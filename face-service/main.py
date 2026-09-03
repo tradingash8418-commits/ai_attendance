@@ -165,7 +165,11 @@ def download_image_as_array(image_url: str) -> np.ndarray:
 
     if image_url.startswith("http://") or image_url.startswith("https://"):
         try:
-            res = requests.get(image_url, timeout=10)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            }
+            res = requests.get(image_url, headers=headers, timeout=15)
             res.raise_for_status()
             img_pil = Image.open(io.BytesIO(res.content)).convert("RGB")
             return np.array(img_pil)
