@@ -54,6 +54,32 @@ export class SupervisorsService {
     return { id: docSnap.id, ...docSnap.data() } as Supervisor;
   }
 
+  /**
+   * Alias and fallback for supervisor lookup by phone or WhatsApp number.
+   */
+  public static async getSupervisorByPhone(
+    rawNumber: string
+  ): Promise<Supervisor | null> {
+    const byWa = await this.getSupervisorByWhatsAppNumber(rawNumber);
+    if (byWa) return byWa;
+
+    const normalized = normalizeWhatsAppNumber(rawNumber);
+    if (!normalized) return null;
+
+    const colRef = collection(db, COLLECTION_NAME);
+    const q = query(
+      colRef,
+      where('phone', '==', normalized),
+      where('active', '==', true)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) return null;
+    const docSnap = snapshot.docs[0];
+    if (!docSnap) return null;
+    return { id: docSnap.id, ...docSnap.data() } as Supervisor;
+  }
+
   public static async createSupervisor(data: {
     name: string;
     phone?: string;
@@ -66,7 +92,7 @@ export class SupervisorsService {
 
     const docRef = await addDoc(colRef, {
       name: data.name.trim(),
-      phone: data.phone?.trim() || '',
+      phone: data.phone?.trim() || normalizedNumber,
       whatsappNumber: normalizedNumber,
       email: data.email?.trim() || '',
       active: true,
