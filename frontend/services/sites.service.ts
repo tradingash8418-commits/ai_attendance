@@ -6,6 +6,7 @@ import {
   addDoc,
   updateDoc,
   query,
+  where,
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -30,6 +31,15 @@ export class SitesService {
     const snap = await getDoc(docRef);
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as Site;
+  }
+
+  /**
+   * Retrieves active construction site assigned to a specific supervisor.
+   */
+  public static async getSiteBySupervisorId(supervisorId: string): Promise<Site | null> {
+    if (!supervisorId) return null;
+    const sites = await this.getSites();
+    return sites.find((s) => s.supervisorId === supervisorId && s.active !== false) || null;
   }
 
   public static async createSite(data: {

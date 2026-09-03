@@ -9,9 +9,18 @@ export interface AttendanceFeedbackOptions {
   siteName: string;
   date: string;
   siteId?: string;
-  recognizedWorkerIds: string[];
+  recognizedWorkerIds?: string[];
+  matchedWorkerIds?: string[];
   unknownFaceCount: number;
 }
+
+const TEST_WORKER_CODE_MAP: Record<string, string> = {
+  'worker-1': 'WRK-001',
+  'worker-2': 'WRK-002',
+  'worker-3': 'WRK-003',
+  'worker-4': 'WRK-004',
+  'worker-5': 'WRK-005',
+};
 
 export class WhatsAppFeedbackServer {
   /**
@@ -22,18 +31,23 @@ export class WhatsAppFeedbackServer {
   public static async sendAttendanceFeedbackReport(
     options: AttendanceFeedbackOptions
   ): Promise<{ success: boolean; error?: string }> {
-    const { supervisorWhatsAppNumber, siteName, date, siteId, recognizedWorkerIds, unknownFaceCount } = options;
+    const { supervisorWhatsAppNumber, siteName, date, siteId, recognizedWorkerIds, matchedWorkerIds, unknownFaceCount } = options;
 
     if (!supervisorWhatsAppNumber) {
       console.warn('[WhatsAppFeedbackServer] Missing supervisor WhatsApp sender number.');
       return { success: false, error: 'Missing supervisor WhatsApp number' };
     }
 
+    const idsToMatch = matchedWorkerIds || recognizedWorkerIds || [];
+
     try {
       // 1. Fetch worker records matching recognized IDs/codes
       const allWorkers = await WorkersService.getWorkers();
-      const recognizedWorkers: Worker[] = allWorkers.filter(
-        (w) => recognizedWorkerIds.includes(w.id) || recognizedWorkerIds.includes(w.workerCode)
+      const recognizedWorkers: Worker[] = allWorkers.filter((w) =>
+        idsToMatch.some((matchedId) => {
+          const mappedCode = TEST_WORKER_CODE_MAP[matchedId] || matchedId;
+          return w.id === matchedId || w.workerCode === matchedId || w.workerCode === mappedCode;
+        })
       );
 
       // 2. Fetch existing attendance records for (siteId, date) to display check-in/out & hajri
