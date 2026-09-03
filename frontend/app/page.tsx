@@ -6,13 +6,8 @@ import {
   LayoutDashboard,
   Users,
   Building2,
-  UserCheck,
-  Sparkles,
   ArrowRight,
-  ShieldCheck,
   CalendarCheck,
-  Cpu,
-  CheckCircle2,
 } from 'lucide-react';
 
 export default function Home() {

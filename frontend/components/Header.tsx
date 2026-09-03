@@ -14,7 +14,6 @@ import {
   Search,
   Bell,
   Grid,
-  Sparkles,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {

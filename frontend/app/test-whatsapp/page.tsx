@@ -7,6 +7,18 @@ import { AttendanceSessionsService } from '@/services/attendanceSessions.service
 import { SeedService } from '@/services/seed.service';
 import type { AttendanceSession } from '@/types/attendance';
 
+interface RecognizedWorkerInfo {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface AnalysisResultData {
+  totalFacesDetected: number;
+  recognizedCount: number;
+  recognizedWorkers: RecognizedWorkerInfo[];
+}
+
 export default function TestWhatsAppPage() {
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -18,7 +30,7 @@ export default function TestWhatsAppPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [analyzingFile, setAnalyzingFile] = useState<boolean>(false);
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResultData | null>(null);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -101,7 +113,7 @@ export default function TestWhatsAppPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setAnalysisResult(data);
+        setAnalysisResult(data as AnalysisResultData);
       } else {
         alert(`Analysis error: ${data.error || 'Failed to analyze image'}`);
       }
@@ -272,7 +284,7 @@ export default function TestWhatsAppPage() {
                       <span className="text-amber-600 font-semibold block">None matched within threshold</span>
                     ) : (
                       <div className="space-y-2">
-                        {analysisResult.recognizedWorkers.map((w: any) => (
+                        {analysisResult.recognizedWorkers.map((w) => (
                           <div
                             key={w.id}
                             className="p-3 rounded-xl bg-white border border-emerald-200 flex items-center justify-between text-xs shadow-sm"

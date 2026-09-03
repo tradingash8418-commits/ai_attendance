@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CalendarCheck, Plus, Clock, CheckCircle, ShieldCheck, Camera, User, Filter } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SitesService } from '@/services/sites.service';
@@ -22,7 +22,6 @@ export default function AttendancePage() {
   const [showManualModal, setShowManualModal] = useState<boolean>(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
-  const [status, setStatus] = useState<'present' | 'absent'>('present');
   const [submittingRecord, setSubmittingRecord] = useState<boolean>(false);
 
   const today = getTodayDateString();
