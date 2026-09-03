@@ -53,7 +53,7 @@ app.mount("/test-data", StaticFiles(directory=TEST_DATA_DIR), name="test-data")
 FACE_SERVICE_SECRET = os.getenv("FACE_SERVICE_SECRET", "contractor_ai_face_secret_key_123")
 MODEL_NAME = os.getenv("FACE_RECOGNITION_MODEL", "ArcFace")
 DISTANCE_METRIC = os.getenv("FACE_RECOGNITION_DISTANCE_METRIC", "cosine")
-DEFAULT_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.68"))
+DEFAULT_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.75"))
 
 # Initialize YuNet Deep Learning Detector & SFace Feature Extractor
 YUNET_MODEL_PATH = os.path.join(MODELS_DIR, "face_detection_yunet.onnx")
@@ -64,8 +64,8 @@ sface_recognizer = None
 
 if os.path.exists(YUNET_MODEL_PATH) and hasattr(cv2, 'FaceDetectorYN_create'):
     try:
-        # Set YuNet detection threshold to 0.25 to catch small faces in collage grids
-        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.25)
+        # Set YuNet detection threshold to 0.20 to catch all faces in photos and collages
+        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.20)
         logger.info("YuNet Deep Learning Face Detector initialized successfully.")
     except Exception as e:
         logger.warn(f"Notice initializing YuNet detector: {e}")
@@ -197,7 +197,7 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
 
     img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
 
-    # 1. Primary YuNet Deep Learning Face Detector (score_threshold=0.25)
+    # 1. Primary YuNet Deep Learning Face Detector (score_threshold=0.20)
     if yunet_detector is not None:
         try:
             yunet_detector.setInputSize((w, h))
@@ -248,7 +248,7 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
 def extract_sface_face_embedding(face_crop: np.ndarray, raw_face=None, full_img_bgr=None) -> List[float]:
     """
     Extracts a 128-dimensional ArcFace/SFace Deep Neural Network feature vector.
-    Uses cv2.FaceRecognizerSF for high-precision face recognition.
+    Uses cv2.FaceRecognizerSF with multi-level YuNet landmark alignment.
     """
     if sface_recognizer is not None:
         # 1. Primary Alignment & Feature Extraction via SFace alignCrop
@@ -261,9 +261,26 @@ def extract_sface_face_embedding(face_crop: np.ndarray, raw_face=None, full_img_
                 feature = sface_recognizer.feature(aligned_face)
                 return [round(float(x), 6) for x in feature.flatten().tolist()]
             except Exception as err:
-                logger.warn(f"SFace alignCrop warning: {err}, falling back to direct face crop extraction")
+                logger.warn(f"SFace alignCrop warning: {err}, trying crop-level YuNet alignment")
 
-        # 2. Secondary Direct SFace Feature Extraction on Face Crop (112x112 BGR)
+        # 2. Secondary Alignment on face_crop itself using YuNet
+        if yunet_detector is not None and face_crop is not None and face_crop.size > 0:
+            try:
+                crop_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR) if face_crop.ndim == 3 and face_crop.shape[2] == 3 else face_crop
+                ch, cw, _ = crop_bgr.shape
+                yunet_detector.setInputSize((cw, ch))
+                _, crop_faces = yunet_detector.detect(crop_bgr)
+                if crop_faces is not None and len(crop_faces) > 0:
+                    crop_face_32f = np.array(crop_faces[0], dtype=np.float32)
+                    if crop_face_32f.ndim == 1:
+                        crop_face_32f = np.expand_dims(crop_face_32f, axis=0)
+                    aligned_face = sface_recognizer.alignCrop(crop_bgr, crop_face_32f)
+                    feature = sface_recognizer.feature(aligned_face)
+                    return [round(float(x), 6) for x in feature.flatten().tolist()]
+            except Exception as err:
+                logger.warn(f"Crop-level YuNet alignment warning: {err}")
+
+        # 3. Fallback Direct SFace Feature Extraction on Face Crop (112x112 BGR)
         try:
             if face_crop is not None and face_crop.size > 0:
                 img_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR) if face_crop.ndim == 3 and face_crop.shape[2] == 3 else face_crop
@@ -353,7 +370,7 @@ def recognize_group_photo(req: RecognizeRequest):
     Detects faces using YuNet and matches each face against ArcFace/SFace reference embeddings.
     Aggregates multiple reference embeddings per worker_id and computes minimum distance per worker.
     Applies conservative matching policy:
-      - distance <= threshold (0.68): status "matched" -> present
+      - distance <= threshold (0.75): status "matched" -> present
       - threshold < distance <= threshold + 0.10: status "needs_review" -> flagged/skipped
       - distance > threshold + 0.10: status "unknown" -> no attendance
     """
@@ -398,7 +415,7 @@ def recognize_group_photo(req: RecognizeRequest):
                     min_distance = dist
                     best_match_worker_id = worker_id
 
-        # Conservative Matching Policy
+        # Conservative Matching Policy (Default Threshold 0.75)
         if min_distance <= threshold and best_match_worker_id:
             confidence = round(max(0.0, 1.0 - (min_distance / threshold)), 4)
             matched_worker_ids.add(best_match_worker_id)

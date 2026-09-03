@@ -29,7 +29,8 @@ export class FaceRecognitionService {
     const faceServiceSecret = process.env.FACE_SERVICE_SECRET || 'contractor_ai_face_secret_key_123';
 
     const dataSource = (process.env.FACE_RECOGNITION_DATA_SOURCE || 'firestore').toLowerCase();
-    const threshold = overrideThreshold || (process.env.FACE_RECOGNITION_THRESHOLD ? parseFloat(process.env.FACE_RECOGNITION_THRESHOLD) : 0.68);
+    // Default Cosine Distance Threshold for SFace: 0.75 (handles compressed WhatsApp / web uploads cleanly)
+    const threshold = overrideThreshold || (process.env.FACE_RECOGNITION_THRESHOLD ? parseFloat(process.env.FACE_RECOGNITION_THRESHOLD) : 0.75);
 
     let referenceEmbeddings: { worker_id: string; embedding: number[] }[] = [];
 
