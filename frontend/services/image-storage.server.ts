@@ -25,6 +25,18 @@ export interface SaveWorkerPhotoParams {
 
 export class ImageStorageServer {
   /**
+   * Checks if current runtime is a serverless environment (Vercel, AWS Lambda, Netlify).
+   */
+  public static isServerlessEnvironment(): boolean {
+    return (
+      process.env.VERCEL === '1' ||
+      !!process.env.VERCEL ||
+      process.env.NODE_ENV === 'production' ||
+      process.cwd().startsWith('/var/task')
+    );
+  }
+
+  /**
    * Retrieves configured storage mode: 'local' (default for dev), 'firebase', or 'supabase'.
    * On Vercel / Production environment, defaults to 'supabase'.
    */
@@ -32,10 +44,9 @@ export class ImageStorageServer {
     const envMode = process.env.IMAGE_STORAGE_MODE?.toLowerCase();
     if (envMode === 'supabase') return 'supabase';
     if (envMode === 'firebase') return 'firebase';
-    if (envMode === 'local') return 'local';
+    if (envMode === 'local' && !this.isServerlessEnvironment()) return 'local';
     
-    // Auto-detect production / serverless environment
-    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    if (this.isServerlessEnvironment()) {
       return 'supabase';
     }
     return 'local';
@@ -139,12 +150,16 @@ export class ImageStorageServer {
     return `data:${mime};base64,${base64}`;
   }
 
-  // --- Local Storage Provider (Dev Environment) ---
+  // --- Local Storage Provider (Dev Environment Only) ---
 
   private static async saveAttendancePhotoLocal(
     params: SaveAttendancePhotoParams,
     fileName: string
   ): Promise<string> {
+    if (this.isServerlessEnvironment()) {
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
+    }
+
     try {
       const rootDir = process.cwd();
       const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'attendance-photos');
@@ -165,6 +180,10 @@ export class ImageStorageServer {
     params: SaveWorkerPhotoParams,
     fileName: string
   ): Promise<string> {
+    if (this.isServerlessEnvironment()) {
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
+    }
+
     try {
       const rootDir = process.cwd();
       const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'worker-photos');
