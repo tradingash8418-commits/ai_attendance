@@ -16,7 +16,7 @@ export interface FaceRecognitionResult {
 export class FaceRecognitionService {
   /**
    * Dispatches group selfie image to Python face-service /recognize endpoint.
-   * In production (default), loads active worker embeddings strictly from Firestore workerFaceEmbeddings collection.
+   * Includes automatic retry mechanism to handle Render Free Tier container cold starts cleanly.
    */
   public static async recognizeGroupSelfie(
     photoUrl: string,
@@ -82,21 +82,57 @@ export class FaceRecognitionService {
       reference_embeddings: referenceEmbeddings,
     };
 
-    try {
-      const res = await fetch(`${faceServiceUrl}/recognize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Face-Service-Secret': faceServiceSecret,
-        },
-        body: JSON.stringify(payload),
-      });
+    const maxRetries = 3;
+    let attempt = 0;
+    let res: Response | null = null;
+    let lastError: any = null;
 
-      if (!res.ok) {
+    while (attempt < maxRetries) {
+      attempt++;
+      try {
+        res = await fetch(`${faceServiceUrl}/recognize`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Face-Service-Secret': faceServiceSecret,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          break;
+        }
+
         const errText = await res.text();
-        throw new Error(`Face service recognition call failed (${res.status}): ${errText}`);
-      }
+        lastError = new Error(`Face service recognition call failed (${res.status}): ${errText}`);
+        console.warn(`[FaceRecognitionService] Attempt ${attempt}/${maxRetries} status ${res.status}. Retrying in 2.5s...`);
 
+        if (res.status >= 500 && attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        } else {
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[FaceRecognitionService] Attempt ${attempt}/${maxRetries} network error: ${err?.message}. Retrying in 2.5s...`);
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        }
+      }
+    }
+
+    if (!res || !res.ok) {
+      console.error('[FaceRecognitionService] All recognition retry attempts exhausted:', lastError);
+      return {
+        matchedWorkerIds: [],
+        faces: [],
+        recognizedCount: 0,
+        unknownFaceCount: 0,
+        needsReviewCount: 0,
+      };
+    }
+
+    try {
       const data = await res.json();
       const duration = Date.now() - startTime;
 
@@ -128,7 +164,7 @@ export class FaceRecognitionService {
         needsReviewCount,
       };
     } catch (err: any) {
-      console.error('[FaceRecognitionService] Error executing recognition:', err?.message || err);
+      console.error('[FaceRecognitionService] Error parsing recognition response JSON:', err?.message || err);
       return {
         matchedWorkerIds: [],
         faces: [],
