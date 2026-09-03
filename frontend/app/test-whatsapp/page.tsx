@@ -339,29 +339,7 @@ export default function TestWhatsAppPage() {
           </div>
         </div>
 
-        {/* Live AI Execution Log Console */}
-        {liveLogs.length > 0 && (
-          <div className="mt-4 rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-2 text-xs font-mono shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-slate-400">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                <Terminal className="w-4 h-4 text-emerald-400" />
-                <span>Live AI Diagnostic Execution Console</span>
-              </div>
-              <span className="text-[10px] text-slate-500 font-bold uppercase">{liveLogs.length} LOG EVENTS</span>
-            </div>
 
-            <div className="max-h-60 overflow-y-auto space-y-1.5 pt-1 text-slate-300 font-mono text-[11px]">
-              {liveLogs.map((logLine, idx) => (
-                <div key={idx} className="flex items-start gap-2 leading-relaxed hover:bg-slate-900/60 p-1 rounded transition-colors">
-                  <span className="text-emerald-500 select-none font-bold">›</span>
-                  <span className={logLine.includes('ERROR') ? 'text-rose-400 font-bold' : logLine.includes('Step') ? 'text-cyan-300 font-bold' : logLine.includes('Match Confirmed') ? 'text-emerald-300 font-bold' : 'text-slate-300'}>
-                    {logLine}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Session Logs Feed */}
