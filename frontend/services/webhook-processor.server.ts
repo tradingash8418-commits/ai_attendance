@@ -187,7 +187,7 @@ export class WebhookProcessorServer {
 
       // 9. AI Face Recognition Pipeline ON THE EXACT DOWNLOADED IMAGE
       console.log(`[WebhookProcessor] Dispatching photo to FaceRecognitionService...`);
-      const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl);
+      const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl, imageBuffer);
 
       // 10. Automatic Attendance Record Creation/Update with Canonical Worker ID Resolution
       const allWorkers = await WorkersService.getWorkers();

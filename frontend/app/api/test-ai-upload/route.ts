@@ -47,9 +47,9 @@ export async function POST(request: Request) {
 
     log(`Image saved to Storage: ${photoUrl}`);
 
-    // 2. Dispatch to YuNet AI Face Recognition microservice
-    log('Step 2: Loading reference 128-D SFace embeddings & querying Python AI face-service...');
-    const result = await FaceRecognitionService.recognizeGroupSelfie(photoUrl);
+    // 2. Dispatch to YuNet AI Face Recognition microservice with buffer for direct Base64 delivery
+    log('Step 2: Loading reference 128-D SFace embeddings & dispatching Base64 payload to Python AI face-service...');
+    const result = await FaceRecognitionService.recognizeGroupSelfie(photoUrl, buffer);
 
     log(`Step 3: AI Service Response Received | Faces Scanned: ${result.faces.length}, Matched: ${result.matchedWorkerIds.length}, Unknown: ${result.unknownFaceCount}`);
 

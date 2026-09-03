@@ -16,10 +16,11 @@ export interface FaceRecognitionResult {
 export class FaceRecognitionService {
   /**
    * Dispatches group selfie image to Python face-service /recognize endpoint.
-   * Includes automatic retry mechanism to handle Render Free Tier container cold starts cleanly.
+   * Accepts imageBuffer to pass base64 data URL directly, bypassing remote CDN download blocks completely.
    */
   public static async recognizeGroupSelfie(
     photoUrl: string,
+    imageBuffer?: Buffer,
     overrideThreshold?: number
   ): Promise<FaceRecognitionResult> {
     const startTime = Date.now();
@@ -29,7 +30,6 @@ export class FaceRecognitionService {
     const faceServiceSecret = process.env.FACE_SERVICE_SECRET || 'contractor_ai_face_secret_key_123';
 
     const dataSource = (process.env.FACE_RECOGNITION_DATA_SOURCE || 'firestore').toLowerCase();
-    // Default Cosine Distance Threshold for SFace: 0.75 (handles compressed WhatsApp / web uploads cleanly)
     const threshold = overrideThreshold || (process.env.FACE_RECOGNITION_THRESHOLD ? parseFloat(process.env.FACE_RECOGNITION_THRESHOLD) : 0.75);
 
     let referenceEmbeddings: { worker_id: string; embedding: number[] }[] = [];
@@ -47,7 +47,6 @@ export class FaceRecognitionService {
         console.error('[FaceRecognitionService] Error loading active embeddings from Firestore:', fsErr);
       }
     } else if (dataSource === 'seed') {
-      // 2. Dev/Test Mode: Explicit seed dataset override
       try {
         console.log('[FaceRecognitionService] Dev Mode: Querying GET /embeddings/seed-dataset...');
         const seedRes = await fetch(`${faceServiceUrl}/embeddings/seed-dataset`);
@@ -76,9 +75,14 @@ export class FaceRecognitionService {
       };
     }
 
+    // Use Base64 Data URL if buffer is provided to avoid remote HTTP download blocks
+    const targetImageUrl = imageBuffer
+      ? `data:image/jpeg;base64,${imageBuffer.toString('base64')}`
+      : photoUrl;
+
     // 2. Format payload for python face-service /recognize
     const payload = {
-      image_url: photoUrl,
+      image_url: targetImageUrl,
       threshold,
       reference_embeddings: referenceEmbeddings,
     };
@@ -149,7 +153,6 @@ export class FaceRecognitionService {
       const unknownFaceCount = data.unknown_face_count || faces.filter((f: any) => f.status === 'unknown').length;
       const needsReviewCount = faces.filter((f: any) => f.status === 'needs_review').length;
 
-      // Safe production logging
       console.log(
         `[FaceRecognitionService] Recognition Completed in ${duration}ms | ` +
         `Model: ${data.model || 'ArcFace'}, Detector: ${data.detector || 'YuNet'}, ` +
