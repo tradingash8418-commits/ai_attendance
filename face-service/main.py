@@ -64,8 +64,8 @@ sface_recognizer = None
 
 if os.path.exists(YUNET_MODEL_PATH) and hasattr(cv2, 'FaceDetectorYN_create'):
     try:
-        # Set YuNet detection threshold to 0.35 to catch compressed/smaller faces in WhatsApp photos
-        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.35)
+        # Set YuNet detection threshold to 0.25 to catch small faces in collage grids
+        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.25)
         logger.info("YuNet Deep Learning Face Detector initialized successfully.")
     except Exception as e:
         logger.warn(f"Notice initializing YuNet detector: {e}")
@@ -189,18 +189,21 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
     """
     Detects real human faces using YuNet Deep Learning Model & Haar Cascade fallbacks.
     Returns list of tuples: (face_crop_rgb, face_raw_bbox_for_alignment, full_img_bgr).
+    Combines YuNet + Haar Cascade detections to catch all faces in collage grids.
     """
     h, w, _ = img_rgb.shape
+    face_items = []
+    seen_boxes = []
 
-    # 1. Primary YuNet Deep Learning Face Detector (score_threshold=0.35)
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
+    # 1. Primary YuNet Deep Learning Face Detector (score_threshold=0.25)
     if yunet_detector is not None:
         try:
-            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
             yunet_detector.setInputSize((w, h))
             _, faces_data = yunet_detector.detect(img_bgr)
 
             if faces_data is not None and len(faces_data) > 0:
-                face_items = []
                 for face in faces_data:
                     bbox = face[0:4].astype(int)
                     x, y, f_w, f_h = bbox[0], bbox[1], bbox[2], bbox[3]
@@ -211,12 +214,11 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
                     if (x2 - x1) > 10 and (y2 - y1) > 10:
                         crop = img_rgb[y1:y2, x1:x2]
                         face_items.append((crop, face, img_bgr))
-                if len(face_items) > 0:
-                    return face_items
+                        seen_boxes.append((x1, y1, x2, y2))
         except Exception as e:
             logger.error(f"YuNet face detection error: {e}")
 
-    # 2. Secondary Haar Cascade Fallback Detector
+    # 2. Haar Cascade Fallback Detector to catch extra small faces in collage grids
     try:
         cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         if os.path.exists(cascade_path):
@@ -224,17 +226,22 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
             gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(20, 20))
             if len(faces) > 0:
-                face_items = []
-                img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
                 for (x, y, f_w, f_h) in faces:
-                    crop = img_rgb[y:y+f_h, x:x+f_w]
-                    face_items.append((crop, None, img_bgr))
-                return face_items
+                    overlap = False
+                    for (bx1, by1, bx2, by2) in seen_boxes:
+                        if abs(x - bx1) < 25 and abs(y - by1) < 25:
+                            overlap = True
+                            break
+                    if not overlap:
+                        crop = img_rgb[y:y+f_h, x:x+f_w]
+                        face_items.append((crop, None, img_bgr))
     except Exception as e:
         logger.error(f"Haar cascade detection error: {e}")
 
+    if len(face_items) > 0:
+        return face_items
+
     # 3. Final Fallback: Treat entire image as single face crop
-    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
     return [(img_rgb, None, img_bgr)]
 
 
