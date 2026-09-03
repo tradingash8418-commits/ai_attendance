@@ -26,11 +26,18 @@ export interface SaveWorkerPhotoParams {
 export class ImageStorageServer {
   /**
    * Retrieves configured storage mode: 'local' (default for dev), 'firebase', or 'supabase'.
+   * On Vercel / Production environment, defaults to 'supabase'.
    */
   public static getStorageMode(): StorageMode {
     const envMode = process.env.IMAGE_STORAGE_MODE?.toLowerCase();
     if (envMode === 'supabase') return 'supabase';
     if (envMode === 'firebase') return 'firebase';
+    if (envMode === 'local') return 'local';
+    
+    // Auto-detect production / serverless environment
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      return 'supabase';
+    }
     return 'local';
   }
 
@@ -85,15 +92,14 @@ export class ImageStorageServer {
 
       if (error) {
         console.warn('[ImageStorageServer] Supabase upload notice:', error.message);
-        // Fallback to local if bucket is not created yet
-        return this.saveAttendancePhotoLocal(params, fileName);
+        return this.createDataUrlFallback(params.buffer, params.mimeType);
       }
 
       const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
       return publicUrlData.publicUrl;
     } catch (err: any) {
       console.warn('[ImageStorageServer] Supabase Storage Error:', err);
-      return this.saveAttendancePhotoLocal(params, fileName);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
     }
   }
 
@@ -114,47 +120,65 @@ export class ImageStorageServer {
 
       if (error) {
         console.warn('[ImageStorageServer] Supabase upload notice:', error.message);
-        return this.saveWorkerPhotoLocal(params, fileName);
+        return this.createDataUrlFallback(params.buffer, params.mimeType);
       }
 
       const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
       return publicUrlData.publicUrl;
     } catch (err: any) {
       console.warn('[ImageStorageServer] Supabase Worker Photo Error:', err);
-      return this.saveWorkerPhotoLocal(params, fileName);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
     }
   }
 
-  // --- Local Storage Provider ---
+  // --- Data URL Fallback for Serverless ---
+
+  private static createDataUrlFallback(buffer: Buffer, mimeType?: string): string {
+    const base64 = buffer.toString('base64');
+    const mime = mimeType || 'image/jpeg';
+    return `data:${mime};base64,${base64}`;
+  }
+
+  // --- Local Storage Provider (Dev Environment) ---
 
   private static async saveAttendancePhotoLocal(
     params: SaveAttendancePhotoParams,
     fileName: string
   ): Promise<string> {
-    const rootDir = process.cwd();
-    const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'attendance-photos');
-    fs.mkdirSync(localDir, { recursive: true });
+    try {
+      const rootDir = process.cwd();
+      const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'attendance-photos');
+      fs.mkdirSync(localDir, { recursive: true });
 
-    const fullFilePath = path.join(localDir, fileName);
-    fs.writeFileSync(fullFilePath, params.buffer);
+      const fullFilePath = path.join(localDir, fileName);
+      fs.writeFileSync(fullFilePath, params.buffer);
 
-    const faceServiceUrl = process.env.FACE_SERVICE_URL || 'http://localhost:8000';
-    return `${faceServiceUrl}/runtime-data/attendance-photos/${fileName}`;
+      const faceServiceUrl = process.env.FACE_SERVICE_URL || 'http://localhost:8000';
+      return `${faceServiceUrl}/runtime-data/attendance-photos/${fileName}`;
+    } catch (err) {
+      console.warn('[ImageStorageServer] Local disk save failed, using Data URL fallback:', err);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
+    }
   }
 
   private static async saveWorkerPhotoLocal(
     params: SaveWorkerPhotoParams,
     fileName: string
   ): Promise<string> {
-    const rootDir = process.cwd();
-    const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'worker-photos');
-    fs.mkdirSync(localDir, { recursive: true });
+    try {
+      const rootDir = process.cwd();
+      const localDir = path.resolve(rootDir, '..', 'face-service', 'runtime-data', 'worker-photos');
+      fs.mkdirSync(localDir, { recursive: true });
 
-    const fullFilePath = path.join(localDir, fileName);
-    fs.writeFileSync(fullFilePath, params.buffer);
+      const fullFilePath = path.join(localDir, fileName);
+      fs.writeFileSync(fullFilePath, params.buffer);
 
-    const faceServiceUrl = process.env.FACE_SERVICE_URL || 'http://localhost:8000';
-    return `${faceServiceUrl}/runtime-data/worker-photos/${fileName}`;
+      const faceServiceUrl = process.env.FACE_SERVICE_URL || 'http://localhost:8000';
+      return `${faceServiceUrl}/runtime-data/worker-photos/${fileName}`;
+    } catch (err) {
+      console.warn('[ImageStorageServer] Local worker photo save failed, using Data URL fallback:', err);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
+    }
   }
 
   // --- Firebase Storage Provider ---
@@ -175,7 +199,7 @@ export class ImageStorageServer {
       return await getDownloadURL(storageRef);
     } catch (err: any) {
       console.error('[ImageStorageServer] Firebase Storage Upload Failed:', err);
-      return this.saveAttendancePhotoLocal(params, fileName);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
     }
   }
 
@@ -195,7 +219,7 @@ export class ImageStorageServer {
       return await getDownloadURL(storageRef);
     } catch (err: any) {
       console.error('[ImageStorageServer] Firebase Storage Worker Photo Upload Failed:', err);
-      return this.saveWorkerPhotoLocal(params, fileName);
+      return this.createDataUrlFallback(params.buffer, params.mimeType);
     }
   }
 }
