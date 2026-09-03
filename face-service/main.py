@@ -2,6 +2,7 @@ import os
 import io
 import json
 import logging
+import base64
 from typing import List, Optional
 import requests
 import numpy as np
@@ -126,9 +127,19 @@ class RecognizeResponse(BaseModel):
 
 def download_image_as_array(image_url: str) -> np.ndarray:
     """
-    Loads an image as an RGB numpy array from remote/local URLs or file paths.
+    Loads an image as an RGB numpy array from remote/local URLs, base64 data URLs, or file paths.
     Directly resolves local static paths to avoid self-HTTP request deadlocks.
     """
+    if image_url.startswith("data:image/"):
+        try:
+            header, base64_str = image_url.split(",", 1)
+            img_bytes = base64.b64decode(base64_str)
+            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            return np.array(img_pil)
+        except Exception as err:
+            logger.error(f"Failed to decode base64 data URL: {err}")
+            raise HTTPException(status_code=400, detail=f"Failed to decode base64 image: {err}")
+
     if os.path.exists(image_url) and os.path.isfile(image_url):
         try:
             img_pil = Image.open(image_url).convert("RGB")
