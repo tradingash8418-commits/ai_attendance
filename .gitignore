@@ -41,7 +41,7 @@ __pycache__/
 face-service/runtime-data/
 face-service/venv/
 face-service/__pycache__/
-face-service/models/*.onnx
+# face-service/models/*.onnx  # REMOVED: ONNX models MUST be deployed to Render for SFace AI to work
 
 # OS & Editor Files
 .DS_Store
