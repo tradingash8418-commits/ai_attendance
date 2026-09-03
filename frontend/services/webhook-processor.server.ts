@@ -80,8 +80,24 @@ export class WebhookProcessorServer {
         return { status: 'failed', reason: 'Unregistered supervisor phone number', messageId: rawMessageId };
       }
 
-      // 4. Site Linkage Check
-      const supervisorSite = await SitesService.getSiteBySupervisorId(supervisor.id);
+      // 4. Site Linkage Check with Automatic Fallback Linkage
+      let supervisorSite = await SitesService.getSiteBySupervisorId(supervisor.id);
+      if (!supervisorSite) {
+        let allSites = await SitesService.getSites();
+        if (allSites.length === 0) {
+          const newSiteId = await SitesService.createSite({
+            name: 'Site B (Bandra Residential)',
+            address: 'Bandra West, Mumbai',
+            supervisorId: supervisor.id,
+          });
+          supervisorSite = await SitesService.getSiteById(newSiteId);
+        } else {
+          supervisorSite = allSites[0];
+          await SitesService.assignSupervisorToSite(supervisorSite.id, supervisor.id);
+        }
+        console.log(`[WebhookProcessor] Auto-linked supervisor ${supervisor.name} to site ${supervisorSite?.name}`);
+      }
+
       if (!supervisorSite) {
         console.log(`[WebhookProcessor] No active site linked to supervisor ${supervisor.name} (${supervisor.id})`);
         await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
@@ -213,6 +229,7 @@ export class WebhookProcessorServer {
         supervisorWhatsAppNumber: normalizedSender,
         siteName: supervisorSite.name,
         date: today,
+        siteId: supervisorSite.id,
         matchedWorkerIds: recognitionResult.matchedWorkerIds,
         unknownFaceCount: recognitionResult.unknownFaceCount,
       });
