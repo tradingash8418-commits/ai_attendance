@@ -32,20 +32,30 @@ export class WhatsAppService {
   }
 
   /**
+   * Alias for duplicate protection check.
+   */
+  public static async isMessageProcessed(messageId: string): Promise<boolean> {
+    return this.isWhatsAppMessageAlreadyProcessed(messageId);
+  }
+
+  /**
    * Records an incoming WhatsApp message payload into Firestore.
    */
   public static async saveIncomingMessage(data: {
-    messageId: string;
+    messageId?: string;
+    whatsappMessageId?: string;
     senderNumber: string;
     messageType: WhatsAppMessageType;
     mediaId?: string;
+    rawPayload?: any;
   }): Promise<string> {
+    const msgId = data.messageId || data.whatsappMessageId || `msg_${Date.now()}`;
     const normalizedSender = normalizeWhatsAppNumber(data.senderNumber);
     const colRef = collection(db, COLLECTION_NAME);
     const now = serverTimestamp();
 
     const docRef = await addDoc(colRef, {
-      messageId: data.messageId,
+      messageId: msgId,
       senderNumber: normalizedSender,
       messageType: data.messageType,
       mediaId: data.mediaId || '',
