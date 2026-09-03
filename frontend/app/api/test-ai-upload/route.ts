@@ -4,6 +4,14 @@ import { FaceRecognitionService } from '@/services/face-recognition.service';
 import { WorkersService } from '@/services/workers.service';
 import { getTodayDateString, getWorkerDisplayName } from '@/lib/formatters';
 
+const TEST_WORKER_CODE_MAP: Record<string, string> = {
+  'worker-1': 'WRK-001',
+  'worker-2': 'WRK-002',
+  'worker-3': 'WRK-003',
+  'worker-4': 'WRK-004',
+  'worker-5': 'WRK-005',
+};
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -17,7 +25,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(bytes);
     const today = getTodayDateString();
 
-    // 1. Save uploaded image to face-service/runtime-data/attendance-photos
+    // 1. Save uploaded image to active storage (Supabase / Data URL)
     const photoUrl = await ImageStorageServer.saveAttendancePhoto({
       date: today,
       siteId: 'test_site',
@@ -33,19 +41,30 @@ export async function POST(request: Request) {
 
     // 3. Resolve worker names for matched worker IDs
     const allWorkers = await WorkersService.getWorkers();
-    const recognizedWorkers = allWorkers
-      .filter((w) => result.matchedWorkerIds.includes(w.id) || result.matchedWorkerIds.includes(w.workerCode))
-      .map((w) => ({
-        id: w.id,
-        name: getWorkerDisplayName(w),
-        code: w.workerCode || 'WRK-000',
-        role: w.role || 'Worker',
-      }));
+
+    const matchedWorkerObjects = new Set<any>();
+
+    for (const matchedId of result.matchedWorkerIds) {
+      const mappedCode = TEST_WORKER_CODE_MAP[matchedId] || matchedId;
+      const found = allWorkers.find(
+        (w) => w.id === matchedId || w.workerCode === matchedId || w.workerCode === mappedCode
+      );
+      if (found) {
+        matchedWorkerObjects.add(found);
+      }
+    }
+
+    const recognizedWorkers = Array.from(matchedWorkerObjects).map((w) => ({
+      id: w.id,
+      name: getWorkerDisplayName(w),
+      code: w.workerCode || 'WRK-000',
+      role: w.role || 'Worker',
+    }));
 
     return NextResponse.json({
       success: true,
       photoUrl,
-      recognizedCount: result.recognizedCount,
+      recognizedCount: recognizedWorkers.length,
       unknownFaceCount: result.unknownFaceCount,
       totalFacesDetected: result.faces.length,
       matchedWorkerIds: result.matchedWorkerIds,

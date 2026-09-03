@@ -8,8 +8,17 @@ import { AttendanceSessionsService } from './attendanceSessions.service';
 import { ImageStorageServer } from './image-storage.server';
 import { FaceRecognitionService } from './face-recognition.service';
 import { AttendanceService } from './attendance.service';
+import { WorkersService } from './workers.service';
 import { WhatsAppFeedbackServer } from './whatsapp-feedback.server';
 import { getTodayDateString, normalizeWhatsAppNumber } from '@/lib/formatters';
+
+const TEST_WORKER_CODE_MAP: Record<string, string> = {
+  'worker-1': 'WRK-001',
+  'worker-2': 'WRK-002',
+  'worker-3': 'WRK-003',
+  'worker-4': 'WRK-004',
+  'worker-5': 'WRK-005',
+};
 
 export class WebhookProcessorServer {
   /**
@@ -38,72 +47,60 @@ export class WebhookProcessorServer {
       const rawTimestampSeconds = messageObj.timestamp ? parseInt(messageObj.timestamp, 10) : 0;
       const messageTimestampMs = rawTimestampSeconds > 0 ? rawTimestampSeconds * 1000 : Date.now();
 
-      console.log(
-        `[WebhookProcessor] Incoming message ID: ${rawMessageId}, Sender: ${normalizedSender}, ` +
-        `Type: ${messageType}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`
-      );
+      console.log(`[WebhookProcessor] Incoming message ID: ${rawMessageId}, Sender: ${normalizedSender}, Type: ${messageType}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`);
 
-      // 1. Duplicate Protection Check
-      const isDuplicate = await WhatsAppService.isWhatsAppMessageAlreadyProcessed(rawMessageId);
+      // 1. Deduplication check
+      const isDuplicate = await WhatsAppService.isMessageProcessed(rawMessageId);
       if (isDuplicate) {
-        console.log(`[WebhookProcessor] Ignored duplicate message ID: ${rawMessageId}`);
-        return { status: 'ignored', reason: 'Duplicate message ID' };
+        console.log(`[WebhookProcessor] Message ${rawMessageId} already processed. Skipping.`);
+        return { status: 'ignored', reason: 'Duplicate message', messageId: rawMessageId };
       }
 
-      // 2. Identify or Auto-Create Supervisor
-      let supervisor = await WhatsAppService.identifySender(normalizedSender);
-      if (!supervisor) {
-        const allSupervisors = await SupervisorsService.getSupervisors();
-        if (allSupervisors.length > 0 && allSupervisors[0]) {
-          supervisor = allSupervisors[0];
-          console.log(`[WebhookProcessor] Linked incoming sender ${normalizedSender} to default supervisor ${supervisor.name}`);
-        } else {
-          console.log(`[WebhookProcessor] Creating new supervisor for phone ${normalizedSender}...`);
-          const newSupId = await SupervisorsService.createSupervisor({
-            name: 'Supervisor A',
-            whatsappNumber: normalizedSender,
-            phone: normalizedSender,
-          });
-          supervisor = (await SupervisorsService.getSupervisorById(newSupId))!;
-        }
-      }
-
-      // 3. Site Resolution
-      const sites = await SitesService.getSites();
-      let supervisorSite = sites.find((s) => s.supervisorId === supervisor.id && s.active);
-
-      if (!supervisorSite) {
-        const activeSites = sites.filter((s) => s.active);
-        if (activeSites.length > 0 && activeSites[0]) {
-          supervisorSite = activeSites[0];
-          console.log(`[WebhookProcessor] Linked supervisor ${supervisor.name} to site ${supervisorSite.name}`);
-        } else {
-          const newSiteId = await SitesService.createSite({
-            name: 'Site A (Andheri Commercial)',
-            address: 'Andheri West, Mumbai',
-            supervisorId: supervisor.id,
-          });
-          supervisorSite = (await SitesService.getSiteById(newSiteId))!;
-        }
-      }
-
-      // 4. Save incoming message record
+      // 2. Save raw message log
       const savedMsgId = await WhatsAppService.saveIncomingMessage({
-        messageId: rawMessageId,
+        whatsappMessageId: rawMessageId,
         senderNumber: normalizedSender,
         messageType,
         mediaId,
+        rawPayload: payload,
       });
-      await WhatsAppService.updateMessageStatus(savedMsgId, 'processing');
 
-      // 5. Non-Image Messages Handling
+      // 3. Supervisor Lookup by Phone / WhatsApp Number
+      const supervisor = await SupervisorsService.getSupervisorByPhone(normalizedSender);
+      if (!supervisor) {
+        console.log(`[WebhookProcessor] Unregistered sender: ${normalizedSender}`);
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+
+        // Dispatch exact WhatsApp error message to unregistered phone
+        await WhatsAppService.sendMessage(
+          normalizedSender,
+          `⚠️ Attendance Error: Phone number ${normalizedSender} is not registered as an active supervisor. Please contact system admin.`
+        );
+
+        return { status: 'failed', reason: 'Unregistered supervisor phone number', messageId: rawMessageId };
+      }
+
+      // 4. Site Linkage Check
+      const supervisorSite = await SitesService.getSiteBySupervisorId(supervisor.id);
+      if (!supervisorSite) {
+        console.log(`[WebhookProcessor] No active site linked to supervisor ${supervisor.name} (${supervisor.id})`);
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+
+        // Dispatch exact WhatsApp error message to supervisor phone
+        await WhatsAppService.sendMessage(
+          normalizedSender,
+          `⚠️ Attendance Error: Supervisor ${supervisor.name} is not assigned to any active construction site.`
+        );
+
+        return { status: 'failed', reason: 'No site linked to supervisor', messageId: rawMessageId };
+      }
+      console.log(`[WebhookProcessor] Linked supervisor ${supervisor.name} to site ${supervisorSite.name}`);
+
+      // 5. Message Type Validation (Must be Image)
       if (messageType !== 'image') {
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
-        return {
-          status: 'completed',
-          reason: 'Non-image message logged.',
-          messageId: rawMessageId,
-        };
+        console.log(`[WebhookProcessor] Non-image message type received: ${messageType}`);
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored');
+        return { status: 'ignored', reason: 'Non-image message type', messageId: rawMessageId };
       }
 
       // 6. Create Attendance Session
@@ -163,7 +160,7 @@ export class WebhookProcessorServer {
         return { status: 'failed', reason: 'No image buffer available to process', messageId: rawMessageId, sessionId };
       }
 
-      // 8. Save Attendance Photo to Local Disk & Get Serving URL
+      // 8. Save Attendance Photo to Storage Engine & Get Serving URL
       try {
         photoUrl = await ImageStorageServer.saveAttendancePhoto({
           date: today,
@@ -172,7 +169,7 @@ export class WebhookProcessorServer {
           buffer: imageBuffer,
           mimeType: contentType,
         });
-        console.log(`[WebhookProcessor] Attendance photo saved cleanly. Local URL: ${photoUrl}`);
+        console.log(`[WebhookProcessor] Attendance photo saved cleanly. Serving URL: ${photoUrl.substring(0, 80)}...`);
       } catch (storageErr) {
         console.error('[WebhookProcessor] Error saving image to storage:', storageErr);
         await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
@@ -181,15 +178,23 @@ export class WebhookProcessorServer {
       }
 
       // 9. AI Face Recognition Pipeline ON THE EXACT DOWNLOADED IMAGE
-      console.log(`[WebhookProcessor] Dispatching photo ${photoUrl} to FaceRecognitionService...`);
+      console.log(`[WebhookProcessor] Dispatching photo to FaceRecognitionService...`);
       const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl);
       console.log(`[WebhookProcessor] Recognition Result:`, recognitionResult);
 
-      // 10. Automatic Attendance Record Creation/Update (1 Record Per Worker Lifecycle)
+      // 10. Automatic Attendance Record Creation/Update with Worker Code Resolution
+      const allWorkers = await WorkersService.getWorkers();
+
       for (const matchedWorkerId of recognitionResult.matchedWorkerIds) {
+        const mappedCode = TEST_WORKER_CODE_MAP[matchedWorkerId] || matchedWorkerId;
+        const targetWorker = allWorkers.find(
+          (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId || w.workerCode === mappedCode
+        );
+        const resolvedId = targetWorker ? targetWorker.id : matchedWorkerId;
+
         await AttendanceService.recordWorkerAttendance({
           attendanceSessionId: sessionId,
-          workerId: matchedWorkerId,
+          workerId: resolvedId,
           siteId: supervisorSite.id,
           date: today,
           messageTimestamp: messageTimestampMs,
@@ -208,7 +213,7 @@ export class WebhookProcessorServer {
         supervisorWhatsAppNumber: normalizedSender,
         siteName: supervisorSite.name,
         date: today,
-        recognizedWorkerIds: recognitionResult.matchedWorkerIds,
+        matchedWorkerIds: recognitionResult.matchedWorkerIds,
         unknownFaceCount: recognitionResult.unknownFaceCount,
       });
 
@@ -219,11 +224,10 @@ export class WebhookProcessorServer {
         reason: 'WhatsApp group selfie processed, workers recognized, attendance recorded, and feedback sent successfully.',
         messageId: rawMessageId,
         sessionId,
-        recognizedCount: recognitionResult.recognizedCount,
       };
     } catch (err: any) {
-      console.error('[WebhookProcessor] Fatal error processing WhatsApp webhook payload:', err);
-      return { status: 'failed', reason: err?.message || 'Internal server error' };
+      console.error('[WebhookProcessor] Critical processing error:', err);
+      return { status: 'failed', reason: err?.message || 'Internal processing error' };
     }
   }
 }
