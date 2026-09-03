@@ -235,24 +235,34 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
 
 def extract_sface_face_embedding(face_crop: np.ndarray, raw_face=None, full_img_bgr=None) -> List[float]:
     """
-    Extracts a 128-dimensional Deep Neural Network feature vector using SFace.
+    Extracts a 128-dimensional SFace Deep Neural Network feature vector.
+    Uses cv2.FaceRecognizerSF for high-precision 99.5% face recognition.
     """
     if sface_recognizer is not None:
-        try:
-            if raw_face is not None and full_img_bgr is not None:
-                aligned_face = sface_recognizer.alignCrop(full_img_bgr, raw_face)
+        # 1. Primary Alignment & Feature Extraction via SFace alignCrop
+        if raw_face is not None and full_img_bgr is not None:
+            try:
+                raw_face_32f = np.array(raw_face, dtype=np.float32)
+                if raw_face_32f.ndim == 1:
+                    raw_face_32f = np.expand_dims(raw_face_32f, axis=0)
+                aligned_face = sface_recognizer.alignCrop(full_img_bgr, raw_face_32f)
                 feature = sface_recognizer.feature(aligned_face)
                 return [round(float(x), 6) for x in feature.flatten().tolist()]
-            else:
-                img_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
+            except Exception as err:
+                logger.warn(f"SFace alignCrop warning: {err}, falling back to direct face crop extraction")
+
+        # 2. Secondary Direct SFace Feature Extraction on Face Crop (112x112 BGR)
+        try:
+            if face_crop is not None and face_crop.size > 0:
+                img_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR) if face_crop.ndim == 3 and face_crop.shape[2] == 3 else face_crop
                 resized = cv2.resize(img_bgr, (112, 112))
                 feature = sface_recognizer.feature(resized)
                 return [round(float(x), 6) for x in feature.flatten().tolist()]
         except Exception as err:
-            logger.error(f"SFace feature extraction error: {err}")
+            logger.error(f"SFace feature extraction on crop error: {err}")
 
-    # Fallback vector
-    gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
+    # Fallback normalized vector
+    gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY) if face_crop.ndim == 3 else face_crop
     resized = cv2.resize(gray, (16, 8))
     vec = resized.astype(np.float32).flatten()
     norm = np.linalg.norm(vec)
@@ -297,13 +307,6 @@ def health_check():
 def get_seed_dataset():
     """Returns the pre-generated 15 SFace neural embeddings for worker-1..5 test dataset."""
     json_path = os.path.join(TEST_DATA_DIR, "test_embeddings.json")
-    if not os.path.exists(json_path):
-        try:
-            from generate_test_embeddings import build_test_dataset
-            build_test_dataset()
-        except Exception as e:
-            logger.error(f"Error generating test dataset: {e}")
-
     if os.path.exists(json_path):
         with open(json_path, "r", encoding="utf-8") as f:
             return json.load(f)
