@@ -12,14 +12,6 @@ import { WorkersService } from './workers.service';
 import { WhatsAppFeedbackServer } from './whatsapp-feedback.server';
 import { getTodayDateString, normalizeWhatsAppNumber } from '@/lib/formatters';
 
-const TEST_WORKER_CODE_MAP: Record<string, string> = {
-  'worker-1': 'WRK-001',
-  'worker-2': 'WRK-002',
-  'worker-3': 'WRK-003',
-  'worker-4': 'WRK-004',
-  'worker-5': 'WRK-005',
-};
-
 export class WebhookProcessorServer {
   /**
    * Main entry point for processing incoming WhatsApp webhooks (Real Meta Webhooks & Simulations).
@@ -139,7 +131,7 @@ export class WebhookProcessorServer {
         const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
         if (fs.existsSync(fallbackPath)) {
           imageBuffer = fs.readFileSync(fallbackPath);
-          console.log(`[WebhookProcessor] Loaded simulation 4-worker collage image (${imageBuffer.length} bytes)`);
+          console.log(`[WebhookProcessor] Loaded simulation collage image (${imageBuffer.length} bytes)`);
         }
       } else if (mediaId) {
         try {
@@ -185,7 +177,7 @@ export class WebhookProcessorServer {
           buffer: imageBuffer,
           mimeType: contentType,
         });
-        console.log(`[WebhookProcessor] Attendance photo saved cleanly. Serving URL: ${photoUrl.substring(0, 80)}...`);
+        console.log(`[WebhookProcessor] Attendance photo saved cleanly.`);
       } catch (storageErr) {
         console.error('[WebhookProcessor] Error saving image to storage:', storageErr);
         await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
@@ -196,15 +188,13 @@ export class WebhookProcessorServer {
       // 9. AI Face Recognition Pipeline ON THE EXACT DOWNLOADED IMAGE
       console.log(`[WebhookProcessor] Dispatching photo to FaceRecognitionService...`);
       const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl);
-      console.log(`[WebhookProcessor] Recognition Result:`, recognitionResult);
 
-      // 10. Automatic Attendance Record Creation/Update with Worker Code Resolution
+      // 10. Automatic Attendance Record Creation/Update with Canonical Worker ID Resolution
       const allWorkers = await WorkersService.getWorkers();
 
       for (const matchedWorkerId of recognitionResult.matchedWorkerIds) {
-        const mappedCode = TEST_WORKER_CODE_MAP[matchedWorkerId] || matchedWorkerId;
         const targetWorker = allWorkers.find(
-          (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId || w.workerCode === mappedCode
+          (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId
         );
         const resolvedId = targetWorker ? targetWorker.id : matchedWorkerId;
 
@@ -233,8 +223,6 @@ export class WebhookProcessorServer {
         matchedWorkerIds: recognitionResult.matchedWorkerIds,
         unknownFaceCount: recognitionResult.unknownFaceCount,
       });
-
-      console.log(`[WebhookProcessor] WhatsApp feedback report status:`, feedbackRes);
 
       return {
         status: 'completed',

@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import time
 import logging
 import base64
 from typing import List, Optional
@@ -32,7 +33,7 @@ for dir_path in [RUNTIME_DATA_DIR, ATTENDANCE_PHOTOS_DIR, TEMP_DIR, EMBEDDINGS_D
 
 app = FastAPI(
     title="Contractor AI - Face Recognition Microservice",
-    description="Python FastAPI service using YuNet & SFace Deep Neural Network for 100% face recognition accuracy.",
+    description="Python FastAPI service using YuNet & ArcFace/SFace Deep Neural Network for 100% face recognition accuracy.",
     version="1.0.0"
 )
 
@@ -50,9 +51,9 @@ app.mount("/runtime-data", StaticFiles(directory=RUNTIME_DATA_DIR), name="runtim
 app.mount("/test-data", StaticFiles(directory=TEST_DATA_DIR), name="test-data")
 
 FACE_SERVICE_SECRET = os.getenv("FACE_SERVICE_SECRET", "contractor_ai_face_secret_key_123")
-MODEL_NAME = "ArcFace/SFace"
-DISTANCE_METRIC = "cosine"
-DEFAULT_THRESHOLD = 0.68  # Cosine distance threshold for SFace (distance <= 0.68 matches same person)
+MODEL_NAME = os.getenv("FACE_RECOGNITION_MODEL", "ArcFace")
+DISTANCE_METRIC = os.getenv("FACE_RECOGNITION_DISTANCE_METRIC", "cosine")
+DEFAULT_THRESHOLD = float(os.getenv("FACE_RECOGNITION_THRESHOLD", "0.68"))
 
 # Initialize YuNet Deep Learning Detector & SFace Feature Extractor
 YUNET_MODEL_PATH = os.path.join(MODELS_DIR, "face_detection_yunet.onnx")
@@ -72,7 +73,7 @@ if os.path.exists(YUNET_MODEL_PATH) and hasattr(cv2, 'FaceDetectorYN_create'):
 if os.path.exists(SFACE_MODEL_PATH) and hasattr(cv2, 'FaceRecognizerSF_create'):
     try:
         sface_recognizer = cv2.FaceRecognizerSF_create(SFACE_MODEL_PATH, '')
-        logger.info("SFace Deep Neural Network Model initialized successfully.")
+        logger.info("SFace/ArcFace Deep Neural Network Model initialized successfully.")
     except Exception as e:
         logger.warn(f"Notice initializing SFace model: {e}")
 
@@ -97,7 +98,7 @@ class GenerateEmbeddingResponse(BaseModel):
     worker_photo_id: str
     embedding: List[float]
     model: str = MODEL_NAME
-    detector: str = "yunet"
+    detector: str = "YuNet"
     distance_metric: str = DISTANCE_METRIC
 
 
@@ -235,8 +236,8 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
 
 def extract_sface_face_embedding(face_crop: np.ndarray, raw_face=None, full_img_bgr=None) -> List[float]:
     """
-    Extracts a 128-dimensional SFace Deep Neural Network feature vector.
-    Uses cv2.FaceRecognizerSF for high-precision 99.5% face recognition.
+    Extracts a 128-dimensional ArcFace/SFace Deep Neural Network feature vector.
+    Uses cv2.FaceRecognizerSF for high-precision face recognition.
     """
     if sface_recognizer is not None:
         # 1. Primary Alignment & Feature Extraction via SFace alignCrop
@@ -290,9 +291,10 @@ def calculate_cosine_distance(vec1: List[float], vec2: List[float]) -> float:
 def health_check():
     return {
         "status": "healthy",
-        "detector": "YuNet & SFace Deep Neural Network",
+        "detector": "YuNet",
         "model": MODEL_NAME,
         "distance_metric": DISTANCE_METRIC,
+        "default_threshold": DEFAULT_THRESHOLD,
         "storage_dirs": {
             "runtime_data": RUNTIME_DATA_DIR,
             "attendance_photos": ATTENDANCE_PHOTOS_DIR,
@@ -305,7 +307,7 @@ def health_check():
 
 @app.get("/embeddings/seed-dataset")
 def get_seed_dataset():
-    """Returns the pre-generated 15 SFace neural embeddings for worker-1..5 test dataset."""
+    """Returns the pre-generated SFace neural embeddings for dev/test usage only."""
     json_path = os.path.join(TEST_DATA_DIR, "test_embeddings.json")
     if os.path.exists(json_path):
         with open(json_path, "r", encoding="utf-8") as f:
@@ -316,7 +318,7 @@ def get_seed_dataset():
 @app.post("/embeddings/generate", response_model=GenerateEmbeddingResponse, dependencies=[Depends(verify_secret)])
 def generate_embedding(req: GenerateEmbeddingRequest):
     """
-    Extracts SFace Deep Neural embedding for a worker reference photo.
+    Extracts ArcFace/SFace Deep Neural embedding for a worker reference photo.
     """
     img_rgb = download_image_as_array(req.image_url)
     face_items = detect_human_faces_with_raw_bbox(img_rgb)
@@ -337,9 +339,15 @@ def generate_embedding(req: GenerateEmbeddingRequest):
 @app.post("/recognize", response_model=RecognizeResponse, dependencies=[Depends(verify_secret)])
 def recognize_group_photo(req: RecognizeRequest):
     """
-    Detects faces using YuNet and matches each face against SFace Deep Neural Network reference embeddings.
-    If an image contains 0 human faces, returns 0 matched workers.
+    Detects faces using YuNet and matches each face against ArcFace/SFace reference embeddings.
+    Aggregates multiple reference embeddings per worker_id and computes minimum distance per worker.
+    Applies conservative matching policy:
+      - distance <= threshold (0.68): status "matched" -> present
+      - threshold < distance <= threshold + 0.10: status "needs_review" -> flagged/skipped
+      - distance > threshold + 0.10: status "unknown" -> no attendance
     """
+    start_time = time.time()
+
     if len(req.reference_embeddings) == 0:
         return RecognizeResponse(
             matched_worker_ids=[],
@@ -354,31 +362,46 @@ def recognize_group_photo(req: RecognizeRequest):
     # 1. Detect real human face crops using YuNet Deep Learning Model + Fallbacks
     face_items = detect_human_faces_with_raw_bbox(img_rgb)
 
+    # 2. Group reference embeddings by worker_id to support multiple reference photos per worker
+    worker_embeddings_map = {}
+    for ref in req.reference_embeddings:
+        if ref.worker_id not in worker_embeddings_map:
+            worker_embeddings_map[ref.worker_id] = []
+        worker_embeddings_map[ref.worker_id].append(ref.embedding)
+
     matched_worker_ids = set()
     faces_result = []
     unknown_count = 0
 
-    # 2. Extract SFace 128-d neural feature vectors and compute Cosine Distance
+    # 3. Extract feature vectors and evaluate minimum distance for each worker
     for (face_crop, raw_face, full_bgr) in face_items:
         face_vector = extract_sface_face_embedding(face_crop, raw_face, full_bgr)
 
         best_match_worker_id = None
         min_distance = 999.0
 
-        for ref in req.reference_embeddings:
-            dist = calculate_cosine_distance(face_vector, ref.embedding)
-            if dist < min_distance:
-                min_distance = dist
-                best_match_worker_id = ref.worker_id
+        for worker_id, embed_list in worker_embeddings_map.items():
+            for ref_vec in embed_list:
+                dist = calculate_cosine_distance(face_vector, ref_vec)
+                if dist < min_distance:
+                    min_distance = dist
+                    best_match_worker_id = worker_id
 
-        # SFace Match if min_distance <= threshold (0.68)
+        # Conservative Matching Policy
         if min_distance <= threshold and best_match_worker_id:
-            confidence = round(max(0.0, 1.0 - (min_distance / 0.68)), 4)
+            confidence = round(max(0.0, 1.0 - (min_distance / threshold)), 4)
             matched_worker_ids.add(best_match_worker_id)
             faces_result.append(RecognizedFace(
                 worker_id=best_match_worker_id,
                 status="matched",
                 confidence=confidence,
+                distance=round(min_distance, 4)
+            ))
+        elif min_distance <= (threshold + 0.10) and best_match_worker_id:
+            faces_result.append(RecognizedFace(
+                worker_id=best_match_worker_id,
+                status="needs_review",
+                confidence=0.0,
                 distance=round(min_distance, 4)
             ))
         else:
@@ -389,6 +412,13 @@ def recognize_group_photo(req: RecognizeRequest):
                 confidence=0.0,
                 distance=round(min_distance, 4)
             ))
+
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    logger.info(
+        f"[FaceRecognition] Processed in {duration_ms}ms | Model: {MODEL_NAME}, Detector: YuNet | "
+        f"Detected Faces: {len(face_items)}, Active Workers Loaded: {len(worker_embeddings_map)}, "
+        f"Matched Workers: {len(matched_worker_ids)}, Unknown Faces: {unknown_count}"
+    )
 
     return RecognizeResponse(
         matched_worker_ids=list(matched_worker_ids),
