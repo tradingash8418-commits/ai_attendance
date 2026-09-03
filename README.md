@@ -37,6 +37,7 @@ npx localtunnel --port 3000
 
 ## 📘 Documentation & Architecture Guides
 
+* **[Complete Cloud Architecture & Deployment Handbook](docs/complete-cloud-architecture-and-deployment.md)**: Full guide on Vercel, Render, GitHub, Firebase, Supabase, system roles, coordination flow, and auto-sync redeployment.
 * **[24/7 Cloud Deployment Guide](docs/cloud-deployment-guide.md)**: Step-by-step tutorial on deploying Next.js to Vercel and Python AI to Render for 24/7/365 active automation even when PC is off.
 * **[Firebase vs Supabase Roles](docs/firebase-and-supabase-roles.md)**: Role division between Firebase (Database) and Supabase (Cloud Image Storage).
 * **[Hajri Time-Slab System Documentation](docs/hajri-time-slab-system.md)**: Detailed technical design, continuous time-slab tables, single-record lifecycle, and boundary test matrix.
