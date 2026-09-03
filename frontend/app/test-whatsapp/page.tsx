@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, MessageSquare, CheckCircle, RefreshCw, AlertCircle, Camera, Play, Upload, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { ArrowLeft, MessageSquare, CheckCircle, RefreshCw, AlertCircle, Camera, Play, Upload, UserCheck, ShieldAlert, Sparkles, Terminal, Code2 } from 'lucide-react';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SeedService } from '@/services/seed.service';
 import type { AttendanceSession } from '@/types/attendance';
@@ -17,6 +17,13 @@ interface AnalysisResultData {
   totalFacesDetected: number;
   recognizedCount: number;
   recognizedWorkers: RecognizedWorkerInfo[];
+  diagnosticLogs?: string[];
+  facesDetail?: {
+    workerId: string | null;
+    status: string;
+    confidence: number;
+    distance: number;
+  }[];
 }
 
 export default function TestWhatsAppPage() {
@@ -31,6 +38,7 @@ export default function TestWhatsAppPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [analyzingFile, setAnalyzingFile] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultData | null>(null);
+  const [liveLogs, setLiveLogs] = useState<string[]>([]);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -95,6 +103,7 @@ export default function TestWhatsAppPage() {
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setAnalysisResult(null);
+      setLiveLogs([]);
     }
   };
 
@@ -102,6 +111,13 @@ export default function TestWhatsAppPage() {
     if (!selectedFile) return;
     setAnalyzingFile(true);
     setAnalysisResult(null);
+    
+    const startTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+    setLiveLogs([
+      `[${startTime}] Starting AI Analysis for file: ${selectedFile.name}...`,
+      `[${startTime}] Uploading image payload & calling /api/test-ai-upload...`
+    ]);
+
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
@@ -114,12 +130,20 @@ export default function TestWhatsAppPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setAnalysisResult(data as AnalysisResultData);
+        if (data.diagnosticLogs && Array.isArray(data.diagnosticLogs)) {
+          setLiveLogs(data.diagnosticLogs);
+        }
       } else {
         alert(`Analysis error: ${data.error || 'Failed to analyze image'}`);
+        if (data.diagnosticLogs && Array.isArray(data.diagnosticLogs)) {
+          setLiveLogs(data.diagnosticLogs);
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error in manual AI photo analysis:', err);
       alert('Error analyzing photo');
+      const errTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+      setLiveLogs((prev) => [...prev, `[${errTime}] ERROR: ${err?.message || 'Network exception'}`]);
     } finally {
       setAnalyzingFile(false);
     }
@@ -235,24 +259,29 @@ export default function TestWhatsAppPage() {
                 <button
                   onClick={handleManualAnalyzePhoto}
                   disabled={analyzingFile}
-                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
+                  className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
                 >
                   <Sparkles className="w-4 h-4" />
-                  <span>{analyzingFile ? 'YuNet AI Scanning Faces...' : 'Analyze Photo with YuNet AI'}</span>
+                  <span>{analyzingFile ? 'YuNet AI Scanning Faces & Generating Logs...' : 'Analyze Photo with YuNet AI'}</span>
                 </button>
               </div>
             )}
           </div>
 
           {/* AI Analysis Output Display */}
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 min-h-[160px]">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200 pb-2">
-              YuNet AI Output Analysis
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 min-h-[220px]">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200 pb-2 flex items-center justify-between">
+              <span>YuNet AI Output Analysis</span>
+              {analyzingFile && (
+                <span className="text-[10px] text-blue-600 flex items-center gap-1 font-bold animate-pulse">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Processing...
+                </span>
+              )}
             </h3>
 
             {!analysisResult ? (
-              <div className="py-6 text-center text-xs text-slate-500">
-                Upload a photo on the left and click <strong className="text-blue-600">Analyze Photo</strong> to see detected human faces and recognized worker names.
+              <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+                <p>Upload a photo on the left and click <strong className="text-blue-600">Analyze Photo with YuNet AI</strong> to execute real-time face detection & generate live diagnostic execution logs.</p>
               </div>
             ) : (
               <div className="space-y-3 text-xs">
@@ -309,6 +338,30 @@ export default function TestWhatsAppPage() {
             )}
           </div>
         </div>
+
+        {/* Live AI Execution Log Console */}
+        {liveLogs.length > 0 && (
+          <div className="mt-4 rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-2 text-xs font-mono shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-slate-400">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                <Terminal className="w-4 h-4 text-emerald-400" />
+                <span>Live AI Diagnostic Execution Console</span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">{liveLogs.length} LOG EVENTS</span>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pt-1 text-slate-300 font-mono text-[11px]">
+              {liveLogs.map((logLine, idx) => (
+                <div key={idx} className="flex items-start gap-2 leading-relaxed hover:bg-slate-900/60 p-1 rounded transition-colors">
+                  <span className="text-emerald-500 select-none font-bold">›</span>
+                  <span className={logLine.includes('ERROR') ? 'text-rose-400 font-bold' : logLine.includes('Step') ? 'text-cyan-300 font-bold' : logLine.includes('Match Confirmed') ? 'text-emerald-300 font-bold' : 'text-slate-300'}>
+                    {logLine}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Session Logs Feed */}
