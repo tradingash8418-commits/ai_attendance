@@ -10,7 +10,8 @@ export class SeedService {
   /**
    * Seeds Stage 4 development test dataset:
    * Maps test-data/worker-1..5 to Pintu, Pradeep, Rampal, Suresh, Ramesh.
-   * Generates and stores all 15 ArcFace embeddings in Firestore workerFaceEmbeddings collection.
+   * Fetches real SFace Deep Neural embeddings from Python face-service /embeddings/seed-dataset
+   * and stores them in Firestore workerFaceEmbeddings collection.
    */
   public static async seedTestData(): Promise<{
     workersCreated: number;
@@ -124,15 +125,36 @@ export class SeedService {
       assignmentsCreated = 5;
     }
 
-    // 5. Seed 15 ArcFace Embeddings into Firestore workerFaceEmbeddings collection
+    // 5. Seed Real SFace Deep Neural Embeddings into Firestore workerFaceEmbeddings collection
+    const isProd = process.env.VERCEL || process.env.NODE_ENV === 'production';
+    const faceServiceUrl =
+      process.env.NEXT_PUBLIC_FACE_SERVICE_URL ||
+      process.env.FACE_SERVICE_URL ||
+      (isProd ? 'https://ai-attendance-zfu0.onrender.com' : 'http://localhost:8000');
+
+    let realSeedEmbeddings: any[] = [];
+    try {
+      const seedRes = await fetch(`${faceServiceUrl}/embeddings/seed-dataset`);
+      if (seedRes.ok) {
+        realSeedEmbeddings = await seedRes.json();
+      }
+    } catch (err) {
+      console.warn('[SeedService] Notice fetching real seed embeddings from face-service:', err);
+    }
+
     const embColRef = collection(db, 'workerFaceEmbeddings');
 
     for (const wDef of workerDefs) {
       const targetWorkerId = workerMap[wDef.workerCode];
       if (!targetWorkerId) continue;
 
-      for (let photoNum = 1; photoNum <= 3; photoNum++) {
-        const photoId = `photo_${wDef.dir}_${photoNum}`;
+      const matchingSeedItems = realSeedEmbeddings.filter(
+        (item: any) => item.workerCode === wDef.dir || item.workerCode === wDef.workerCode
+      );
+
+      let photoIndex = 1;
+      for (const item of matchingSeedItems) {
+        const photoId = item.workerPhotoId || `photo_${wDef.dir}_${photoIndex}`;
         const existingQ = query(
           embColRef,
           where('workerId', '==', targetWorkerId),
@@ -141,25 +163,20 @@ export class SeedService {
         const existingSnap = await getDocs(existingQ);
 
         if (existingSnap.empty) {
-          const seedVal = (targetWorkerId.charCodeAt(0) * 100 + photoNum * 50) % 10000;
-          const vec = new Array(512).fill(0).map((_, i) => {
-            const raw = Math.sin(seedVal + i) * 0.15;
-            return Math.round(raw * 1000000) / 1000000;
-          });
-
           const now = serverTimestamp();
           await addDoc(embColRef, {
             workerId: targetWorkerId,
             workerPhotoId: photoId,
-            model: 'ArcFace',
-            detector: 'opencv',
+            model: 'SFace',
+            detector: 'yunet',
             distanceMetric: 'cosine',
-            embedding: vec,
+            embedding: item.embedding,
             createdAt: now,
             updatedAt: now,
           });
           embeddingsCreated++;
         }
+        photoIndex++;
       }
     }
 
