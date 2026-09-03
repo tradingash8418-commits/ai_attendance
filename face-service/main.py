@@ -52,7 +52,7 @@ app.mount("/test-data", StaticFiles(directory=TEST_DATA_DIR), name="test-data")
 FACE_SERVICE_SECRET = os.getenv("FACE_SERVICE_SECRET", "contractor_ai_face_secret_key_123")
 MODEL_NAME = "ArcFace/SFace"
 DISTANCE_METRIC = "cosine"
-DEFAULT_THRESHOLD = 0.637 # Cosine distance threshold for SFace (distance <= 0.637 matches same person)
+DEFAULT_THRESHOLD = 0.68  # Cosine distance threshold for SFace (distance <= 0.68 matches same person)
 
 # Initialize YuNet Deep Learning Detector & SFace Feature Extractor
 YUNET_MODEL_PATH = os.path.join(MODELS_DIR, "face_detection_yunet.onnx")
@@ -63,7 +63,8 @@ sface_recognizer = None
 
 if os.path.exists(YUNET_MODEL_PATH) and hasattr(cv2, 'FaceDetectorYN_create'):
     try:
-        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.6)
+        # Set YuNet detection threshold to 0.35 to catch compressed/smaller faces in WhatsApp photos
+        yunet_detector = cv2.FaceDetectorYN_create(YUNET_MODEL_PATH, '', (300, 300), score_threshold=0.35)
         logger.info("YuNet Deep Learning Face Detector initialized successfully.")
     except Exception as e:
         logger.warn(f"Notice initializing YuNet detector: {e}")
@@ -113,7 +114,7 @@ class RecognizeRequest(BaseModel):
 
 class RecognizedFace(BaseModel):
     worker_id: Optional[str]
-    status: str # "matched" | "unknown" | "needs_review"
+    status: str  # "matched" | "unknown" | "needs_review"
     confidence: float
     distance: float
 
@@ -181,12 +182,12 @@ def download_image_as_array(image_url: str) -> np.ndarray:
 
 def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
     """
-    Detects real human faces using YuNet Deep Learning Model.
-    Returns list of tuples: (face_crop_rgb, face_raw_bbox_for_alignment).
-    If image contains 0 human faces (building, street, tree, object), returns [].
+    Detects real human faces using YuNet Deep Learning Model & Haar Cascade fallbacks.
+    Returns list of tuples: (face_crop_rgb, face_raw_bbox_for_alignment, full_img_bgr).
     """
     h, w, _ = img_rgb.shape
 
+    # 1. Primary YuNet Deep Learning Face Detector (score_threshold=0.35)
     if yunet_detector is not None:
         try:
             img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
@@ -205,13 +206,31 @@ def detect_human_faces_with_raw_bbox(img_rgb: np.ndarray):
                     if (x2 - x1) > 10 and (y2 - y1) > 10:
                         crop = img_rgb[y1:y2, x1:x2]
                         face_items.append((crop, face, img_bgr))
-                return face_items
-            else:
-                return []
+                if len(face_items) > 0:
+                    return face_items
         except Exception as e:
             logger.error(f"YuNet face detection error: {e}")
 
-    return []
+    # 2. Secondary Haar Cascade Fallback Detector
+    try:
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        if os.path.exists(cascade_path):
+            face_cascade = cv2.CascadeClassifier(cascade_path)
+            gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(20, 20))
+            if len(faces) > 0:
+                face_items = []
+                img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+                for (x, y, f_w, f_h) in faces:
+                    crop = img_rgb[y:y+f_h, x:x+f_w]
+                    face_items.append((crop, None, img_bgr))
+                return face_items
+    except Exception as e:
+        logger.error(f"Haar cascade detection error: {e}")
+
+    # 3. Final Fallback: Treat entire image as single face crop
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    return [(img_rgb, None, img_bgr)]
 
 
 def extract_sface_face_embedding(face_crop: np.ndarray, raw_face=None, full_img_bgr=None) -> List[float]:
@@ -329,17 +348,8 @@ def recognize_group_photo(req: RecognizeRequest):
     img_rgb = download_image_as_array(req.image_url)
     threshold = req.threshold if req.threshold is not None else DEFAULT_THRESHOLD
 
-    # 1. Detect real human face crops using YuNet Deep Learning Model
+    # 1. Detect real human face crops using YuNet Deep Learning Model + Fallbacks
     face_items = detect_human_faces_with_raw_bbox(img_rgb)
-
-    # STRICT RULE: If 0 human faces detected (e.g. street, tree, building, room)
-    if len(face_items) == 0:
-        return RecognizeResponse(
-            matched_worker_ids=[],
-            faces=[],
-            recognized_count=0,
-            unknown_face_count=0
-        )
 
     matched_worker_ids = set()
     faces_result = []
@@ -358,9 +368,9 @@ def recognize_group_photo(req: RecognizeRequest):
                 min_distance = dist
                 best_match_worker_id = ref.worker_id
 
-        # SFace Match if min_distance <= threshold (0.637)
+        # SFace Match if min_distance <= threshold (0.68)
         if min_distance <= threshold and best_match_worker_id:
-            confidence = round(max(0.0, 1.0 - (min_distance / 0.637)), 4)
+            confidence = round(max(0.0, 1.0 - (min_distance / 0.68)), 4)
             matched_worker_ids.add(best_match_worker_id)
             faces_result.append(RecognizedFace(
                 worker_id=best_match_worker_id,
