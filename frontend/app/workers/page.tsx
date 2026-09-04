@@ -8,6 +8,7 @@ import { WorkerPhotosService } from '@/services/workerPhotos.service';
 import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
 import { getWorkerDisplayName } from '@/lib/formatters';
 import type { Worker, WorkerPhoto } from '@/types/worker';
+import { compressImageFile } from '@/lib/image-compress';
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -74,8 +75,11 @@ export default function WorkersPage() {
       formData.append('workerCode', nextCode);
       formData.append('phone', phone);
       formData.append('role', role || 'General Worker');
+      
       if (selectedPhotoFile) {
-        formData.append('file', selectedPhotoFile);
+        // Automatically compress camera image before sending to avoid Vercel 413 Payload limit
+        const compressedFile = await compressImageFile(selectedPhotoFile, 1280, 0.85);
+        formData.append('file', compressedFile);
       }
 
       const res = await fetch('/api/workers/enroll', {
@@ -83,7 +87,16 @@ export default function WorkersPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'Image file is too large for upload. Please choose a smaller photo.'
+            : `Server returned HTTP ${res.status}`
+        );
+      }
 
       if (res.ok && data.success) {
         setSuccessNotice(`Worker ${name} (${nextCode}) enrolled successfully with SFace AI Neural Face Vector!`);
@@ -98,9 +111,9 @@ export default function WorkersPage() {
       } else {
         setErrorMsg(data.error || 'Failed to enroll worker');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating worker:', err);
-      setErrorMsg('Failed to create worker.');
+      setErrorMsg(err?.message || 'Failed to create worker.');
     } finally {
       setSubmitting(false);
     }
@@ -133,7 +146,8 @@ export default function WorkersPage() {
     setUploadingPhoto(true);
     setEmbeddingNotice(null);
     try {
-      const uploaded = await WorkerPhotosService.uploadWorkerPhoto(selectedWorkerForPhoto.id, file);
+      const compressed = await compressImageFile(file, 1280, 0.85);
+      const uploaded = await WorkerPhotosService.uploadWorkerPhoto(selectedWorkerForPhoto.id, compressed);
       setWorkerPhotos((prev) => [uploaded, ...prev]);
 
       try {

@@ -6,6 +6,7 @@ import { ArrowLeft, MessageSquare, CheckCircle, RefreshCw, AlertCircle, Camera, 
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SeedService } from '@/services/seed.service';
 import type { AttendanceSession } from '@/types/attendance';
+import { compressImageFile } from '@/lib/image-compress';
 
 interface RecognizedWorkerInfo {
   id: string;
@@ -119,15 +120,25 @@ export default function TestWhatsAppPage() {
     ]);
 
     try {
+      const compressed = await compressImageFile(selectedFile, 1280, 0.85);
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append('file', compressed);
 
       const res = await fetch('/api/test-ai-upload', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'Image file too large for server.'
+            : `Server returned HTTP ${res.status}`
+        );
+      }
       if (res.ok && data.success) {
         setAnalysisResult(data as AnalysisResultData);
         if (data.diagnosticLogs && Array.isArray(data.diagnosticLogs)) {
