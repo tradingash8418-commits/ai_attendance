@@ -1,4 +1,4 @@
-import { HAJRI_TIME_RANGES, UNMATCHED_HAJRI_STATE, TIMEZONE, HajriTimeRangeRule } from '@/config/hajri-rules.config';
+import { HAJRI_TIME_RANGES, UNMATCHED_HAJRI_STATE, TIMEZONE } from '@/config/hajri-rules.config';
 
 export interface HajriCalculationResult {
   status: 'matched' | 'unmatched';

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, MessageSquare, CheckCircle, RefreshCw, AlertCircle, Camera, Play, Upload, UserCheck, ShieldAlert, Sparkles, Terminal, Code2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, CheckCircle, RefreshCw, AlertCircle, Camera, Play, Upload, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SeedService } from '@/services/seed.service';
 import type { AttendanceSession } from '@/types/attendance';
@@ -334,6 +334,20 @@ export default function TestWhatsAppPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {liveLogs.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] space-y-1 max-h-48 overflow-y-auto">
+                <div className="text-slate-400 font-bold border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+                  <span>LIVE DIAGNOSTIC LOGS</span>
+                  <span className="text-[10px] text-emerald-400 font-bold">READY</span>
+                </div>
+                {liveLogs.map((log, i) => (
+                  <div key={i} className="leading-tight text-slate-300">
+                    {log}
+                  </div>
+                ))}
               </div>
             )}
           </div>

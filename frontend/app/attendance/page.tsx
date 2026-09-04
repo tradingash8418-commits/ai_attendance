@@ -6,7 +6,7 @@ import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SitesService } from '@/services/sites.service';
 import { WorkersService } from '@/services/workers.service';
-import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime } from '@/lib/formatters';
 import type { AttendanceSession, AttendanceRecord } from '@/types/attendance';
 import type { Site } from '@/types/site';
 import type { Worker } from '@/types/worker';
@@ -192,10 +192,10 @@ export default function AttendancePage() {
                           {site ? site.name : 'Unknown Site'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '10:00 AM'}
+                          {formatTime(r.checkInTime, '10:00 AM')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                          {formatTime(r.checkOutTime, '-')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-500 font-semibold">
                           {r.workedHours || '0h 00m'}

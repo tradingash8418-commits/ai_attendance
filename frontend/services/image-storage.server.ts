@@ -94,7 +94,7 @@ export class ImageStorageServer {
       const bucketName = 'attendance-photos';
       const filePath = `attendance/${params.date}/${params.siteId}/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from(bucketName)
         .upload(filePath, params.buffer, {
           contentType: params.mimeType || 'image/jpeg',
@@ -122,7 +122,7 @@ export class ImageStorageServer {
       const bucketName = 'attendance-photos';
       const filePath = `workers/${params.workerId}/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from(bucketName)
         .upload(filePath, params.buffer, {
           contentType: params.mimeType || 'image/jpeg',

@@ -8,6 +8,11 @@ import { LayoutDashboard, CalendarCheck, Building2, Users, UserCheck } from 'luc
 export const MobileNav: React.FC = () => {
   const pathname = usePathname();
 
+  // Completely isolate worker check-in and login screens
+  if (pathname?.startsWith('/checkin') || pathname === '/login') {
+    return null;
+  }
+
   const navItems = [
     { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
     { href: '/attendance', label: 'Attendance', icon: CalendarCheck },

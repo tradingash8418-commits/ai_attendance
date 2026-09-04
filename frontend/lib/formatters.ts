@@ -41,6 +41,27 @@ export const getWorkerDisplayName = (worker: Worker): string => {
 };
 
 /**
+ * Formats a Date object, ISO string, timestamp number, or Firestore Timestamp to HH:MM AM/PM.
+ */
+export const formatTime = (val: any, fallback = '-'): string => {
+  if (!val) return fallback;
+  try {
+    let d: Date;
+    if (typeof val === 'object' && 'toDate' in val && typeof val.toDate === 'function') {
+      d = val.toDate();
+    } else if (typeof val === 'object' && 'seconds' in val) {
+      d = new Date(val.seconds * 1000);
+    } else {
+      d = new Date(val);
+    }
+    if (isNaN(d.getTime())) return fallback;
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return fallback;
+  }
+};
+
+/**
  * Formats a Date object or current date to YYYY-MM-DD string.
  */
 export const getTodayDateString = (date?: Date): string => {

@@ -12,10 +12,59 @@ import {
 import { db } from '@/lib/firebase';
 import { HajriCalculatorService } from './hajri-calculator.service';
 import type { AttendanceRecord } from '@/types/attendance';
+import { SitesService } from './sites.service';
+import { WorkersService } from './workers.service';
 
 const COLLECTION_NAME = 'attendanceRecords';
 
+export interface TodayDashboardSummary {
+  presentCount: number;
+  expectedCount: number;
+  percentage: number;
+  siteSummaries: Array<{
+    siteId: string;
+    siteName: string;
+    presentCount: number;
+    expectedCount: number;
+  }>;
+}
+
 export class AttendanceService {
+  /**
+   * Generates aggregated attendance metrics for the contractor dashboard.
+   */
+  public static async getTodayDashboardSummary(date: string): Promise<TodayDashboardSummary> {
+    const [records, sites, workers] = await Promise.all([
+      this.getAttendanceRecords({ date }),
+      SitesService.getSites(),
+      WorkersService.getWorkers(),
+    ]);
+
+    const presentWorkers = new Set(records.map((r) => r.workerId));
+    const presentCount = presentWorkers.size;
+    const expectedCount = workers.length;
+    const percentage = expectedCount > 0 ? Math.round((presentCount / expectedCount) * 100) : 0;
+
+    const siteSummaries = sites.map((site) => {
+      const siteRecords = records.filter((r) => r.siteId === site.id);
+      const sitePresentWorkers = new Set(siteRecords.map((r) => r.workerId));
+      const sitePresentCount = sitePresentWorkers.size;
+      return {
+        siteId: site.id,
+        siteName: site.name,
+        presentCount: sitePresentCount,
+        expectedCount: workers.length,
+      };
+    });
+
+    return {
+      presentCount,
+      expectedCount,
+      percentage,
+      siteSummaries,
+    };
+  }
+
   /**
    * Retrieves all attendance records matching date and site filters.
    */

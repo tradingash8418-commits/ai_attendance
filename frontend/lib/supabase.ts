@@ -39,7 +39,7 @@ export const supabase = {
               'Content-Type': options?.contentType || 'image/jpeg',
               'x-upsert': options?.upsert ? 'true' : 'false',
             },
-            body: buffer,
+            body: buffer as unknown as BodyInit,
           });
 
           if (!res.ok) {

@@ -3,6 +3,7 @@ import './globals.css';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { MobileNav } from '@/components/MobileNav';
+import { AuthGuard } from '@/components/AuthGuard';
 
 export const metadata: Metadata = {
   title: 'Contractor AI | Construction Workforce Management',
@@ -31,7 +32,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-[#f4f5f7] text-slate-900 min-h-screen flex flex-col antialiased pb-16 md:pb-0">
         <Header />
-        <main className="flex-grow flex flex-col">{children}</main>
+        <main className="flex-grow flex flex-col">
+          <AuthGuard>{children}</AuthGuard>
+        </main>
         <Footer />
         <div className="md:hidden">
           <MobileNav />

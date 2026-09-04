@@ -213,12 +213,12 @@ export class WebhookProcessorServer {
         const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl, imageBuffer);
         const allWorkers = await WorkersService.getWorkers();
 
-        if (recognitionResult.matchedWorkerIds.length > 0) {
-          const matchedWorkerId = recognitionResult.matchedWorkerIds[0];
+        const matchedWorkerId = recognitionResult.matchedWorkerIds[0];
+        if (matchedWorkerId) {
           const targetWorker = allWorkers.find(
             (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId
           );
-          const resolvedId = targetWorker ? targetWorker.id : matchedWorkerId;
+          const resolvedId = targetWorker?.id || matchedWorkerId;
           const displayName = targetWorker ? getWorkerDisplayName(targetWorker) : 'Worker';
 
           // Record attendance with method: 'worker_qr_whatsapp'

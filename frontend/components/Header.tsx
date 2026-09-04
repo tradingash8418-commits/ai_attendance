@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   HardHat,
   LayoutDashboard,
@@ -11,13 +11,23 @@ import {
   Users,
   UserCheck,
   Activity,
-  Search,
   Bell,
-  Grid,
+  LogOut,
+  ChevronDown,
 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { AuthService } from '@/services/auth.service';
 
 export const Header: React.FC = () => {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useAuth();
+  const [showProfileDropdown, setShowProfileDropdown] = useState<boolean>(false);
+
+  // Completely isolate worker check-in and login screens from any navigation/header
+  if (pathname?.startsWith('/checkin') || pathname === '/login') {
+    return null;
+  }
 
   const navLinks = [
     { href: '/dashboard', label: 'Contractor Home', icon: LayoutDashboard },
@@ -27,6 +37,22 @@ export const Header: React.FC = () => {
     { href: '/supervisors', label: 'Supervisors', icon: UserCheck },
     { href: '/test-whatsapp', label: 'AI Diagnostics', icon: Activity },
   ];
+
+  const handleLogout = async () => {
+    try {
+      await AuthService.logout();
+      setShowProfileDropdown(false);
+      router.replace('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const userInitials = user?.displayName
+    ? user.displayName.slice(0, 2).toUpperCase()
+    : user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : 'CA';
 
   return (
     <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md">
@@ -79,25 +105,42 @@ export const Header: React.FC = () => {
               <span className="text-[11px] tracking-wider uppercase text-emerald-400">LIVE MODE</span>
             </div>
 
-            {/* Search Icon */}
-            <button className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-              <Search className="w-4 h-4" />
-            </button>
-
             {/* Notifications Bell */}
             <button className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors relative">
               <Bell className="w-4 h-4" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500"></span>
             </button>
 
-            {/* Layout Grid */}
-            <button className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-              <Grid className="w-4 h-4" />
-            </button>
+            {/* User Profile Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileDropdown((prev) => !prev)}
+                className="flex items-center gap-2 p-1 pl-2 rounded-xl hover:bg-slate-800/80 transition-colors border border-transparent hover:border-slate-700"
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-xs text-white shadow-md">
+                  {userInitials}
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+              </button>
 
-            {/* User Profile Avatar Pill */}
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-xs text-white shadow-md cursor-pointer hover:opacity-90 transition-opacity">
-              CA
+              {showProfileDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl space-y-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-2 border-b border-slate-800/80">
+                    <p className="font-extrabold text-white truncate">
+                      {user?.displayName || 'Contractor Admin'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">{user?.email || 'admin@contractor.ai'}</p>
+                  </div>
+
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-semibold transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
