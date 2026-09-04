@@ -56,26 +56,29 @@ export class PaymentOcrService {
     const intPart = parts[0] || '';
     const decPart = parts[1] ? '.' + parts[1] : '';
 
-    // 1. PhonePe Rupee-as-3 artifact: '37,400' -> '7,400' = 7400
-    if (intPart.startsWith('37,') && intPart.length <= 7) {
-      const sub = parseFloat(intPart.substring(1).replace(/,/g, '') + decPart);
-      if (!isNaN(sub) && sub > 0) return sub;
+    // Rule 1: 3 digits before single comma: e.g. '350,000' (₹50,000), '745,000' (₹45,000), '315,000' (₹15,000)
+    // In Indian banking, 50,000 is written as ₹50,000. When ₹ is misread as 3 or 7, it becomes 350,000 or 745,000.
+    // In real Indian system, 3.5 Lakh is formatted as '3,50,000' with 2 commas!
+    if (intPart.match(/^[1-9][0-9]{2},[0-9]{3}$/)) {
+      const recovered = parseFloat(intPart.substring(1).replace(/,/g, '') + decPart);
+      if (!isNaN(recovered) && recovered > 0) return recovered;
     }
 
-    // 2. PhonePe 5-digit '37400' without commas -> 7400
+    // Rule 2: 2 digits before single comma where first digit is 3 or 7: e.g. '37,400' (₹7,400), '75,000' (₹5,000)
+    if (intPart.match(/^[37][0-9],[0-9]{3}$/)) {
+      const recovered = parseFloat(intPart.substring(1).replace(/,/g, '') + decPart);
+      if (!isNaN(recovered) && recovered > 0) return recovered;
+    }
+
+    // Rule 3: 4, 5, or 6 digit numbers without commas starting with 3 or 7:
+    // e.g. 350000 -> 50000, 745000 -> 45000, 37400 -> 7400, 7300 -> 300, 7460 -> 460
     const cleanInt = intPart.replace(/,/g, '');
+    if (cleanInt.match(/^[37][1-9]0000$/)) {
+      return parseFloat(cleanInt.substring(1) + decPart);
+    }
     if (cleanInt.startsWith('37') && cleanInt.length === 5) {
-      const sub = parseFloat(cleanInt.substring(1) + decPart);
-      if (sub >= 1000 && sub <= 9999) return sub;
+      return parseFloat(cleanInt.substring(1) + decPart);
     }
-
-    // 3. GPay Rupee-as-7 artifact: '745,000' -> '45,000' = 45000, '75,000' -> '5,000' = 5000
-    if (intPart.startsWith('7') && intPart.match(/^7[0-9]{1,2},[0-9]{3}/)) {
-      const sub = parseFloat(intPart.substring(1).replace(/,/g, '') + decPart);
-      if (!isNaN(sub) && sub > 0) return sub;
-    }
-
-    // 4. Small amounts Rupee-as-7: '7300' -> 300, '7460' -> 460, '7500' -> 500
     if (cleanInt.startsWith('7') && cleanInt.length >= 3 && cleanInt.length <= 4) {
       const sub = parseFloat(cleanInt.substring(1) + decPart);
       if (sub > 0 && sub < 1000) return sub;
