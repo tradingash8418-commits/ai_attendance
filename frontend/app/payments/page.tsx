@@ -64,6 +64,7 @@ export default function PaymentsPage() {
   const [ocrAnalyzing, setOcrAnalyzing] = useState<boolean>(false);
   const [ocrImagePreview, setOcrImagePreview] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<ExtractedPaymentData | null>(null);
+  const [ocrAmount, setOcrAmount] = useState<string>('');
   const [ocrPaidToName, setOcrPaidToName] = useState<string>('');
   const [ocrSaveSuccess, setOcrSaveSuccess] = useState<string | null>(null);
 
@@ -165,13 +166,13 @@ export default function PaymentsPage() {
     }
   };
 
-  // OCR Screenshot Processing
   const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setOcrAnalyzing(true);
     setOcrResult(null);
+    setOcrAmount('');
     setOcrPaidToName('');
     setOcrSaveSuccess(null);
 
@@ -182,7 +183,8 @@ export default function PaymentsPage() {
       // Perform OCR extraction
       const extracted = await PaymentOcrService.extractPaymentFromBase64(compressedBase64);
       setOcrResult(extracted);
-      setOcrPaidToName(extracted.receiverName || 'MUBARAK');
+      setOcrAmount(extracted.amount ? String(extracted.amount) : '');
+      setOcrPaidToName(extracted.receiverName || '');
     } catch (err) {
       console.error('Screenshot OCR error:', err);
     } finally {
@@ -191,15 +193,15 @@ export default function PaymentsPage() {
   };
 
   const handleSaveOcrEntry = async () => {
-    if (!ocrResult || !ocrResult.amount || !ocrPaidToName.trim()) return;
+    const amountNum = parseFloat(ocrAmount) || ocrResult?.amount || 0;
+    const targetName = ocrPaidToName.trim();
+    if (!ocrResult || amountNum <= 0 || !targetName) return;
 
     setSubmitting(true);
     try {
-      const targetName = ocrPaidToName.trim();
-
       await PaymentLedgerService.recordPayment({
         paidTo: targetName,
-        amount: ocrResult.amount,
+        amount: amountNum,
         category: 'advance',
         paymentMethod: ocrResult.paymentMethod || 'gpay',
         upiId: ocrResult.upiId || undefined,
@@ -211,7 +213,7 @@ export default function PaymentsPage() {
         rawOcrText: ocrResult.rawText,
       });
 
-      setOcrSaveSuccess(`Payment of ₹${ocrResult.amount} paid to ${targetName} recorded successfully!`);
+      setOcrSaveSuccess(`Payment of ₹${amountNum.toLocaleString('en-IN')} paid to ${targetName} recorded successfully!`);
       setTimeout(() => {
         loadData();
       }, 1200);
@@ -739,24 +741,44 @@ export default function PaymentsPage() {
                   </div>
                 </div>
 
-                {/* Paid To Name (Extracted from OCR, fully editable) */}
-                <div className="space-y-1.5 pt-2">
-                  <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-                    <span>Paid To (Person / Worker / Receiver Name) *</span>
-                    <span className="text-[10px] text-emerald-600 font-bold">Auto-Extracted from Bill</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={ocrPaidToName}
-                    onChange={(e) => setOcrPaidToName(e.target.value)}
-                    placeholder="e.g. MUBARAK"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 uppercase shadow-sm"
-                  />
-                  <p className="text-[10px] text-slate-400">
-                    AI extracted &quot;{ocrResult.receiverName || 'MUBARAK'}&quot; from payment screenshot. You can edit if needed.
-                  </p>
+                {/* Editable Fields: Amount & Paid To Name */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <span>Amount (₹) *</span>
+                      <span className="text-[10px] text-emerald-600 font-bold">Auto-Detected</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      value={ocrAmount}
+                      onChange={(e) => setOcrAmount(e.target.value)}
+                      placeholder="e.g. 45000"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-black text-rose-600 focus:outline-none focus:border-blue-500 shadow-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <span>Paid To (Receiver Name) *</span>
+                      <span className="text-[10px] text-emerald-600 font-bold">Auto-Detected</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ocrPaidToName}
+                      onChange={(e) => setOcrPaidToName(e.target.value)}
+                      placeholder="e.g. RAJKUMAR"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 uppercase shadow-sm"
+                    />
+                  </div>
                 </div>
+
+                <p className="text-[10px] text-slate-400">
+                  AI auto-extracted ₹{ocrAmount || '0'} paid to &quot;{ocrPaidToName || 'Recipient'}&quot;. You can edit either field before confirming.
+                </p>
 
                 {ocrSaveSuccess && (
                   <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
@@ -768,14 +790,14 @@ export default function PaymentsPage() {
                 {/* 1-Click Save Action */}
                 <button
                   onClick={handleSaveOcrEntry}
-                  disabled={submitting || !ocrResult.amount || !ocrPaidToName.trim()}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+                  disabled={submitting || !ocrAmount || parseFloat(ocrAmount) <= 0 || !ocrPaidToName.trim()}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     {submitting
                       ? 'Saving to Ledger...'
-                      : `Confirm & Record ₹${ocrResult.amount ?? 0} Paid to ${ocrPaidToName.trim() || 'Recipient'}`}
+                      : `Confirm & Record ₹${Number(ocrAmount || 0).toLocaleString('en-IN')} Paid to ${ocrPaidToName.trim() || 'Recipient'}`}
                   </span>
                 </button>
               </div>

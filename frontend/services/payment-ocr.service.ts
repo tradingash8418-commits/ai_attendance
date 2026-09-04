@@ -42,8 +42,7 @@ const WORDS_MAP: Record<string, number> = {
 export class PaymentOcrService {
   /**
    * Converts written currency words (e.g. "Rupees Three Hundred Only" -> 300)
-   * into a numeric amount. This is a 100% reliable validator because OCR cannot
-   * confuse ₹ with digit 7 in written words.
+   * into a numeric amount.
    */
   public static parseWordsToNumber(text: string): number | null {
     const match = text.match(/(?:rupees?|inr|rs\.?)\s+([a-z\s]+?)(?:\s+only|\.|\n|$)/i);
@@ -125,19 +124,40 @@ export class PaymentOcrService {
       paymentMethod = 'paytm';
     }
 
-    // 2. Extract Amount (Cross-validated against written words & digits)
+    // 2. Extract Date & Time FIRST so day numbers (e.g. '2' in '2 September 2026') never get parsed as ₹2 Amount
+    let timestampStr: string | null = null;
+    const fullDateMatch = text.match(
+      /\b([0-3]?[0-9]\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202[4-9](?:[,\s\-at]+[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)?)?)\b/i
+    );
+    if (fullDateMatch && fullDateMatch[1]) {
+      timestampStr = fullDateMatch[1].trim();
+    } else {
+      const timeMatch = text.match(/\b([0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM))\b/);
+      if (timeMatch && timeMatch[1]) {
+        timestampStr = timeMatch[1].trim();
+      }
+    }
+
+    // Strip date strings and time strings to prevent day of month or hours from matching as amount
+    const textWithoutDates = text
+      .replace(/\b[0-3]?[0-9]\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202[4-9]\b/gi, '')
+      .replace(/\b[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)\b/gi, '');
+
+    // 3. Extract Amount (Cross-validated against written words & digits)
     const wordsAmount = this.parseWordsToNumber(text);
 
     let digitsAmount: number | null = null;
     const amountRegexes = [
-      /(?:amount|paid|total|sent)[\s:\n]*[₹RsINR\s]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i,
-      /[₹RsINR]\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i,
-      /\b([0-9]+(?:,[0-9]{3})*\.[0-9]{2})\b/,
+      // Handles ?45,000.00, ₹45,000.00, Rs. 45,000.00, 45,000.00, 45,000
+      /[?₹RsINR\s]*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?)/i,
+      /(?:amount|paid|total|sent)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i,
+      /[?₹RsINR]\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+      /\b([0-9]+(?:\.[0-9]{2}))\b/,
       /\b([0-9]{2,7})\b/,
     ];
 
     for (const rx of amountRegexes) {
-      const match = text.match(rx);
+      const match = textWithoutDates.match(rx);
       if (match && match[1]) {
         const cleaned = match[1].replace(/,/g, '');
         const val = parseFloat(cleaned);
@@ -166,7 +186,7 @@ export class PaymentOcrService {
       }
     }
 
-    // 3. Extract Receiver Name
+    // 4. Extract Receiver Name
     let receiverName: string | null = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -213,25 +233,11 @@ export class PaymentOcrService {
       }
     }
 
-    // 4. Extract UPI ID
+    // 5. Extract UPI ID
     let upiId: string | null = null;
     const upiMatch = text.match(/([a-zA-Z0-9._*#-]+@[a-zA-Z0-9]+)/i);
     if (upiMatch && upiMatch[1]) {
       upiId = upiMatch[1].trim();
-    }
-
-    // 5. Extract Date and Time (Strict pattern)
-    let timestampStr: string | null = null;
-    const fullDateMatch = text.match(
-      /\b([0-3]?[0-9]\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202[4-9](?:[,\s\-at]+[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)?)?)\b/i
-    );
-    if (fullDateMatch && fullDateMatch[1]) {
-      timestampStr = fullDateMatch[1].trim();
-    } else {
-      const timeMatch = text.match(/\b([0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM))\b/);
-      if (timeMatch && timeMatch[1]) {
-        timestampStr = timeMatch[1].trim();
-      }
     }
 
     const isPaymentScreenshot = Boolean(
@@ -276,7 +282,7 @@ export class PaymentOcrService {
   ): Promise<ExtractedPaymentData> {
     let rawText = '';
 
-    // Strategy 1: OCR.space Cloud OCR API
+    // Strategy 1: OCR.space Cloud OCR API with scale & auto-engine
     try {
       const form = new URLSearchParams();
       if (imageBuffer) {
@@ -285,6 +291,8 @@ export class PaymentOcrService {
         form.append('url', imageUrl);
       }
       form.append('apikey', 'helloworld');
+      form.append('scale', 'true');
+      form.append('detectOrientation', 'true');
       form.append('OCREngine', '2');
 
       const ocrRes = await fetch('https://api.ocr.space/parse/image', {
@@ -297,7 +305,7 @@ export class PaymentOcrService {
         const ocrData = await ocrRes.json();
         if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
           rawText = ocrData.ParsedResults[0].ParsedText || '';
-          console.log('[PaymentOcrService] OCR.space extracted text:', rawText.slice(0, 150));
+          console.log('[PaymentOcrService] OCR.space (Engine 2) extracted text:', rawText.slice(0, 150));
         }
       }
     } catch (ocrErr) {
