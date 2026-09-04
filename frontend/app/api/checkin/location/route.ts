@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SitesService } from '@/services/sites.service';
 import { PendingCheckinService } from '@/services/pending-checkin.service';
 import { calculateHaversineDistance } from '@/lib/geoutils';
-import { normalizeWhatsAppNumber } from '@/lib/formatters';
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,12 +85,19 @@ export async function POST(request: NextRequest) {
     // 5. Construct official WhatsApp click-to-chat URL
     const rawBotNumber =
       process.env.WHATSAPP_BOT_PHONE_NUMBER ||
-      process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER ||
+      process.env.NEXT_PUBLIC_WHATSAPP_BOT_PHONE_NUMBER ||
       process.env.WHATSAPP_BOT_NUMBER ||
+      process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER ||
+      process.env.WHATSAPP_BUSINESS_PHONE_NUMBER ||
+      process.env.NEXT_PUBLIC_WHATSAPP_BUSINESS_PHONE_NUMBER ||
+      process.env.WHATSAPP_PHONE_NUMBER ||
       '15552037574';
-    const cleanBotPhone = normalizeWhatsAppNumber(rawBotNumber);
+
+    // Strip non-digit characters for official WhatsApp wa.me redirect
+    const cleanDigits = rawBotNumber.trim().replace(/\D/g, '');
+    const finalBotPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
     const prefilledText = encodeURIComponent(`CHECKIN_${pendingSession.token}`);
-    const whatsappUrl = `https://wa.me/${cleanBotPhone}?text=${prefilledText}`;
+    const whatsappUrl = `https://wa.me/${finalBotPhone}?text=${prefilledText}`;
 
     return NextResponse.json({
       verified: true,
