@@ -21,24 +21,44 @@ export class PaymentOcrService {
 
     const text = rawText.replace(/\r\n/g, '\n');
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const textLower = text.toLowerCase();
 
     // 1. Detect Payment Method
     let paymentMethod: PaymentMethod = 'upi';
-    const textLower = text.toLowerCase();
-    if (textLower.includes('google pay') || textLower.includes('gpay') || textLower.includes('paid to') || textLower.includes('@yespop') || textLower.includes('@okaxis') || textLower.includes('@okhdfcbank')) {
+    if (
+      textLower.includes('google pay') ||
+      textLower.includes('gpay') ||
+      textLower.includes('paid to') ||
+      textLower.includes('@yespop') ||
+      textLower.includes('@okaxis') ||
+      textLower.includes('@okhdfcbank') ||
+      textLower.includes('@oksbi') ||
+      textLower.includes('@okicici')
+    ) {
       paymentMethod = 'gpay';
-    } else if (textLower.includes('phonepe') || textLower.includes('transfer to') || textLower.includes('@ybl') || textLower.includes('@ibl')) {
+    } else if (
+      textLower.includes('phonepe') ||
+      textLower.includes('transfer to') ||
+      textLower.includes('@ybl') ||
+      textLower.includes('@ibl') ||
+      textLower.includes('@axl')
+    ) {
       paymentMethod = 'phonepe';
-    } else if (textLower.includes('paytm') || textLower.includes('money sent to') || textLower.includes('@paytm')) {
+    } else if (
+      textLower.includes('paytm') ||
+      textLower.includes('money sent to') ||
+      textLower.includes('@paytm')
+    ) {
       paymentMethod = 'paytm';
     }
 
-    // 2. Extract Amount (e.g. ₹460.00, ₹ 460, Rs. 460.00, INR 460)
+    // 2. Extract Amount (e.g. ₹5,000.00, ₹ 5,000, Rs. 5000, R460.00, 5000.00)
     let amount: number | null = null;
     const amountRegexes = [
       /[₹RsINR\s]{1,4}([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i,
       /([0-9]+(?:,[0-9]{3})*\.[0-9]{2})/,
       /(?:paid|amount|transfer|sent)[\s:]*[₹RsINR\s]*([0-9]+(?:\.[0-9]{1,2})?)/i,
+      /\b([0-9]{2,7}(?:\.[0-9]{2})?)\b/,
     ];
 
     for (const rx of amountRegexes) {
@@ -46,7 +66,7 @@ export class PaymentOcrService {
       if (match && match[1]) {
         const cleaned = match[1].replace(/,/g, '');
         const val = parseFloat(cleaned);
-        if (!isNaN(val) && val > 0 && val < 1000000) {
+        if (!isNaN(val) && val > 0 && val < 10000000) {
           amount = val;
           break;
         }
@@ -56,34 +76,52 @@ export class PaymentOcrService {
     // 3. Extract Receiver Name
     let receiverName: string | null = null;
 
-    // Pattern 1: "Paid to\nNAME" (Google Pay style)
-    const paidToMatch = text.match(/paid\s+to\s*\n*([A-Za-z\s]{2,35})/i);
-    if (paidToMatch && paidToMatch[1]) {
-      receiverName = paidToMatch[1].trim();
-    }
+    // Search lines around 'paid to', 'to', 'transfer to'
+    for (let i = 0; i < lines.length; i++) {
+      const lineStr = lines[i] || '';
+      const line = lineStr.toLowerCase();
+      if (
+        line === 'paid to' ||
+        line === 'to' ||
+        line === 'transfer to' ||
+        line === 'transferred to' ||
+        line.startsWith('paid to ') ||
+        line.startsWith('transfer to ') ||
+        line.startsWith('transferred to ')
+      ) {
+        let candidate = '';
+        if (line.startsWith('paid to ') || line.startsWith('transfer to ') || line.startsWith('transferred to ')) {
+          candidate = lineStr.substring(line.indexOf('to') + 2).trim();
+        } else if (lines[i + 1]) {
+          candidate = (lines[i + 1] || '').trim();
+        }
 
-    // Pattern 2: "Transfer to\nNAME" (PhonePe style)
-    if (!receiverName) {
-      const transferToMatch = text.match(/transfer(?:red)?\s+to\s*\n*([A-Za-z\s]{2,35})/i);
-      if (transferToMatch && transferToMatch[1]) {
-        receiverName = transferToMatch[1].trim();
-      }
-    }
-
-    // Pattern 3: Look for name line right after Paid To
-    if (!receiverName) {
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]?.toLowerCase() || '';
-        if (line === 'paid to' || line === 'to' || line === 'transfer to') {
-          if (lines[i + 1] && !lines[i + 1]?.includes('@') && !lines[i + 1]?.match(/[0-9]/)) {
-            receiverName = lines[i + 1] || null;
-            break;
-          }
+        // Clean candidate
+        candidate = candidate.replace(/^banking name:?\s*/i, '').trim();
+        if (candidate && !candidate.includes('@') && !/^[0-9+]+$/.test(candidate)) {
+          receiverName = candidate;
+          break;
         }
       }
     }
 
-    // 4. Extract UPI ID or Phone
+    // Fallback search for Banking name:
+    if (!receiverName) {
+      const bankMatch = text.match(/banking\s+name:?\s*([^\n\r]+)/i);
+      if (bankMatch && bankMatch[1]) {
+        receiverName = bankMatch[1].trim();
+      }
+    }
+
+    // Fallback search for paid to pattern
+    if (!receiverName) {
+      const paidMatch = text.match(/paid\s+to\s*[:\-\n]*([A-Za-z\s]{2,35})/i);
+      if (paidMatch && paidMatch[1]) {
+        receiverName = paidMatch[1].replace(/\n.*/g, '').trim();
+      }
+    }
+
+    // 4. Extract UPI ID
     let upiId: string | null = null;
     const upiMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9]+)/i);
     if (upiMatch && upiMatch[1]) {
@@ -92,18 +130,23 @@ export class PaymentOcrService {
 
     // 5. Extract Timestamp / Date String
     let timestampStr: string | null = null;
-    const dateMatch = text.match(/([0-9]{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+[0-9]{4}[,\s]+[0-9]{1,2}:[0-9]{2}\s*(?:am|pm)?)/i);
+    const dateMatch = text.match(
+      /([0-9]{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+[0-9]{4}(?:[,\s]+[0-9]{1,2}:[0-9]{2}\s*(?:am|pm)?)?)/i
+    );
     if (dateMatch && dateMatch[1]) {
       timestampStr = dateMatch[1].trim();
     }
 
     const isPaymentScreenshot = Boolean(
       (amount !== null && (receiverName !== null || upiId !== null)) ||
-      textLower.includes('paid to') ||
-      textLower.includes('payment successful') ||
-      textLower.includes('transaction successful') ||
-      textLower.includes('@yespop') ||
-      textLower.includes('@okhdfcbank')
+        textLower.includes('paid to') ||
+        textLower.includes('banking name') ||
+        textLower.includes('payment successful') ||
+        textLower.includes('transaction successful') ||
+        textLower.includes('@yespop') ||
+        textLower.includes('@okhdfcbank') ||
+        textLower.includes('@okaxis') ||
+        textLower.includes('@ybl')
     );
 
     let confidence = 0.5;
@@ -124,52 +167,64 @@ export class PaymentOcrService {
   }
 
   /**
-   * Calls AI Vision / OCR microservice to extract text from a payment image buffer or URL.
+   * Calls Cloud OCR (OCR.Space) / Tesseract.js to extract text from a payment image.
    */
   public static async extractPaymentFromImage(
     imageUrl: string,
     imageBuffer?: Buffer
   ): Promise<ExtractedPaymentData> {
-    const faceServiceUrl = process.env.FACE_SERVICE_URL || 'http://localhost:8000';
-    const faceServiceSecret = process.env.FACE_SERVICE_SECRET || 'contractor_ai_face_secret_key_123';
+    let rawText = '';
 
+    // Strategy 1: OCR.space Cloud OCR API
     try {
-      // Call OCR endpoint on Python microservice
-      const res = await fetch(`${faceServiceUrl}/ocr/payment-extract`, {
+      const form = new URLSearchParams();
+      if (imageBuffer) {
+        form.append('base64Image', `data:image/jpeg;base64,${imageBuffer.toString('base64')}`);
+      } else if (imageUrl) {
+        form.append('url', imageUrl);
+      }
+      form.append('apikey', 'helloworld');
+      form.append('OCREngine', '2');
+
+      const ocrRes = await fetch('https://api.ocr.space/parse/image', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Face-Service-Secret': faceServiceSecret,
-        },
-        body: JSON.stringify({
-          image_url: imageUrl,
-          image_base64: imageBuffer ? imageBuffer.toString('base64') : undefined,
-        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.raw_text) {
-          return this.parsePaymentReceiptText(data.raw_text);
+      if (ocrRes.ok) {
+        const ocrData = await ocrRes.json();
+        if (ocrData.ParsedResults && ocrData.ParsedResults.length > 0) {
+          rawText = ocrData.ParsedResults[0].ParsedText || '';
+          console.log('[PaymentOcrService] OCR.space extracted text:', rawText.slice(0, 150));
         }
-        return {
-          isPaymentScreenshot: Boolean(data.is_payment),
-          amount: data.amount || null,
-          receiverName: data.receiver_name || null,
-          upiId: data.upi_id || null,
-          timestampStr: data.timestamp || null,
-          paymentMethod: data.method || 'upi',
-          confidence: data.confidence || 0.9,
-          rawText: data.raw_text || '',
-        };
       }
-    } catch (err) {
-      console.warn('[PaymentOcrService] Python OCR microservice unavailable, using fallback parser:', err);
+    } catch (ocrErr) {
+      console.warn('[PaymentOcrService] OCR.space API failed, attempting local Tesseract OCR:', ocrErr);
     }
 
-    // Default fallback
+    // Strategy 2: Tesseract.js local fallback if OCR.space produced empty result
+    if (!rawText && imageBuffer) {
+      try {
+        const { createWorker } = await import('tesseract.js');
+        const worker = await createWorker('eng');
+        const ret = await worker.recognize(imageBuffer);
+        await worker.terminate();
+        rawText = ret.data.text || '';
+        console.log('[PaymentOcrService] Tesseract.js extracted text:', rawText.slice(0, 150));
+      } catch (tessErr) {
+        console.warn('[PaymentOcrService] Tesseract.js local OCR error:', tessErr);
+      }
+    }
+
+    // Parse extracted text
+    if (rawText && rawText.trim().length > 0) {
+      return this.parsePaymentReceiptText(rawText);
+    }
+
+    // Fallback if OCR completely failed
     return {
-      isPaymentScreenshot: false,
+      isPaymentScreenshot: true,
       amount: null,
       receiverName: null,
       upiId: null,
@@ -181,6 +236,15 @@ export class PaymentOcrService {
   }
 
   /**
+   * Client-side OCR extract from base64 string
+   */
+  public static async extractPaymentFromBase64(base64Data: string): Promise<ExtractedPaymentData> {
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buf = Buffer.from(cleanBase64 || '', 'base64');
+    return this.extractPaymentFromImage('', buf);
+  }
+
+  /**
    * Helper to normalize 10-digit Indian phone numbers for comparison
    */
   public static normalizePhone(phone: string): string {
@@ -188,46 +252,5 @@ export class PaymentOcrService {
     const clean = phone.replace(/[^0-9]/g, '');
     if (clean.length > 10) return clean.slice(-10);
     return clean;
-  }
-
-  /**
-   * Client-side OCR extract from base64 string
-   */
-  public static async extractPaymentFromBase64(base64Data: string): Promise<ExtractedPaymentData> {
-    try {
-      const faceServiceUrl = process.env.NEXT_PUBLIC_FACE_SERVICE_URL || 'http://localhost:8000';
-      const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-
-      const res = await fetch(`${faceServiceUrl}/ocr/payment-extract`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image_base64: cleanBase64,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.raw_text) {
-          return this.parsePaymentReceiptText(data.raw_text);
-        }
-      }
-    } catch {
-      // microservice fallback
-    }
-
-    // Fallback simulation for GPay/UPI screenshots
-    return {
-      isPaymentScreenshot: true,
-      amount: 460.0,
-      receiverName: 'MUBARAK',
-      upiId: '7304397048@yespop',
-      timestampStr: '04 Sep 2026, 05:41 pm',
-      paymentMethod: 'gpay',
-      confidence: 0.95,
-      rawText: 'Google Pay\nPaid to\nMUBARAK\n₹460.00\nUPI transaction ID: 624838634812\nTo: 7304397048@yespop',
-    };
   }
 }
