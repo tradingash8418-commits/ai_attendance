@@ -92,19 +92,30 @@ export class WhatsAppFeedbackServer {
             ? this.formatTimeStringIST(attRecord.checkInTime)
             : '10:00 AM';
 
-          const checkOutFormatted = attRecord?.checkOutTime
-            ? this.formatTimeStringIST(attRecord.checkOutTime)
-            : checkInFormatted;
+          const hasCheckedOut = Boolean(
+            attRecord?.checkOutTime &&
+            attRecord?.checkInTime &&
+            new Date(attRecord.checkOutTime).getTime() > new Date(attRecord.checkInTime).getTime()
+          );
 
-          const workedStr = attRecord?.workedHours || '0h 00m';
+          const checkOutFormatted = hasCheckedOut && attRecord?.checkOutTime
+            ? this.formatTimeStringIST(attRecord.checkOutTime)
+            : null;
+
+          const workedStr = hasCheckedOut ? (attRecord?.workedHours || '0h 00m') : null;
           const hajriVal = attRecord?.hajri !== undefined && attRecord?.hajri !== null ? attRecord.hajri : 1.0;
           const hajriLabel = attRecord?.hajriLabel || 'Normal';
 
           messageLines.push(`${index + 1}. ${nameDisplay}`);
           messageLines.push(`   Check-in: ${checkInFormatted}`);
-          messageLines.push(`   Check-out: ${checkOutFormatted}`);
-          messageLines.push(`   Worked: ${workedStr}`);
-          messageLines.push(`   Hajri: ${hajriVal} (${hajriLabel})`);
+          if (hasCheckedOut && checkOutFormatted) {
+            messageLines.push(`   Check-out: ${checkOutFormatted}`);
+            messageLines.push(`   Worked: ${workedStr}`);
+            messageLines.push(`   Hajri: ${hajriVal} (${hajriLabel})`);
+          } else {
+            messageLines.push(`   Status: Present (Shift Active)`);
+            messageLines.push(`   Hajri: ${hajriVal} (${hajriLabel})`);
+          }
           messageLines.push('');
         });
       }
