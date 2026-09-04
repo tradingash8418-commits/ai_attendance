@@ -153,4 +153,30 @@ export class WorkerEmbeddingsService {
       throw err;
     }
   }
+  /**
+   * Directly stores a pre-computed face embedding vector in Firestore.
+   */
+  public static async createEmbedding(data: {
+    workerId: string;
+    photoId?: string;
+    workerPhotoId?: string;
+    embedding: number[];
+    model?: string;
+    detector?: string;
+    distanceMetric?: string;
+  }): Promise<string> {
+    const colRef = collection(db, COLLECTION_NAME);
+    const now = serverTimestamp();
+    const docRef = await addDoc(colRef, {
+      workerId: data.workerId,
+      workerPhotoId: data.photoId || data.workerPhotoId || `ref_photo_${data.workerId}`,
+      model: data.model || 'ArcFace/SFace',
+      detector: data.detector || 'yunet',
+      distanceMetric: data.distanceMetric || 'cosine',
+      embedding: data.embedding,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return docRef.id;
+  }
 }

@@ -48,3 +48,8 @@ face-service/__pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Datasets & Zip archives
+dataset/
+*.zip
+

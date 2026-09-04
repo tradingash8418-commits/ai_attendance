@@ -16,16 +16,31 @@ const COLLECTION_NAME = 'workerPhotos';
 export class WorkerPhotosService {
   public static async getWorkerPhotos(workerId: string): Promise<WorkerPhoto[]> {
     const colRef = collection(db, COLLECTION_NAME);
-    const q = query(
-      colRef,
-      where('workerId', '==', workerId),
-      orderBy('createdAt', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    })) as WorkerPhoto[];
+    try {
+      const q = query(
+        colRef,
+        where('workerId', '==', workerId),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as WorkerPhoto[];
+    } catch (err) {
+      // Fallback if composite index (workerId + createdAt) is not created yet in Firebase Console
+      const qFallback = query(colRef, where('workerId', '==', workerId));
+      const snapshot = await getDocs(qFallback);
+      const docs = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as WorkerPhoto[];
+      return docs.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.seconds || 0;
+        const timeB = (b.createdAt as any)?.seconds || 0;
+        return timeB - timeA;
+      });
+    }
   }
 
   public static async uploadWorkerPhoto(
