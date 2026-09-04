@@ -225,7 +225,7 @@ export class WebhookProcessorServer {
           await AttendanceService.recordWorkerAttendance({
             attendanceSessionId: sessionId,
             workerId: resolvedId,
-            siteId: activeWorkerPendingSession.siteId,
+            siteId: activeWorkerPendingSession.siteId || '',
             date: today,
             messageTimestamp: messageTimestampMs,
             attendancePhotoUrl: photoUrl,
