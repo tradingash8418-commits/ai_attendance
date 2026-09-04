@@ -8,7 +8,7 @@ import { SitesService } from '@/services/sites.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { SiteAssignmentsService } from '@/services/siteAssignments.service';
 import { WorkersService } from '@/services/workers.service';
-import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime } from '@/lib/formatters';
 import type { Site } from '@/types/site';
 import type { AttendanceRecord } from '@/types/attendance';
 import type { Worker } from '@/types/worker';
@@ -20,6 +20,7 @@ export default function SiteAttendancePage() {
   const [site, setSite] = useState<Site | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [assignedWorkers, setAssignedWorkers] = useState<Worker[]>([]);
+  const [allWorkers, setAllWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const today = getTodayDateString();
@@ -34,10 +35,14 @@ export default function SiteAttendancePage() {
       const records = await AttendanceService.getAttendanceRecords({ siteId, date: today });
       setAttendanceRecords(records);
 
-      const siteAssignments = await SiteAssignmentsService.getAssignmentsBySite(siteId, today);
-      const allWorkers = await WorkersService.getWorkers();
+      const [siteAssignments, workersList] = await Promise.all([
+        SiteAssignmentsService.getAssignmentsBySite(siteId, today),
+        WorkersService.getWorkers(),
+      ]);
 
-      const assignedWorkerList = allWorkers.filter((w) =>
+      setAllWorkers(workersList);
+
+      const assignedWorkerList = workersList.filter((w) =>
         siteAssignments.some((a) => a.workerId === w.id)
       );
       setAssignedWorkers(assignedWorkerList);
@@ -148,28 +153,20 @@ export default function SiteAttendancePage() {
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {attendanceRecords.map((r) => {
-                  const workerObj = assignedWorkers.find((w) => w.id === r.workerId);
+                  const workerObj = allWorkers.find(
+                    (w) => w.id === r.workerId || w.workerCode === r.workerId
+                  );
 
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3.5 px-6 font-bold text-slate-900">
-                        {workerObj ? getWorkerDisplayName(workerObj) : r.workerId}
+                        {workerObj ? getWorkerDisplayName(workerObj) : 'Worker Record'}
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
-                        {r.checkInTime
-                          ? new Date(r.checkInTime as any).toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '10:00 AM'}
+                        {formatTime(r.checkInTime, '10:00 AM')}
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
-                        {r.checkOutTime
-                          ? new Date(r.checkOutTime as any).toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '-'}
+                        {formatTime(r.checkOutTime, '-')}
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 font-semibold">
                         {r.workedHours || 'In Progress'}

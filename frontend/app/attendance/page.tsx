@@ -180,7 +180,9 @@ export default function AttendancePage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {records.map((r) => {
-                    const worker = workers.find((w) => w.id === r.workerId);
+                    const worker = workers.find(
+                      (w) => w.id === r.workerId || w.workerCode === r.workerId
+                    );
                     const site = sites.find((s) => s.id === r.siteId);
 
                     return (
