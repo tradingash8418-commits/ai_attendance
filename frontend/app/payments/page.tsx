@@ -463,16 +463,20 @@ export default function PaymentsPage() {
                     </tr>
                   ) : (
                     filteredSummaries.map((summary) => {
-                      const earnedWage = summary.totalHajriEarned * dailyRate;
                       const isPositive = summary.netPayableBalance >= 0;
 
                       return (
                         <tr key={summary.workerId} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-4">
                             <div className="font-bold text-slate-900">{summary.workerName}</div>
-                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-                              {summary.workerCode || 'WRK-ID'}
-                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                {summary.workerCode || 'WRK-ID'}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-bold text-slate-600 border border-slate-200">
+                                ₹{summary.dailyRate}/day
+                              </span>
+                            </div>
                           </td>
                           <td className="py-3 px-4 font-mono text-slate-600">
                             {summary.phone || '—'}
@@ -483,7 +487,10 @@ export default function PaymentsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right font-bold text-slate-900">
-                            ₹{earnedWage.toLocaleString('en-IN')}
+                            ₹{summary.totalEarnedAmount.toLocaleString('en-IN')}
+                            <span className="block text-[10px] text-slate-400 font-normal">
+                              {summary.totalHajriEarned} × ₹{summary.dailyRate}
+                            </span>
                           </td>
                           <td className="py-3 px-4 text-right font-bold text-rose-600">
                             ₹{summary.totalAdvancesPaid.toLocaleString('en-IN')}

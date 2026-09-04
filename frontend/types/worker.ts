@@ -6,6 +6,7 @@ export interface Worker {
   name: string;
   phone?: string;
   role?: string;
+  dailyRate?: number; // Daily wage rate in INR (e.g. 500, 650)
   photoUrl?: string;
   active: boolean;
   createdAt: Timestamp;

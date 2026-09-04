@@ -63,6 +63,7 @@ export class WorkersService {
       workerCode: nextWorkerCode,
       phone: cleanPhone,
       role: 'General Worker',
+      dailyRate: 500,
     });
 
     return {
@@ -71,6 +72,7 @@ export class WorkersService {
       workerCode: nextWorkerCode,
       phone: cleanPhone,
       role: 'General Worker',
+      dailyRate: 500,
       active: true,
       createdAt: null as any,
       updatedAt: null as any,
@@ -82,6 +84,7 @@ export class WorkersService {
     workerCode?: string;
     phone?: string;
     role?: string;
+    dailyRate?: number;
     photoUrl?: string;
   }): Promise<string> {
     const colRef = collection(db, COLLECTION_NAME);
@@ -91,6 +94,7 @@ export class WorkersService {
       workerCode: data.workerCode?.trim() || '',
       phone: data.phone?.trim() || '',
       role: data.role?.trim() || 'General Worker',
+      dailyRate: typeof data.dailyRate === 'number' && data.dailyRate > 0 ? data.dailyRate : 500,
       photoUrl: data.photoUrl || '',
       active: true,
       createdAt: now,

@@ -21,7 +21,9 @@ export interface WorkerKhataSummary {
   workerName: string;
   workerCode?: string;
   phone?: string;
+  dailyRate: number;
   totalHajriEarned: number;
+  totalEarnedAmount: number;
   totalAdvancesPaid: number;
   totalWagesPaid: number;
   netPayableBalance: number;
@@ -153,7 +155,8 @@ export class PaymentLedgerService {
         .filter((p) => p.category === 'wage')
         .reduce((sum, p) => sum + p.amount, 0);
 
-      const totalEarnedAmount = totalHajriEarned * defaultDailyRate;
+      const workerDailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : defaultDailyRate;
+      const totalEarnedAmount = totalHajriEarned * workerDailyRate;
       const netPayableBalance = totalEarnedAmount - totalAdvancesPaid - totalWagesPaid;
 
       totalAdvancesPaidAll += totalAdvancesPaid;
@@ -164,10 +167,12 @@ export class PaymentLedgerService {
         workerName: worker.name,
         workerCode: worker.workerCode,
         phone: worker.phone,
+        dailyRate: workerDailyRate,
         totalHajriEarned: Number(totalHajriEarned.toFixed(1)),
+        totalEarnedAmount: Math.round(totalEarnedAmount),
         totalAdvancesPaid,
         totalWagesPaid,
-        netPayableBalance,
+        netPayableBalance: Math.round(netPayableBalance),
         recentPayments: workerPayments.slice(0, 5),
       };
     });

@@ -36,6 +36,7 @@ export default function WorkersPage() {
   const [workerCode, setWorkerCode] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [role, setRole] = useState<string>('');
+  const [dailyRate, setDailyRate] = useState<string>('500');
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
 
@@ -45,6 +46,7 @@ export default function WorkersPage() {
   const [editPhone, setEditPhone] = useState<string>('');
   const [editWorkerCode, setEditWorkerCode] = useState<string>('');
   const [editRole, setEditRole] = useState<string>('');
+  const [editDailyRate, setEditDailyRate] = useState<string>('500');
   const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -99,6 +101,7 @@ export default function WorkersPage() {
       formData.append('workerCode', nextCode);
       formData.append('phone', phone);
       formData.append('role', role || 'General Worker');
+      formData.append('dailyRate', dailyRate || '500');
       
       if (selectedPhotoFile) {
         // Automatically compress camera image before sending to avoid Vercel 413 Payload limit
@@ -128,6 +131,7 @@ export default function WorkersPage() {
         setWorkerCode('');
         setPhone('');
         setRole('');
+        setDailyRate('500');
         setSelectedPhotoFile(null);
         setPhotoPreviewUrl(null);
         setShowAddModal(false);
@@ -149,6 +153,7 @@ export default function WorkersPage() {
     setEditPhone(worker.phone || '');
     setEditWorkerCode(worker.workerCode || '');
     setEditRole(worker.role || 'General Worker');
+    setEditDailyRate(worker.dailyRate ? worker.dailyRate.toString() : '500');
     setEditError(null);
   };
 
@@ -157,6 +162,12 @@ export default function WorkersPage() {
     if (!editingWorker) return;
     if (!editName.trim()) {
       setEditError('Worker name is required.');
+      return;
+    }
+
+    const rateNum = parseFloat(editDailyRate);
+    if (isNaN(rateNum) || rateNum <= 0) {
+      setEditError('Please enter a valid daily rate greater than 0.');
       return;
     }
 
@@ -169,6 +180,7 @@ export default function WorkersPage() {
         phone: editPhone.trim(),
         workerCode: editWorkerCode.trim(),
         role: editRole.trim(),
+        dailyRate: rateNum,
       });
 
       setSuccessNotice(`Worker ${editName.trim()} updated successfully in Firestore!`);
@@ -324,6 +336,9 @@ export default function WorkersPage() {
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-700 border border-slate-200">
                         {worker.role || 'General Worker'}
                       </span>
+                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
+                        ₹{worker.dailyRate || 500}/day
+                      </span>
                       {worker.phone ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                           <Phone className="w-2.5 h-2.5" />
@@ -461,17 +476,34 @@ export default function WorkersPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Phone Number (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. +91 9876543210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +91 9876543210"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                    <span>Daily Wage (₹/day)</span>
+                    <span className="text-[10px] text-blue-600 font-bold">Hajri Rate</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 500"
+                    value={dailyRate}
+                    onChange={(e) => setDailyRate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
               </div>
 
               {/* Reference Face Photo Uploader */}
@@ -674,6 +706,22 @@ export default function WorkersPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1 flex items-center justify-between">
+                  <span>Daily Wage Rate (₹ / Day) *</span>
+                  <span className="text-[10px] text-blue-600 font-bold">Hajri Base Rate</span>
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={editDailyRate}
+                  onChange={(e) => setEditDailyRate(e.target.value)}
+                  placeholder="e.g. 500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white"
+                />
               </div>
 
               <div className="flex items-center gap-3 pt-3 border-t border-slate-100">
