@@ -266,22 +266,24 @@ export class WebhookProcessorServer {
 
         await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
 
-        // Send WhatsApp confirmation back to contractor
+        // Send clear WhatsApp confirmation back to contractor / sender
+        const finalPaidTo = paymentData.receiverName || resolvedWorkerName || 'Recipient';
         await WhatsAppService.sendMessage(
           normalizedSender,
-          `Payment Recorded in Khata 💳\n\n` +
-          `Paid To: *${resolvedWorkerName}*\n` +
-          `Amount: *₹${paymentData.amount.toFixed(2)}*\n` +
-          `Date: ${today}\n` +
-          `Payment App: ${paymentData.paymentMethod.toUpperCase()}\n` +
-          `UPI / Ref: ${paymentData.upiId || 'Direct UPI'}\n` +
-          `Category: *Advance Payment*\n\n` +
-          `Worker Khata Balance Updated! ✅`
+          `✅ *Payment Recorded in Ledger!*\n\n` +
+          `👤 *Paid To:* ${finalPaidTo}\n` +
+          `💵 *Amount:* ₹${paymentData.amount.toFixed(2)}\n` +
+          `📒 *Khata Account:* ${finalPaidTo}\n` +
+          `💳 *Method / App:* ${paymentData.paymentMethod.toUpperCase()}\n` +
+          `📱 *UPI / Ref:* ${paymentData.upiId || 'Direct UPI'}\n` +
+          `📅 *Date:* ${today} (${paymentData.timestampStr || 'Today'})\n` +
+          `🏷️ *Type:* Advance / Kharcha\n\n` +
+          `Ledger & Khata balance have been successfully updated! 📊`
         );
 
         return {
           status: 'completed',
-          reason: `Payment receipt recorded for ${resolvedWorkerName}: ₹${paymentData.amount}`,
+          reason: `Payment receipt recorded for ${finalPaidTo}: ₹${paymentData.amount}`,
           messageId: rawMessageId,
         };
       }
