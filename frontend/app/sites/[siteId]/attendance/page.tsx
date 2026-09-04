@@ -3,7 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Building2, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  RefreshCw,
+} from 'lucide-react';
 import { SitesService } from '@/services/sites.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { SiteAssignmentsService } from '@/services/siteAssignments.service';
@@ -17,29 +26,32 @@ export default function SiteAttendancePage() {
   const params = useParams();
   const siteId = params?.siteId as string;
 
+  const todayStr = getTodayDateString();
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [viewMode, setViewMode] = useState<'selected_date' | 'all_history'>('selected_date');
+
   const [site, setSite] = useState<Site | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [assignedWorkers, setAssignedWorkers] = useState<Worker[]>([]);
   const [allWorkers, setAllWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const today = getTodayDateString();
-
   const loadSiteData = useCallback(async () => {
     if (!siteId) return;
     setLoading(true);
     try {
-      const siteData = await SitesService.getSiteById(siteId);
-      setSite(siteData);
+      const isAllHistory = viewMode === 'all_history';
+      const dateParam = isAllHistory ? undefined : selectedDate;
 
-      const records = await AttendanceService.getAttendanceRecords({ siteId, date: today });
-      setAttendanceRecords(records);
-
-      const [siteAssignments, workersList] = await Promise.all([
-        SiteAssignmentsService.getAssignmentsBySite(siteId, today),
+      const [siteData, records, siteAssignments, workersList] = await Promise.all([
+        SitesService.getSiteById(siteId),
+        AttendanceService.getAttendanceRecords({ siteId, date: dateParam }),
+        SiteAssignmentsService.getAssignmentsBySite(siteId, selectedDate || todayStr),
         WorkersService.getWorkers(),
       ]);
 
+      setSite(siteData);
+      setAttendanceRecords(records);
       setAllWorkers(workersList);
 
       const assignedWorkerList = workersList.filter((w) =>
@@ -51,11 +63,22 @@ export default function SiteAttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [siteId, today]);
+  }, [siteId, selectedDate, viewMode, todayStr]);
 
   useEffect(() => {
     loadSiteData();
   }, [loadSiteData]);
+
+  // Date Navigation Helpers
+  const handleShiftDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    setSelectedDate(`${yyyy}-${mm}-${dd}`);
+    setViewMode('selected_date');
+  };
 
   const getHajriBadgeStyle = (hajri: number | null | undefined) => {
     if (hajri === 1.0) return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -66,10 +89,17 @@ export default function SiteAttendancePage() {
     return 'bg-slate-50 text-slate-600 border-slate-200';
   };
 
+  const totalHajriInView = attendanceRecords.reduce((sum, r) => {
+    const h = typeof r.hajri === 'number' ? r.hajri : 1.0;
+    return sum + h;
+  }, 0);
+
+  const uniquePresentCount = new Set(attendanceRecords.map((r) => r.workerId)).size;
+
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Top Header - Razorpay Style */}
-      <div className="flex items-center justify-between">
+    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* 1. Header Banner */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <Link
             href="/sites"
@@ -84,58 +114,136 @@ export default function SiteAttendancePage() {
           {site?.address && <p className="text-xs text-slate-500 mt-0.5">{site.address}</p>}
         </div>
 
-        <div className="text-right">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-            Work Date
-          </span>
-          <span className="text-sm font-extrabold text-slate-800 font-mono">{today}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadSiteData}
+            disabled={loading}
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 shadow-sm transition-all"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      {/* 2. Interactive Date Navigation Bar & History Toggle */}
+      <div className="razorpay-card p-4 flex flex-col lg:flex-row items-center justify-between gap-4">
+        {/* Left: View Mode Selector */}
+        <div className="flex items-center gap-2 p-1 bg-slate-100/80 rounded-xl w-full sm:w-auto">
+          <button
+            onClick={() => setViewMode('selected_date')}
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              viewMode === 'selected_date'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Daily Site Log</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('all_history')}
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              viewMode === 'all_history'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <History className="w-4 h-4 text-amber-600" />
+            <span>All Site History 📜</span>
+          </button>
+        </div>
+
+        {/* Right: Date Navigation Controls */}
+        {viewMode === 'selected_date' ? (
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+            <button
+              onClick={() => handleShiftDate(-1)}
+              className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+              title="Previous Day"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 shadow-sm"
+            />
+
+            <button
+              onClick={() => handleShiftDate(1)}
+              className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+              title="Next Day"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {selectedDate !== todayStr && (
+              <button
+                onClick={() => setSelectedDate(todayStr)}
+                className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200 transition-colors"
+              >
+                Today
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-amber-50 px-3.5 py-2 rounded-xl border border-amber-200">
+            <CheckCircle2 className="w-4 h-4 text-amber-600" />
+            <span>Viewing All Past & Present Records for this Site</span>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-1">
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-            Assigned Workforce
+            {viewMode === 'all_history' ? 'TOTAL SESSIONS RECORDED' : 'ASSIGNED WORKFORCE'}
           </span>
-          <p className="text-2xl font-black text-slate-900">{assignedWorkers.length}</p>
+          <p className="text-2xl font-black text-slate-900">
+            {viewMode === 'all_history' ? attendanceRecords.length : assignedWorkers.length}
+          </p>
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-1">
           <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
-            Present Today
+            {viewMode === 'all_history' ? 'TOTAL UNIQUE WORKERS' : 'PRESENT ON DATE'}
           </span>
-          <p className="text-2xl font-black text-emerald-600">{attendanceRecords.length}</p>
+          <p className="text-2xl font-black text-emerald-600">{uniquePresentCount}</p>
         </div>
 
-        <div className="col-span-2 sm:col-span-1 bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-1">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-            Attendance Rate
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-1">
+          <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
+            TOTAL HAJRI EARNED
           </span>
-          <p className="text-2xl font-black text-slate-900">
-            {assignedWorkers.length > 0
-              ? `${Math.round((attendanceRecords.length / assignedWorkers.length) * 100)}%`
-              : '100%'}
-          </p>
+          <p className="text-2xl font-black text-blue-600">{totalHajriInView.toFixed(1)} Hajri</p>
         </div>
       </div>
 
-      {/* Attendance Records Table - Razorpay White Table */}
+      {/* 4. Attendance Records Table */}
       <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
-            Today&apos;s Worker Attendance Logs ({attendanceRecords.length})
+            {viewMode === 'all_history'
+              ? `All Historical Logs for ${site?.name || 'Site'} (${attendanceRecords.length})`
+              : `Worker Attendance Logs on ${selectedDate} (${attendanceRecords.length})`}
           </h2>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-xs text-slate-500">Loading site records...</div>
+          <div className="p-12 text-center text-xs text-slate-500">Loading site records...</div>
         ) : attendanceRecords.length === 0 ? (
-          <div className="p-12 text-center space-y-2">
-            <Building2 className="w-8 h-8 text-slate-400 mx-auto" />
-            <p className="text-sm font-bold text-slate-700">No attendance recorded today</p>
-            <p className="text-xs text-slate-500">
-              Attendance will appear as workers scan the gate QR or supervisor sends group photo.
+          <div className="p-12 text-center space-y-3">
+            <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-sm font-bold text-slate-800">
+              No attendance recorded on {viewMode === 'all_history' ? 'this site' : selectedDate}
+            </p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Use the date picker at the top to check yesterday or previous dates, or click &quot;All Site History&quot;.
             </p>
           </div>
         ) : (
@@ -143,6 +251,7 @@ export default function SiteAttendancePage() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200/80">
                 <tr>
+                  {viewMode === 'all_history' && <th className="py-3 px-6">Date</th>}
                   <th className="py-3 px-6">Worker</th>
                   <th className="py-3 px-4">Check-In</th>
                   <th className="py-3 px-4">Check-Out</th>
@@ -159,8 +268,18 @@ export default function SiteAttendancePage() {
 
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-6 font-bold text-slate-900">
-                        {workerObj ? getWorkerDisplayName(workerObj) : 'Worker Record'}
+                      {viewMode === 'all_history' && (
+                        <td className="py-3.5 px-6 font-mono font-bold text-slate-800">
+                          {r.date}
+                        </td>
+                      )}
+                      <td className="py-3.5 px-6">
+                        <div className="font-bold text-slate-900">
+                          {workerObj ? getWorkerDisplayName(workerObj) : r.workerId}
+                        </div>
+                        {workerObj?.phone && (
+                          <span className="text-[10px] text-slate-500 font-mono">{workerObj.phone}</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
                         {formatTime(r.checkInTime, '10:00 AM')}

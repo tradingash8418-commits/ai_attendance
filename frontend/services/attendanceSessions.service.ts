@@ -18,21 +18,30 @@ const COLLECTION_NAME = 'attendanceSessions';
 
 export class AttendanceSessionsService {
   public static async getAttendanceSessions(
-    date: string = getTodayDateString()
+    date?: string
   ): Promise<AttendanceSession[]> {
     const colRef = collection(db, COLLECTION_NAME);
     let snapshot;
     try {
-      const q = query(
-        colRef,
-        where('date', '==', date),
-        orderBy('receivedAt', 'desc')
-      );
-      snapshot = await getDocs(q);
+      if (date && date !== 'all') {
+        const q = query(
+          colRef,
+          where('date', '==', date),
+          orderBy('receivedAt', 'desc')
+        );
+        snapshot = await getDocs(q);
+      } else {
+        const q = query(colRef, orderBy('receivedAt', 'desc'));
+        snapshot = await getDocs(q);
+      }
     } catch (err) {
-      console.warn('[AttendanceSessionsService] Using in-memory sort fallback for sessions:', err);
-      const simpleQ = query(colRef, where('date', '==', date));
-      snapshot = await getDocs(simpleQ);
+      console.warn('[AttendanceSessionsService] Using in-memory fallback for sessions:', err);
+      if (date && date !== 'all') {
+        const simpleQ = query(colRef, where('date', '==', date));
+        snapshot = await getDocs(simpleQ);
+      } else {
+        snapshot = await getDocs(colRef);
+      }
     }
 
     const docs = snapshot.docs.map((docSnap) => {
