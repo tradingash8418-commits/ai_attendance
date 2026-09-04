@@ -92,11 +92,16 @@ export class WhatsAppFeedbackServer {
             ? this.formatTimeStringIST(attRecord.checkInTime)
             : '10:00 AM';
 
-          const hasCheckedOut = Boolean(
-            attRecord?.checkOutTime &&
-            attRecord?.checkInTime &&
-            new Date(attRecord.checkOutTime).getTime() > new Date(attRecord.checkInTime).getTime()
-          );
+          const getMillis = (t: any): number => {
+            if (!t) return 0;
+            if (t?.toDate && typeof t.toDate === 'function') return t.toDate().getTime();
+            if (t instanceof Date) return t.getTime();
+            return new Date(t).getTime() || 0;
+          };
+
+          const checkInMs = getMillis(attRecord?.checkInTime);
+          const checkOutMs = getMillis(attRecord?.checkOutTime);
+          const hasCheckedOut = Boolean(checkOutMs && checkInMs && checkOutMs > checkInMs);
 
           const checkOutFormatted = hasCheckedOut && attRecord?.checkOutTime
             ? this.formatTimeStringIST(attRecord.checkOutTime)
@@ -140,8 +145,19 @@ export class WhatsAppFeedbackServer {
     }
   }
 
-  private static formatTimeStringIST(dateInput: string | Date | number): string {
-    const d = new Date(dateInput);
+  private static formatTimeStringIST(dateInput: any): string {
+    let d: Date;
+    if (!dateInput) return '10:00 AM';
+    if (dateInput?.toDate && typeof dateInput.toDate === 'function') {
+      d = dateInput.toDate();
+    } else if (dateInput instanceof Date) {
+      d = dateInput;
+    } else {
+      d = new Date(dateInput);
+    }
+
+    if (isNaN(d.getTime())) return '10:00 AM';
+
     return new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Kolkata',
       hour: 'numeric',

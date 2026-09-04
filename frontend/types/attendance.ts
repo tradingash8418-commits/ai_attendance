@@ -16,6 +16,7 @@ export interface AttendanceSession {
   date: string; // ISO Date String: YYYY-MM-DD
   receivedAt: Timestamp;
   photoUrl?: string;
+  attendancePhotoUrl?: string;
   status: AttendanceSessionStatus;
   processingStartedAt?: Timestamp;
   processingCompletedAt?: Timestamp;
@@ -23,8 +24,8 @@ export interface AttendanceSession {
   updatedAt: Timestamp;
 }
 
-export type AttendanceStatus = 'present' | 'absent';
-export type AttendanceMethod = 'face_recognition' | 'manual_review';
+export type AttendanceStatus = 'present' | 'absent' | 'unmatched';
+export type AttendanceMethod = 'face_recognition' | 'manual_review' | 'supervisor_whatsapp' | 'worker_qr_whatsapp' | string;
 export type AttendanceVerificationStatus = 'verified' | 'needs_review' | 'rejected';
 
 export interface AttendanceRecord {
@@ -33,7 +34,13 @@ export interface AttendanceRecord {
   workerId: string;
   siteId: string;
   date: string; // ISO Date String: YYYY-MM-DD
-  checkInTime?: Timestamp;
+  checkInTime?: Timestamp | string | Date;
+  checkOutTime?: Timestamp | string | Date | null;
+  workedHours?: string;
+  workedMinutes?: number;
+  hajri?: number | null;
+  hajriLabel?: string;
+  ruleName?: string;
   status: AttendanceStatus;
   method: AttendanceMethod;
   confidence?: number;

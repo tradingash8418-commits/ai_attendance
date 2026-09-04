@@ -5,6 +5,10 @@ export interface Site {
   name: string;
   address?: string;
   supervisorId?: string;
+  latitude?: number;
+  longitude?: number;
+  radiusMeters?: number; // Default: 150 meters
+  checkInToken?: string; // Non-guessable site check-in token e.g. st_site_abc123
   active: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;

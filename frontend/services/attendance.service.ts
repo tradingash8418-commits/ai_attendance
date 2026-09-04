@@ -58,6 +58,7 @@ export class AttendanceService {
     messageTimestamp?: number; // Authoritative WhatsApp message timestamp (ms)
     attendancePhotoUrl: string;
     submittedBy: string;
+    method?: string; // 'supervisor_whatsapp' | 'worker_qr_whatsapp' | 'face_recognition'
   }): Promise<string> {
     const colRef = collection(db, COLLECTION_NAME);
     const now = serverTimestamp();
@@ -146,7 +147,7 @@ export class AttendanceService {
         checkInTime: checkInDate.toISOString(),
         checkOutTime: null,
         status: hajriResult.status === 'matched' ? 'present' : 'unmatched',
-        method: 'face_recognition',
+        method: data.method || 'face_recognition',
         confidence: 0.95,
         verificationStatus: 'verified',
         attendancePhotoUrl: data.attendancePhotoUrl,
