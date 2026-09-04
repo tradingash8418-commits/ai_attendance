@@ -98,8 +98,8 @@ export class WorkerEmbeddingsService {
   ): Promise<WorkerFaceEmbedding> {
     const isProd = process.env.VERCEL || process.env.NODE_ENV === 'production';
     const defaultFaceUrl = isProd ? 'https://ai-attendance-zfu0.onrender.com' : 'http://localhost:8000';
-    const faceServiceUrl = process.env.FACE_SERVICE_URL || defaultFaceUrl;
-    const faceServiceSecret = process.env.FACE_SERVICE_SECRET || 'contractor_ai_face_secret_key_123';
+    const faceServiceUrl = process.env.NEXT_PUBLIC_FACE_SERVICE_URL || process.env.FACE_SERVICE_URL || defaultFaceUrl;
+    const faceServiceSecret = process.env.NEXT_PUBLIC_FACE_SERVICE_SECRET || process.env.FACE_SERVICE_SECRET || 'contractor_ai_face_secret_key_123';
 
     try {
       const res = await fetch(`${faceServiceUrl}/embeddings/generate`, {

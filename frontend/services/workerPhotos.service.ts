@@ -51,40 +51,36 @@ export class WorkerPhotosService {
     let photoUrl = '';
     let storagePath = `workers/${workerId}/photos/${photoId}`;
 
-    const isLocalMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE === 'local' ||
-      process.env.IMAGE_STORAGE_MODE === 'local' ||
-      process.env.NODE_ENV === 'development';
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('workerId', workerId);
 
-    if (isLocalMode) {
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('workerId', workerId);
+      const res = await fetch('/api/storage/upload-worker-photo', {
+        method: 'POST',
+        body: formData,
+      });
 
-        const res = await fetch('/api/storage/upload-worker-photo', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          photoUrl = data.photoUrl;
-          storagePath = data.storagePath;
-        } else {
-          throw new Error('Local API upload returned non-200 status');
-        }
-      } catch (localErr) {
-        console.warn('[WorkerPhotosService] Local API upload fallback to object URL:', localErr);
-        photoUrl = URL.createObjectURL(file);
+      if (res.ok) {
+        const data = await res.json();
+        photoUrl = data.photoUrl;
+        storagePath = data.storagePath || storagePath;
+      } else {
+        throw new Error(`Upload API returned status ${res.status}`);
       }
-    } else {
+    } catch (apiErr) {
+      console.warn('[WorkerPhotosService] Server upload fallback to client Firebase SDK:', apiErr);
       try {
         const storageRef = ref(storage, storagePath);
         await uploadBytes(storageRef, file);
         photoUrl = await getDownloadURL(storageRef);
       } catch (fbErr: any) {
-        console.error('[WorkerPhotosService] Firebase Storage upload failed:', fbErr);
-        throw new Error(`Firebase Storage unavailable: ${fbErr?.message || 'Upload failed'}`);
+        console.error('[WorkerPhotosService] Firebase Storage upload also failed:', fbErr);
+        const reader = new FileReader();
+        photoUrl = await new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
       }
     }
 
