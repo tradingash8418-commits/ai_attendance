@@ -84,7 +84,11 @@ export async function POST(request: NextRequest) {
     });
 
     // 5. Construct official WhatsApp click-to-chat URL
-    const rawBotNumber = process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_BOT_NUMBER || '919876543210';
+    const rawBotNumber =
+      process.env.WHATSAPP_BOT_PHONE_NUMBER ||
+      process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER ||
+      process.env.WHATSAPP_BOT_NUMBER ||
+      '15552037574';
     const cleanBotPhone = normalizeWhatsAppNumber(rawBotNumber);
     const prefilledText = encodeURIComponent(`CHECKIN_${pendingSession.token}`);
     const whatsappUrl = `https://wa.me/${cleanBotPhone}?text=${prefilledText}`;
