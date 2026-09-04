@@ -21,11 +21,14 @@ export interface TodayDashboardSummary {
   presentCount: number;
   expectedCount: number;
   percentage: number;
+  totalHajriToday: number;
+  aiRecognitionAccuracy: number;
   siteSummaries: Array<{
     siteId: string;
     siteName: string;
     presentCount: number;
     expectedCount: number;
+    totalHajri: number;
   }>;
 }
 
@@ -45,15 +48,29 @@ export class AttendanceService {
     const expectedCount = workers.length;
     const percentage = expectedCount > 0 ? Math.round((presentCount / expectedCount) * 100) : 0;
 
+    // Real sum of all Hajri recorded across all workers today
+    const totalHajriToday = records.reduce((sum, r) => {
+      const val = typeof r.hajri === 'number' ? r.hajri : 1.0;
+      return sum + val;
+    }, 0);
+
+    const verifiedRecordsCount = records.filter((r) => r.verificationStatus === 'verified').length;
+    const aiRecognitionAccuracy = records.length > 0
+      ? Math.round((verifiedRecordsCount / records.length) * 100)
+      : 100;
+
     const siteSummaries = sites.map((site) => {
       const siteRecords = records.filter((r) => r.siteId === site.id);
       const sitePresentWorkers = new Set(siteRecords.map((r) => r.workerId));
       const sitePresentCount = sitePresentWorkers.size;
+      const siteHajri = siteRecords.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 1.0), 0);
+
       return {
         siteId: site.id,
         siteName: site.name,
         presentCount: sitePresentCount,
         expectedCount: workers.length,
+        totalHajri: Number(siteHajri.toFixed(1)),
       };
     });
 
@@ -61,6 +78,8 @@ export class AttendanceService {
       presentCount,
       expectedCount,
       percentage,
+      totalHajriToday: Number(totalHajriToday.toFixed(1)),
+      aiRecognitionAccuracy,
       siteSummaries,
     };
   }

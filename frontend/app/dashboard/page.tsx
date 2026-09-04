@@ -176,9 +176,11 @@ export default function DashboardPage() {
               ACTIVE HAJRI BALANCE
             </div>
             <div className="text-3xl font-extrabold text-blue-900">
-              {summary?.presentCount ? `${(summary.presentCount * 1.5).toFixed(1)} Hajri` : '1.5 Hajri (Dedhi)'}
+              {summary?.totalHajriToday ? `${summary.totalHajriToday} Hajri` : '0.0 Hajri'}
             </div>
-            <p className="text-xs text-blue-700 font-medium">Time-Slab Matched (Asia/Kolkata IST)</p>
+            <p className="text-xs text-blue-700 font-medium">
+              {summary?.totalHajriToday ? "Calculated from Today's Checkouts" : 'Shift Inactive (Asia/Kolkata IST)'}
+            </p>
           </div>
 
           {/* Box 3: WhatsApp Automation */}
@@ -188,7 +190,8 @@ export default function DashboardPage() {
               <MessageSquare className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-3xl font-extrabold text-slate-900">
-              100% <span className="text-sm font-semibold text-emerald-600">Dispatched</span>
+              {recentSessions.length > 0 ? `${recentSessions.length}` : '0'}{' '}
+              <span className="text-sm font-semibold text-emerald-600">Dispatched</span>
             </div>
             <div className="text-xs text-slate-600 font-medium flex items-center gap-2 pt-1 border-t border-slate-200">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -221,7 +224,7 @@ export default function DashboardPage() {
               </span>
               <div className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3" />
-                <span>100% vs yesterday</span>
+                <span>{summary?.percentage ?? 0}% Attendance Rate</span>
               </div>
             </div>
 
@@ -246,12 +249,12 @@ export default function DashboardPage() {
               </span>
               <div className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200 flex items-center gap-1">
                 <TrendingUp className="w-3 h-3" />
-                <span>100% Accuracy</span>
+                <span>{summary?.aiRecognitionAccuracy ?? 100}% Verified</span>
               </div>
             </div>
 
             <div className="text-4xl font-extrabold text-slate-900 tracking-tight">
-              100%
+              {summary?.aiRecognitionAccuracy ?? 100}%
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
@@ -316,9 +319,10 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-2.5">
-              {recentSessions.slice(0, 4).map((session) => {
+              {recentSessions.slice(0, 5).map((session) => {
                 const site = sites.find((s) => s.id === session.siteId);
                 const supervisor = supervisors.find((s) => s.id === session.supervisorId);
+                const isWorkerQR = session.supervisorId === 'worker_qr_self';
 
                 return (
                   <div
@@ -331,11 +335,13 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <span className="font-bold text-sm text-slate-900 block">
-                          WhatsApp Group Photo Received
+                          {isWorkerQR ? 'Worker QR Selfie Check-In' : 'Supervisor Group Attendance'}
                         </span>
                         <span className="text-xs text-slate-500 block mt-0.5">
-                          Site: <strong className="text-slate-700">{site?.name || 'Site A'}</strong> • Supervisor:{' '}
-                          {supervisor?.name || session.whatsappSenderNumber || 'Supervisor'}
+                          Site: <strong className="text-slate-700">{site?.name || 'Site Gate'}</strong> • Sender:{' '}
+                          {isWorkerQR
+                            ? session.whatsappSenderNumber || 'Worker'
+                            : supervisor?.name || session.whatsappSenderNumber || 'Supervisor'}
                         </span>
                       </div>
                     </div>
@@ -379,7 +385,7 @@ export default function DashboardPage() {
                   <div>
                     <h3 className="text-xs font-bold text-slate-900">{site.siteName}</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {site.presentCount} / {site.expectedCount} workers present
+                      {site.presentCount} / {site.expectedCount} workers present • {site.totalHajri} Hajri
                     </p>
                   </div>
                   <div className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-xs font-bold text-blue-700">
