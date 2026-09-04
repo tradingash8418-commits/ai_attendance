@@ -10,6 +10,8 @@ import { AttendanceService } from './attendance.service';
 import { WorkersService } from './workers.service';
 import { WhatsAppFeedbackServer } from './whatsapp-feedback.server';
 import { PendingCheckinService } from './pending-checkin.service';
+import { PaymentOcrService } from './payment-ocr.service';
+import { PaymentLedgerService } from './payment-ledger.service';
 import { getTodayDateString, normalizeWhatsAppNumber, getWorkerDisplayName } from '@/lib/formatters';
 
 export class WebhookProcessorServer {
@@ -66,13 +68,13 @@ export class WebhookProcessorServer {
       });
 
       // =====================================================================
-      // PATH 1: WORKER QR TEXT TOKEN REGISTRATION (e.g. CHECKIN_CK_123_ABC)
+      // PATH 1: 1-TAP ZERO-SELFIE WORKER QR ATTENDANCE (e.g. CHECKIN_CK_...)
       // =====================================================================
       if (messageType === 'text' && textBody.toUpperCase().includes('CHECKIN_')) {
         const tokenMatch = textBody.match(/CHECKIN_([A-Za-z0-9_]+)/i);
         const rawToken = tokenMatch ? tokenMatch[1] : '';
 
-        console.log(`[WebhookProcessor] Worker QR check-in token received: "${rawToken}" from ${normalizedSender}`);
+        console.log(`[WebhookProcessor] Worker 1-Tap QR check-in token received: "${rawToken}" from ${normalizedSender}`);
 
         const session = await PendingCheckinService.linkPhoneToPendingCheckin(
           rawToken,
@@ -84,19 +86,50 @@ export class WebhookProcessorServer {
           const site = await SitesService.getSiteById(session.siteId);
           const siteName = site ? site.name : 'Construction Site';
 
-          await WhatsAppService.sendMessage(
-            normalizedSender,
-            `👋 *Namaste! Welcome to ${siteName}.*\n\n` +
-            `📍 Location verified within site boundary.\n` +
-            `📸 *Please click and send your LIVE SELFIE photo now to record your attendance.*`
-          );
+          // 1. Resolve or auto-register worker by phone number
+          const targetWorker = await WorkersService.getOrCreateWorkerByPhone(normalizedSender);
 
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+          // 2. Create Attendance Session
+          const sessionId = await AttendanceSessionsService.createAttendanceSession({
+            date: today,
+            siteId: session.siteId,
+            supervisorId: 'worker_qr_whatsapp',
+            whatsappSenderNumber: normalizedSender,
+            whatsappMessageId: rawMessageId,
+          });
+
+          // 3. Record attendance immediately (Zero selfie required!)
+          await AttendanceService.recordWorkerAttendance({
+            attendanceSessionId: sessionId,
+            workerId: targetWorker.id,
+            siteId: session.siteId,
+            date: today,
+            messageTimestamp: messageTimestampMs,
+            attendancePhotoUrl: '',
+            submittedBy: `Worker QR WhatsApp (${normalizedSender})`,
+            method: 'worker_qr_whatsapp',
+          });
+
+          // 4. Mark pending checkin as used
+          await PendingCheckinService.markPendingCheckinUsed(session.id);
+          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
+
+          // 5. Send instant, complete attendance report back to the worker
+          await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({
+            supervisorWhatsAppNumber: normalizedSender,
+            siteId: session.siteId,
+            siteName: siteName,
+            date: today,
+            recognizedWorkerIds: [targetWorker.id],
+            unknownFaceCount: 0,
+          });
+
           return {
             status: 'completed',
-            reason: 'Worker checkin token linked to phone. Awaiting selfie.',
+            reason: `1-Tap QR attendance recorded for ${targetWorker.name} at ${siteName}`,
             messageId: rawMessageId,
-            siteId: session.siteId,
+            sessionId,
           };
         } else {
           await WhatsAppService.sendMessage(
@@ -118,28 +151,145 @@ export class WebhookProcessorServer {
       }
 
       // =====================================================================
-      // PATH 2: IMAGE PROCESSING (SUPERVISOR GROUP PHOTO vs WORKER QR SELFIE)
+      // PATH 2: IMAGE PROCESSING (PAYMENT SCREENSHOT OCR vs SELFIE ATTENDANCE)
       // =====================================================================
 
-      // Check if sender has an active GPS-verified worker QR session
-      let activeWorkerPendingSession = await PendingCheckinService.getActivePendingCheckinByPhone(normalizedSender);
+      // Download image buffer
+      let imageBuffer: Buffer | null = null;
+      let contentType = 'image/jpeg';
+      let photoUrl = '';
 
-      // Also check if image caption contains a fresh checkin token
-      if (!activeWorkerPendingSession && textBody.toUpperCase().includes('CHECKIN_')) {
-        const tokenMatch = textBody.match(/CHECKIN_([A-Za-z0-9_]+)/i);
-        if (tokenMatch && tokenMatch[1]) {
-          activeWorkerPendingSession = await PendingCheckinService.linkPhoneToPendingCheckin(
-            tokenMatch[1],
+      if (isSimulation) {
+        const rootDir = process.cwd();
+        const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
+        if (fs.existsSync(fallbackPath)) {
+          imageBuffer = fs.readFileSync(fallbackPath);
+        }
+      } else if (mediaId) {
+        try {
+          const metadata = await MetaWhatsAppServer.getMediaMetadata(mediaId);
+          const downloaded = await MetaWhatsAppServer.downloadMediaBuffer(metadata.url);
+          imageBuffer = downloaded.buffer;
+          contentType = downloaded.contentType;
+        } catch (mediaErr: any) {
+          console.error('[WebhookProcessor] Failed to download media:', mediaErr);
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+          await WhatsAppService.sendMessage(
             normalizedSender,
-            rawMessageId
+            `⚠️ Could not download your photo from WhatsApp. Please try sending it again.`
           );
+          return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
         }
       }
 
+      if (!imageBuffer) {
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+        return { status: 'failed', reason: 'No image buffer', messageId: rawMessageId };
+      }
+
       // ---------------------------------------------------------------------
-      // SECURITY RULE: Direct Photo Bypass Prevention
-      // If no active QR session exists, do not record attendance.
+      // FEATURE: AI PAYMENT SCREENSHOT OCR & KHATA LEDGER
+      // Check if uploaded image is a payment receipt (GPay / PhonePe / Paytm)
       // ---------------------------------------------------------------------
+      const paymentData = await PaymentOcrService.extractPaymentFromImage('', imageBuffer);
+
+      if (paymentData.isPaymentScreenshot && paymentData.amount && paymentData.amount > 0) {
+        console.log(`[WebhookProcessor] Payment Screenshot Detected! Amount: ₹${paymentData.amount}, Receiver: ${paymentData.receiverName}`);
+
+        // Save receipt image to Supabase storage
+        try {
+          photoUrl = await ImageStorageServer.saveAttendancePhoto({
+            date: today,
+            siteId: 'payment_receipts',
+            sessionId: `pay_${Date.now()}`,
+            buffer: imageBuffer,
+            mimeType: contentType,
+          });
+        } catch (storageErr) {
+          console.warn('[WebhookProcessor] Error saving payment receipt photo:', storageErr);
+        }
+
+        // Match or resolve worker
+        const allWorkers = await WorkersService.getWorkers();
+        let matchedWorker = allWorkers.find((w) => {
+          const nameLower = w.name.toLowerCase();
+          const targetName = (paymentData.receiverName || '').toLowerCase();
+          if (targetName && (nameLower.includes(targetName) || targetName.includes(nameLower))) {
+            return true;
+          }
+          if (paymentData.upiId && w.phone) {
+            const cleanPhone = w.phone.replace(/\D/g, '');
+            if (cleanPhone.length >= 10 && paymentData.upiId.includes(cleanPhone.slice(-10))) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!matchedWorker && paymentData.receiverName) {
+          const newCode = `WRK-00${allWorkers.length + 1}`;
+          const newId = await WorkersService.createWorker({
+            name: paymentData.receiverName,
+            workerCode: newCode,
+            role: 'General Worker',
+          });
+          matchedWorker = {
+            id: newId,
+            name: paymentData.receiverName,
+            workerCode: newCode,
+            active: true,
+            createdAt: null as any,
+            updatedAt: null as any,
+          };
+        }
+
+        const resolvedWorkerId = matchedWorker?.id || 'unassigned_worker';
+        const resolvedWorkerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : paymentData.receiverName || 'Worker';
+
+        // Record entry in Khata Ledger
+        await PaymentLedgerService.recordPayment({
+          workerId: resolvedWorkerId,
+          workerName: resolvedWorkerName,
+          workerCode: matchedWorker?.workerCode,
+          workerPhone: matchedWorker?.phone,
+          amount: paymentData.amount,
+          category: 'advance',
+          paymentMethod: paymentData.paymentMethod,
+          upiId: paymentData.upiId || '',
+          paymentDate: today,
+          paymentTime: paymentData.timestampStr || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          receiptPhotoUrl: photoUrl,
+          recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
+          rawOcrText: paymentData.rawText,
+        });
+
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+
+        // Send WhatsApp confirmation back to contractor
+        await WhatsAppService.sendMessage(
+          normalizedSender,
+          `Payment Recorded in Khata 💳\n\n` +
+          `Paid To: *${resolvedWorkerName}*\n` +
+          `Amount: *₹${paymentData.amount.toFixed(2)}*\n` +
+          `Date: ${today}\n` +
+          `Payment App: ${paymentData.paymentMethod.toUpperCase()}\n` +
+          `UPI / Ref: ${paymentData.upiId || 'Direct UPI'}\n` +
+          `Category: *Advance Payment*\n\n` +
+          `Worker Khata Balance Updated! ✅`
+        );
+
+        return {
+          status: 'completed',
+          reason: `Payment receipt recorded for ${resolvedWorkerName}: ₹${paymentData.amount}`,
+          messageId: rawMessageId,
+        };
+      }
+
+      // ---------------------------------------------------------------------
+      // ATTENDANCE SELFIE / GROUP PHOTO PATH
+      // ---------------------------------------------------------------------
+      let activeWorkerPendingSession = await PendingCheckinService.getActivePendingCheckinByPhone(normalizedSender);
+
       if (!activeWorkerPendingSession) {
         console.log(`[WebhookProcessor] Photo rejected: No active QR checkin token for ${normalizedSender}`);
         await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored');
@@ -151,7 +301,7 @@ export class WebhookProcessorServer {
           `📌 *Attendance Lagane Ka Sahi Tareeqa:*\n` +
           `1️⃣ Apne construction site gate par laga QR Code scan karein.\n` +
           `2️⃣ Mobile browser mein *Allow Location* par tap karein.\n` +
-          `3️⃣ WhatsApp open hone par apni *LIVE SELFIE* bhejein.\n\n` +
+          `3️⃣ WhatsApp open hone par *SEND* button dabayein!\n\n` +
           `_Kripya pehle QR code scan kijiye, direct photo bhejne par attendance nahi lagega._`
         );
 
@@ -179,32 +329,30 @@ export class WebhookProcessorServer {
         whatsappMessageId: rawMessageId,
       });
 
-      // Download image buffer
-      let imageBuffer: Buffer | null = null;
-      let contentType = 'image/jpeg';
-      let photoUrl = '';
-
-      if (isSimulation) {
-        const rootDir = process.cwd();
-        const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
-        if (fs.existsSync(fallbackPath)) {
-          imageBuffer = fs.readFileSync(fallbackPath);
-        }
-      } else if (mediaId) {
-        try {
-          const metadata = await MetaWhatsAppServer.getMediaMetadata(mediaId);
-          const downloaded = await MetaWhatsAppServer.downloadMediaBuffer(metadata.url);
-          imageBuffer = downloaded.buffer;
-          contentType = downloaded.contentType;
-        } catch (mediaErr: any) {
-          console.error('[WebhookProcessor] Failed to download worker selfie:', mediaErr);
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-          await WhatsAppService.sendMessage(
-            normalizedSender,
-            `⚠️ Could not download your selfie from WhatsApp. Please try sending your photo again.`
-          );
-          return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
+      // Ensure image buffer is downloaded
+      if (!imageBuffer) {
+        if (isSimulation) {
+          const rootDir = process.cwd();
+          const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
+          if (fs.existsSync(fallbackPath)) {
+            imageBuffer = fs.readFileSync(fallbackPath);
+          }
+        } else if (mediaId) {
+          try {
+            const metadata = await MetaWhatsAppServer.getMediaMetadata(mediaId);
+            const downloaded = await MetaWhatsAppServer.downloadMediaBuffer(metadata.url);
+            imageBuffer = downloaded.buffer;
+            contentType = downloaded.contentType;
+          } catch (mediaErr: any) {
+            console.error('[WebhookProcessor] Failed to download worker selfie:', mediaErr);
+            await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
+            await WhatsAppService.sendMessage(
+              normalizedSender,
+              `⚠️ Could not download your selfie from WhatsApp. Please try sending your photo again.`
+            );
+            return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
+          }
         }
       }
 

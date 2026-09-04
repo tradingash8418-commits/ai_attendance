@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, CalendarCheck, Building2, Users, UserCheck } from 'lucide-react';
+import { LayoutDashboard, CalendarCheck, IndianRupee, Building2, Users } from 'lucide-react';
 
 export const MobileNav: React.FC = () => {
   const pathname = usePathname();
@@ -16,9 +16,9 @@ export const MobileNav: React.FC = () => {
   const navItems = [
     { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
     { href: '/attendance', label: 'Attendance', icon: CalendarCheck },
+    { href: '/payments', label: 'Khata', icon: IndianRupee },
     { href: '/sites', label: 'Sites', icon: Building2 },
     { href: '/workers', label: 'Workers', icon: Users },
-    { href: '/supervisors', label: 'Supervisors', icon: UserCheck },
   ];
 
   return (

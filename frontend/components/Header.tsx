@@ -14,6 +14,7 @@ import {
   Bell,
   LogOut,
   ChevronDown,
+  IndianRupee,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthService } from '@/services/auth.service';
@@ -32,6 +33,7 @@ export const Header: React.FC = () => {
   const navLinks = [
     { href: '/dashboard', label: 'Contractor Home', icon: LayoutDashboard },
     { href: '/attendance', label: 'Attendance', icon: CalendarCheck },
+    { href: '/payments', label: 'Khata / Payments', icon: IndianRupee },
     { href: '/sites', label: 'Sites', icon: Building2 },
     { href: '/workers', label: 'Workers', icon: Users },
     { href: '/supervisors', label: 'Supervisors', icon: UserCheck },

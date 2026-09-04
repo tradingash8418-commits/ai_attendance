@@ -17,8 +17,8 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Briefcase,
-  FileText,
   UserCheck,
+  IndianRupee,
 } from 'lucide-react';
 import { AttendanceService, type TodayDashboardSummary } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
@@ -84,11 +84,11 @@ export default function DashboardPage() {
   const recommendedPills = [
     { label: 'Home', href: '/dashboard', icon: Briefcase, color: 'bg-blue-50 text-blue-600 border-blue-200' },
     { label: 'Attendance', href: '/attendance', icon: CalendarCheck, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { label: 'Khata / Ledger', href: '/payments', icon: IndianRupee, color: 'bg-violet-50 text-violet-600 border-violet-200' },
     { label: 'Workers', href: '/workers', icon: Users, color: 'bg-sky-50 text-sky-600 border-sky-200' },
     { label: 'Sites', href: '/sites', icon: Building2, color: 'bg-amber-50 text-amber-600 border-amber-200' },
     { label: 'Supervisors', href: '/supervisors', icon: UserCheck, color: 'bg-purple-50 text-purple-600 border-purple-200' },
     { label: 'AI Diagnostics', href: '/test-whatsapp', icon: Activity, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    { label: 'System Logs', href: '/status', icon: FileText, color: 'bg-rose-50 text-rose-600 border-rose-200' },
   ];
 
   return (
