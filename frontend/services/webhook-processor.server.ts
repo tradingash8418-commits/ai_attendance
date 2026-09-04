@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { WhatsAppService } from './whatsapp.service';
 import { MetaWhatsAppServer } from './meta-whatsapp.server';
-import { SupervisorsService } from './supervisors.service';
 import { SitesService } from './sites.service';
 import { AttendanceSessionsService } from './attendanceSessions.service';
 import { ImageStorageServer } from './image-storage.server';
@@ -122,16 +121,13 @@ export class WebhookProcessorServer {
       // PATH 2: IMAGE PROCESSING (SUPERVISOR GROUP PHOTO vs WORKER QR SELFIE)
       // =====================================================================
 
-      // 3. Check if sender is a Registered Supervisor
-      const supervisor = await SupervisorsService.getSupervisorByPhone(normalizedSender);
-
       // Check if sender has an active GPS-verified worker QR session
       let activeWorkerPendingSession = await PendingCheckinService.getActivePendingCheckinByPhone(normalizedSender);
 
       // Also check if image caption contains a fresh checkin token
       if (!activeWorkerPendingSession && textBody.toUpperCase().includes('CHECKIN_')) {
         const tokenMatch = textBody.match(/CHECKIN_([A-Za-z0-9_]+)/i);
-        if (tokenMatch) {
+        if (tokenMatch && tokenMatch[1]) {
           activeWorkerPendingSession = await PendingCheckinService.linkPhoneToPendingCheckin(
             tokenMatch[1],
             normalizedSender,
@@ -141,199 +137,53 @@ export class WebhookProcessorServer {
       }
 
       // ---------------------------------------------------------------------
-      // WORKER QR SELFIE WORKFLOW
+      // SECURITY RULE: Direct Photo Bypass Prevention
+      // If no active QR session exists, do not record attendance.
       // ---------------------------------------------------------------------
-      if (!supervisor && activeWorkerPendingSession) {
-        console.log(`[WebhookProcessor] Processing WORKER QR Selfie for site ID ${activeWorkerPendingSession.siteId}`);
-
-        const site = await SitesService.getSiteById(activeWorkerPendingSession.siteId);
-        const siteName = site ? site.name : 'Construction Site';
-
-        // Create Attendance Session for worker self check-in
-        const sessionId = await AttendanceSessionsService.createAttendanceSession({
-          date: today,
-          siteId: activeWorkerPendingSession.siteId,
-          supervisorId: 'worker_qr_self',
-          whatsappSenderNumber: normalizedSender,
-          whatsappMessageId: rawMessageId,
-        });
-
-        // Download image buffer
-        let imageBuffer: Buffer | null = null;
-        let contentType = 'image/jpeg';
-        let photoUrl = '';
-
-        if (isSimulation) {
-          const rootDir = process.cwd();
-          const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
-          if (fs.existsSync(fallbackPath)) {
-            imageBuffer = fs.readFileSync(fallbackPath);
-          }
-        } else if (mediaId) {
-          try {
-            const metadata = await MetaWhatsAppServer.getMediaMetadata(mediaId);
-            const downloaded = await MetaWhatsAppServer.downloadMediaBuffer(metadata.url);
-            imageBuffer = downloaded.buffer;
-            contentType = downloaded.contentType;
-          } catch (mediaErr: any) {
-            console.error('[WebhookProcessor] Failed to download worker selfie:', mediaErr);
-            await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
-            await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-            await WhatsAppService.sendMessage(
-              normalizedSender,
-              `⚠️ Could not download your selfie from WhatsApp. Please try sending your photo again.`
-            );
-            return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
-          }
-        }
-
-        if (!imageBuffer) {
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-          return { status: 'failed', reason: 'No image buffer', messageId: rawMessageId };
-        }
-
-        // Save photo to storage
-        try {
-          photoUrl = await ImageStorageServer.saveAttendancePhoto({
-            date: today,
-            siteId: activeWorkerPendingSession.siteId,
-            sessionId,
-            buffer: imageBuffer,
-            mimeType: contentType,
-          });
-        } catch (storageErr) {
-          console.error('[WebhookProcessor] Error saving worker photo:', storageErr);
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-          return { status: 'failed', reason: 'Storage error', messageId: rawMessageId };
-        }
-
-        // Run SFace / YuNet Face Recognition
-        const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl, imageBuffer);
-        const allWorkers = await WorkersService.getWorkers();
-
-        const matchedWorkerId = recognitionResult.matchedWorkerIds[0];
-        if (matchedWorkerId) {
-          const targetWorker = allWorkers.find(
-            (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId
-          );
-          const resolvedId = targetWorker?.id || matchedWorkerId;
-          const displayName = targetWorker ? getWorkerDisplayName(targetWorker) : 'Worker';
-
-          // Record attendance with method: 'worker_qr_whatsapp'
-          await AttendanceService.recordWorkerAttendance({
-            attendanceSessionId: sessionId,
-            workerId: resolvedId,
-            siteId: activeWorkerPendingSession.siteId || '',
-            date: today,
-            messageTimestamp: messageTimestampMs,
-            attendancePhotoUrl: photoUrl,
-            submittedBy: `Worker QR WhatsApp (${normalizedSender})`,
-            method: 'worker_qr_whatsapp',
-          });
-
-          // Mark pending checkin session as used
-          await PendingCheckinService.markPendingCheckinUsed(activeWorkerPendingSession.id);
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
-
-          // Send clean WhatsApp confirmation to worker
-          await WhatsAppService.sendMessage(
-            normalizedSender,
-            `Attendance Recorded ✅\n\n` +
-            `Name: ${displayName}\n` +
-            `Site: ${siteName}\n` +
-            `Date: ${today}\n` +
-            `Status: Present (Shift Active)\n` +
-            `Hajri: 1.0 (Normal)\n\n` +
-            `Thank you!`
-          );
-
-          return {
-            status: 'completed',
-            reason: `Worker QR check-in successful for ${displayName} at ${siteName}`,
-            messageId: rawMessageId,
-            sessionId,
-          };
-        } else {
-          // Unknown face
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
-
-          await WhatsAppService.sendMessage(
-            normalizedSender,
-            `⚠️ *Face Not Recognized*\n\n` +
-            `We could not match your photo with our registered workers database.\n` +
-            `Please ensure your face is well-lit and clearly visible, then send your selfie again.`
-          );
-
-          return {
-            status: 'completed',
-            reason: 'Face not recognized in worker selfie',
-            messageId: rawMessageId,
-            sessionId,
-          };
-        }
-      }
-
-      // ---------------------------------------------------------------------
-      // SUPERVISOR WORKFLOW (EXISTING FLOW - 100% PRESERVED)
-      // ---------------------------------------------------------------------
-      if (!supervisor) {
-        console.log(`[WebhookProcessor] Unregistered sender with no active QR session: ${normalizedSender}`);
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+      if (!activeWorkerPendingSession) {
+        console.log(`[WebhookProcessor] Photo rejected: No active QR checkin token for ${normalizedSender}`);
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored');
 
         await WhatsAppService.sendMessage(
           normalizedSender,
-          `⚠️ *Attendance Error*\n\n` +
-          `Phone number ${normalizedSender} is not registered as a supervisor.\n` +
-          `If you are a worker marking attendance, please scan the Site QR code at the gate first, allow location, and then send your selfie.`
+          `⚠️ *Attendance Record Nahi Hua!*\n\n` +
+          `❌ *Aapne Site Gate ka QR Code scan nahi kiya hai.*\n\n` +
+          `📌 *Attendance Lagane Ka Sahi Tareeqa:*\n` +
+          `1️⃣ Apne construction site gate par laga QR Code scan karein.\n` +
+          `2️⃣ Mobile browser mein *Allow Location* par tap karein.\n` +
+          `3️⃣ WhatsApp open hone par apni *LIVE SELFIE* bhejein.\n\n` +
+          `_Kripya pehle QR code scan kijiye, direct photo bhejne par attendance nahi lagega._`
         );
 
-        return { status: 'failed', reason: 'Unregistered sender without QR session', messageId: rawMessageId };
+        return {
+          status: 'failed',
+          reason: 'Direct photo rejected without active QR check-in session',
+          messageId: rawMessageId,
+        };
       }
 
-      // 4. Supervisor Site Linkage Check with Auto-linking Fallback
-      let supervisorSite = await SitesService.getSiteBySupervisorId(supervisor.id);
-      if (!supervisorSite) {
-        let allSites = await SitesService.getSites();
-        if (allSites.length === 0) {
-          const newSiteId = await SitesService.createSite({
-            name: 'Site B (Bandra Residential)',
-            address: 'Bandra West, Mumbai',
-            supervisorId: supervisor.id,
-          });
-          supervisorSite = await SitesService.getSiteById(newSiteId);
-        } else if (allSites[0]) {
-          supervisorSite = allSites[0];
-          await SitesService.assignSupervisorToSite(supervisorSite.id, supervisor.id);
-        }
-      }
+      // ---------------------------------------------------------------------
+      // WORKER QR SELFIE WORKFLOW (Strictly uses scanned site ID)
+      // ---------------------------------------------------------------------
+      console.log(`[WebhookProcessor] Processing WORKER QR Selfie for site ID ${activeWorkerPendingSession.siteId}`);
 
-      if (!supervisorSite) {
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
-        await WhatsAppService.sendMessage(
-          normalizedSender,
-          `⚠️ Attendance Error: Supervisor ${supervisor.name} is not assigned to any active construction site.`
-        );
-        return { status: 'failed', reason: 'No site linked to supervisor', messageId: rawMessageId };
-      }
+      const site = await SitesService.getSiteById(activeWorkerPendingSession.siteId);
+      const siteName = site ? site.name : 'Construction Site';
 
-      // 6. Create Supervisor Attendance Session
+      // Create Attendance Session for worker self check-in
       const sessionId = await AttendanceSessionsService.createAttendanceSession({
         date: today,
-        siteId: supervisorSite.id,
-        supervisorId: supervisor.id,
+        siteId: activeWorkerPendingSession.siteId,
+        supervisorId: 'worker_qr_self',
         whatsappSenderNumber: normalizedSender,
         whatsappMessageId: rawMessageId,
       });
 
+      // Download image buffer
       let imageBuffer: Buffer | null = null;
       let contentType = 'image/jpeg';
       let photoUrl = '';
 
-      // 7. Binary Image Retrieval
       if (isSimulation) {
         const rootDir = process.cwd();
         const fallbackPath = path.resolve(rootDir, '..', 'face-service', 'test-data', 'test_4_workers_collage.jpg');
@@ -347,82 +197,103 @@ export class WebhookProcessorServer {
           imageBuffer = downloaded.buffer;
           contentType = downloaded.contentType;
         } catch (mediaErr: any) {
-          console.error('[WebhookProcessor] Failed to download supervisor media:', mediaErr);
+          console.error('[WebhookProcessor] Failed to download worker selfie:', mediaErr);
           await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
           await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
           await WhatsAppService.sendMessage(
             normalizedSender,
-            `⚠️ Attendance Photo Download Error: Could not download media from Meta API (${mediaErr?.message || 'Access Token Expired'}).`
+            `⚠️ Could not download your selfie from WhatsApp. Please try sending your photo again.`
           );
-          return { status: 'failed', reason: 'Meta Media Download Error', messageId: rawMessageId, sessionId };
+          return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
         }
       }
 
       if (!imageBuffer) {
         await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
         await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-        return { status: 'failed', reason: 'No image buffer available', messageId: rawMessageId, sessionId };
+        return { status: 'failed', reason: 'No image buffer', messageId: rawMessageId };
       }
 
-      // 8. Save Attendance Photo
+      // Save photo to storage under the verified siteId
       try {
         photoUrl = await ImageStorageServer.saveAttendancePhoto({
           date: today,
-          siteId: supervisorSite.id,
+          siteId: activeWorkerPendingSession.siteId,
           sessionId,
           buffer: imageBuffer,
           mimeType: contentType,
         });
       } catch (storageErr) {
-        console.error('[WebhookProcessor] Error saving image to storage:', storageErr);
+        console.error('[WebhookProcessor] Error saving worker photo:', storageErr);
         await AttendanceSessionsService.updateSessionStatus(sessionId, 'failed');
         await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', sessionId);
-        return { status: 'failed', reason: 'Image storage error', messageId: rawMessageId, sessionId };
+        return { status: 'failed', reason: 'Storage error', messageId: rawMessageId };
       }
 
-      // 9. AI Face Recognition Pipeline
+      // Run SFace / YuNet Face Recognition
       const recognitionResult = await FaceRecognitionService.recognizeGroupSelfie(photoUrl, imageBuffer);
       const allWorkers = await WorkersService.getWorkers();
 
-      // 10. Record Attendance for all matched workers (method: 'supervisor_whatsapp')
-      for (const matchedWorkerId of recognitionResult.matchedWorkerIds) {
+      const matchedWorkerId = recognitionResult.matchedWorkerIds[0];
+      if (matchedWorkerId) {
         const targetWorker = allWorkers.find(
           (w) => w.id === matchedWorkerId || w.workerCode === matchedWorkerId
         );
-        const resolvedId = targetWorker ? targetWorker.id : matchedWorkerId;
+        const resolvedId = targetWorker?.id || matchedWorkerId;
+        const displayName = targetWorker ? getWorkerDisplayName(targetWorker) : 'Worker';
 
+        // Record attendance strictly under the QR-scanned siteId
         await AttendanceService.recordWorkerAttendance({
           attendanceSessionId: sessionId,
           workerId: resolvedId,
-          siteId: supervisorSite.id,
+          siteId: activeWorkerPendingSession.siteId,
           date: today,
           messageTimestamp: messageTimestampMs,
           attendancePhotoUrl: photoUrl,
-          submittedBy: `Supervisor WhatsApp (${normalizedSender})`,
-          method: 'supervisor_whatsapp',
+          submittedBy: `Worker QR WhatsApp (${normalizedSender})`,
+          method: 'worker_qr_whatsapp',
         });
+
+        // Mark pending checkin session as used
+        await PendingCheckinService.markPendingCheckinUsed(activeWorkerPendingSession.id);
+        await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
+
+        // Send full, formatted attendance feedback report strictly for this Site
+        await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({
+          supervisorWhatsAppNumber: normalizedSender,
+          siteId: activeWorkerPendingSession.siteId,
+          siteName: siteName,
+          date: today,
+          recognizedWorkerIds: [resolvedId],
+          unknownFaceCount: 0,
+        });
+
+        return {
+          status: 'completed',
+          reason: `Worker QR check-in successful for ${displayName} at ${siteName}`,
+          messageId: rawMessageId,
+          sessionId,
+        };
+      } else {
+        // Unknown face
+        await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
+
+        await WhatsAppService.sendMessage(
+          normalizedSender,
+          `⚠️ *Face Not Recognized*\n\n` +
+          `We could not match your photo with our registered workers database for ${siteName}.\n` +
+          `Please ensure your face is well-lit and clearly visible, then send your selfie again.`
+        );
+
+        return {
+          status: 'completed',
+          reason: 'Face not recognized in worker selfie',
+          messageId: rawMessageId,
+          sessionId,
+        };
       }
-
-      // 11. Complete Session
-      await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
-      await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
-
-      // 12. Send Clean WhatsApp Feedback Report Back to Supervisor Phone
-      await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({
-        supervisorWhatsAppNumber: normalizedSender,
-        siteName: supervisorSite.name,
-        date: today,
-        siteId: supervisorSite.id,
-        matchedWorkerIds: recognitionResult.matchedWorkerIds,
-        unknownFaceCount: recognitionResult.unknownFaceCount,
-      });
-
-      return {
-        status: 'completed',
-        reason: 'Supervisor group selfie processed successfully.',
-        messageId: rawMessageId,
-        sessionId,
-      };
     } catch (err: any) {
       console.error('[WebhookProcessor] Critical processing error:', err);
       return { status: 'failed', reason: err?.message || 'Internal processing error' };
