@@ -48,6 +48,7 @@ export class PaymentOcrService {
    * - Paytm "₹300" -> "7300" -> 300
    * - GPay "₹5,000.00" -> "75,000.00" -> 5000
    * - PhonePe "₹460" -> "7460" -> 460
+   * - SBI Yono "INR 15,000.00" -> 15000
    */
   public static cleanOcrRupeeArtifact(numStr: string): number | null {
     if (!numStr) return null;
@@ -117,7 +118,7 @@ export class PaymentOcrService {
   }
 
   /**
-   * Parses raw OCR text from a payment receipt screenshot (Google Pay, PhonePe, Paytm, BHIM, UPI)
+   * Parses raw OCR text from a payment receipt screenshot (Google Pay, PhonePe, Paytm, BHIM, Bank Apps)
    * and extracts structured financial data with regex pattern matching and cross-validation.
    */
   public static parsePaymentReceiptText(rawText: string): ExtractedPaymentData {
@@ -168,10 +169,10 @@ export class PaymentOcrService {
       paymentMethod = 'paytm';
     }
 
-    // 2. Extract Date & Time FIRST so day numbers (e.g. '2' in '2 September 2026') never get parsed as ₹2 Amount
+    // 2. Extract Date & Time FIRST across all Indian Bank & UPI App date formats
     let timestampStr: string | null = null;
     const fullDateMatch = text.match(
-      /\b([0-3]?[0-9]\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202[4-9](?:[,\s\-at]+[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)?)?)\b/i
+      /\b([0-3]?[0-9][\s\-\/]+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-1]?[0-9])[\s\-\/]+202[4-9](?:[,\s\-at]+[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)?)?)\b/i
     );
     if (fullDateMatch && fullDateMatch[1]) {
       timestampStr = fullDateMatch[1].trim();
@@ -184,7 +185,10 @@ export class PaymentOcrService {
 
     // Strip date strings and time strings to prevent day of month or hours from matching as amount
     const textWithoutDates = text
-      .replace(/\b[0-3]?[0-9]\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202[4-9]\b/gi, '')
+      .replace(
+        /\b[0-3]?[0-9][\s\-\/]+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-1]?[0-9])[\s\-\/]+202[4-9]\b/gi,
+        ''
+      )
       .replace(/\b[0-1]?[0-9]:[0-5][0-9]\s*(?:am|pm|AM|PM)\b/gi, '');
 
     // 3. Extract Amount (Cross-validated against written words & digits)
@@ -192,7 +196,7 @@ export class PaymentOcrService {
 
     let digitsAmount: number | null = null;
 
-    // Pattern A: Comma-formatted numbers (e.g. 37,400, 745,000.00, 45,000.00, ?45,000.00, 7,400)
+    // Pattern A: Comma-formatted numbers (e.g. 37,400, 745,000.00, 45,000.00, ?45,000.00, 7,400, 15,000.00)
     const commaMatch = textWithoutDates.match(/[?₹RsINR\s]*([0-9]{1,6}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?)/i);
     if (commaMatch && commaMatch[1]) {
       const cleanedVal = this.cleanOcrRupeeArtifact(commaMatch[1]);
@@ -201,85 +205,107 @@ export class PaymentOcrService {
       }
     }
 
-    // Pattern B: Decimal & standard digit patterns if no comma match
+    // Pattern B: Keyword-tagged amounts (e.g. "Amount: INR 15,000", "Payment of ₹1,200", "Paid ₹460")
     if (digitsAmount === null) {
-      const amountRegexes = [
-        /(?:amount|paid|total|sent)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:\.[0-9]{1,2})?)/i,
-        /[?₹RsINR]\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
-        /\b([0-9]+\.[0-9]{2})\b/,
-        /\b([0-9]{2,7})\b/,
-      ];
+      const markedMatch = textWithoutDates.match(
+        /(?:amount|paid|total|sent|payment of)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i
+      );
+      if (markedMatch && markedMatch[1]) {
+        const cleanedVal = this.cleanOcrRupeeArtifact(markedMatch[1]);
+        if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
+          digitsAmount = cleanedVal;
+        }
+      }
+    }
 
-      for (const rx of amountRegexes) {
-        const match = textWithoutDates.match(rx);
-        if (match && match[1]) {
-          const cleanedVal = this.cleanOcrRupeeArtifact(match[1]);
-          if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
-            digitsAmount = cleanedVal;
+    // Pattern C: Currency symbol tagged amounts (e.g. "₹460.00", "INR 500")
+    if (digitsAmount === null) {
+      const symbolMatch = textWithoutDates.match(/[?₹RsINR]\s*([0-9]+(?:\.[0-9]{1,2})?)/i);
+      if (symbolMatch && symbolMatch[1]) {
+        const cleanedVal = this.cleanOcrRupeeArtifact(symbolMatch[1]);
+        if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
+          digitsAmount = cleanedVal;
+        }
+      }
+    }
+
+    // Pattern D: Pure decimal or digit fallback
+    if (digitsAmount === null) {
+      const looseMatch = textWithoutDates.match(/\b([0-9]{2,7}(?:\.[0-9]{2})?)\b/);
+      if (looseMatch && looseMatch[1]) {
+        const cleanedVal = this.cleanOcrRupeeArtifact(looseMatch[1]);
+        if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
+          digitsAmount = cleanedVal;
+        }
+      }
+    }
+
+    // Amount priority: Written words ("Rupees Three Hundred Only") is highest ground truth
+    const finalAmount = wordsAmount || digitsAmount;
+
+    // 4. Extract Receiver / Beneficiary Name (Whom money was paid to)
+    let receiverName: string | null = null;
+
+    // Pattern 1: Inline sentence matches (e.g. "Paid to SRI LINGALA SLAB INDUSTRIES", "Beneficiary Name: SURESH KUMAR", "Payment of ₹1200 to RAMESH SINGH")
+    const inlineMatch = text.match(
+      /(?:paid to|transfer to|transferred to|sent to|payment of [^]+? to|beneficiary name:?|credited to)\s+([A-Za-z\s]{2,40})/i
+    );
+    if (inlineMatch && inlineMatch[1]) {
+      const firstLine = inlineMatch[1].split('\n')[0] || '';
+      const candidate = firstLine
+        .replace(/(?:successful|banking name.*|props?.*|upi.*|transaction.*)/i, '')
+        .trim();
+      if (candidate && !candidate.includes('@') && !/^[0-9+]+$/.test(candidate) && candidate.length > 2) {
+        receiverName = candidate;
+      }
+    }
+
+    // Pattern 2: Multiline blocks around "To", "Paid to", "Transfer to"
+    if (!receiverName) {
+      for (let i = 0; i < lines.length; i++) {
+        const lineStr = lines[i] || '';
+        const line = lineStr.toLowerCase();
+        if (
+          line === 'to' ||
+          line === 'paid to' ||
+          line === 'transfer to' ||
+          line === 'transferred to' ||
+          line === 'sent to' ||
+          line.startsWith('paid to ') ||
+          line.startsWith('transfer to ') ||
+          line.startsWith('to ')
+        ) {
+          let candidate = '';
+          if (line.startsWith('paid to ')) {
+            candidate = lineStr.substring(8).trim();
+          } else if (line.startsWith('transfer to ')) {
+            candidate = lineStr.substring(12).trim();
+          } else if (line.startsWith('to ')) {
+            candidate = lineStr.substring(3).trim();
+          } else if (lines[i + 1]) {
+            candidate = (lines[i + 1] || '').trim();
+          }
+
+          candidate = candidate.replace(/^banking name:?\s*/i, '').trim();
+          if (
+            candidate &&
+            !candidate.includes('@') &&
+            !/^[0-9+]+$/.test(candidate) &&
+            !candidate.toLowerCase().includes('upi') &&
+            !candidate.toLowerCase().includes('rupees')
+          ) {
+            receiverName = candidate;
             break;
           }
         }
       }
     }
 
-    // Amount priority: Written words ("Rupees Three Hundred Only") is highest ground truth
-    let finalAmount: number | null = null;
-    if (wordsAmount !== null && wordsAmount > 0) {
-      finalAmount = wordsAmount;
-    } else if (digitsAmount !== null) {
-      finalAmount = digitsAmount;
-    }
-
-    // 4. Extract Receiver Name
-    let receiverName: string | null = null;
-
-    for (let i = 0; i < lines.length; i++) {
-      const lineStr = lines[i] || '';
-      const line = lineStr.toLowerCase();
-      if (
-        line === 'to' ||
-        line === 'paid to' ||
-        line === 'transfer to' ||
-        line === 'transferred to' ||
-        line.startsWith('paid to ') ||
-        line.startsWith('transfer to ') ||
-        line.startsWith('transferred to ')
-      ) {
-        let candidate = '';
-        if (line.startsWith('paid to ') || line.startsWith('transfer to ') || line.startsWith('transferred to ')) {
-          candidate = lineStr.substring(line.indexOf('to') + 2).trim();
-        } else if (lines[i + 1]) {
-          candidate = (lines[i + 1] || '').trim();
-        }
-
-        // Clean candidate
-        candidate = candidate.replace(/^banking name:?\s*/i, '').trim();
-        if (
-          candidate &&
-          !candidate.includes('@') &&
-          !/^[0-9+]+$/.test(candidate) &&
-          !candidate.toLowerCase().includes('upi') &&
-          !candidate.toLowerCase().includes('rupees')
-        ) {
-          receiverName = candidate;
-          break;
-        }
-      }
-    }
-
-    // Fallback: search for Banking name
+    // Pattern 3: Fallback search for Banking Name / Account Title
     if (!receiverName) {
       const bankMatch = text.match(/banking\s+name:?\s*([^\n\r]+)/i);
       if (bankMatch && bankMatch[1]) {
         receiverName = bankMatch[1].trim();
-      }
-    }
-
-    // Fallback: search for 'paid to' pattern
-    if (!receiverName) {
-      const paidMatch = text.match(/paid\s+to\s*[:\-\n]*([A-Za-z\s]{2,35})/i);
-      if (paidMatch && paidMatch[1]) {
-        receiverName = paidMatch[1].replace(/\n.*/g, '').trim();
       }
     }
 
@@ -294,6 +320,7 @@ export class PaymentOcrService {
       (finalAmount !== null && (receiverName !== null || upiId !== null)) ||
         textLower.includes('paid to') ||
         textLower.includes('banking name') ||
+        textLower.includes('beneficiary name') ||
         textLower.includes('payment successful') ||
         textLower.includes('transaction successful') ||
         textLower.includes('pay again') ||
