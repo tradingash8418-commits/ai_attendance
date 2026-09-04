@@ -259,6 +259,15 @@ export class WebhookProcessorServer {
       await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
 
       // Send clear WhatsApp confirmation back to contractor / sender
+      let dateDisplay = today;
+      if (paymentData.timestampStr) {
+        if (paymentData.timestampStr.match(/202[4-9]/)) {
+          dateDisplay = paymentData.timestampStr;
+        } else {
+          dateDisplay = `${today} (${paymentData.timestampStr})`;
+        }
+      }
+
       if (finalAmount > 0) {
         await WhatsAppService.sendMessage(
           normalizedSender,
@@ -268,7 +277,7 @@ export class WebhookProcessorServer {
           `📒 *Khata Account:* ${finalPaidTo}\n` +
           `💳 *Method / App:* ${paymentData.paymentMethod.toUpperCase()}\n` +
           `📱 *UPI / Ref:* ${paymentData.upiId || 'Direct UPI'}\n` +
-          `📅 *Date:* ${today} (${paymentData.timestampStr || 'Today'})\n` +
+          `📅 *Date:* ${dateDisplay}\n` +
           `🏷️ *Type:* Advance / Kharcha\n\n` +
           `Ledger & Khata balance have been successfully updated! 📊`
         );
