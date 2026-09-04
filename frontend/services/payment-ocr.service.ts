@@ -41,6 +41,37 @@ const WORDS_MAP: Record<string, number> = {
 
 export class PaymentOcrService {
   /**
+   * Cleans OCR artifacts where Indian Rupee symbol '₹' is misrecognized as digit '7'
+   * (e.g. "₹45,000.00" -> "745,000.00" -> 45000, "₹300" -> "7300" -> 300, "₹460" -> "7460" -> 460).
+   */
+  public static cleanOcrRupeeArtifact(numStr: string): number | null {
+    if (!numStr) return null;
+    const parts = numStr.split('.');
+    const intPart = parts[0] || '';
+    const decPart = parts[1] ? '.' + parts[1] : '';
+
+    // If intPart starts with 7 and is followed by comma-formatted thousands (e.g. 745,000 or 75,000 or 710,000)
+    if (intPart.startsWith('7') && intPart.match(/^7[0-9]{1,2},[0-9]{3}/)) {
+      const sub = parseFloat(intPart.substring(1).replace(/,/g, '') + decPart);
+      if (!isNaN(sub) && sub > 0) return sub;
+    }
+
+    // If intPart is 3 to 6 digits without commas starting with 7 (e.g. 7460 or 7300 or 75000 or 745000)
+    const cleanInt = intPart.replace(/,/g, '');
+    if (cleanInt.startsWith('7') && cleanInt.length >= 3) {
+      const sub = parseFloat(cleanInt.substring(1) + decPart);
+      if (!isNaN(sub) && sub > 0 && sub < 1000000) {
+        if (cleanInt.length <= 4 || sub >= 1000) {
+          return sub;
+        }
+      }
+    }
+
+    const val = parseFloat(cleanInt + decPart);
+    return !isNaN(val) && val > 0 ? val : null;
+  }
+
+  /**
    * Converts written currency words (e.g. "Rupees Three Hundred Only" -> 300)
    * into a numeric amount.
    */
@@ -147,23 +178,33 @@ export class PaymentOcrService {
     const wordsAmount = this.parseWordsToNumber(text);
 
     let digitsAmount: number | null = null;
-    const amountRegexes = [
-      // Handles ?45,000.00, ₹45,000.00, Rs. 45,000.00, 45,000.00, 45,000
-      /[?₹RsINR\s]*([0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?)/i,
-      /(?:amount|paid|total|sent)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i,
-      /[?₹RsINR]\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
-      /\b([0-9]+(?:\.[0-9]{2}))\b/,
-      /\b([0-9]{2,7})\b/,
-    ];
 
-    for (const rx of amountRegexes) {
-      const match = textWithoutDates.match(rx);
-      if (match && match[1]) {
-        const cleaned = match[1].replace(/,/g, '');
-        const val = parseFloat(cleaned);
-        if (!isNaN(val) && val > 0 && val < 10000000) {
-          digitsAmount = val;
-          break;
+    // Pattern A: Comma-formatted numbers (e.g. 745,000.00, 45,000.00, ?45,000.00, 5,000.00)
+    const commaMatch = textWithoutDates.match(/[?₹RsINR\s]*([0-9]{1,6}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?)/i);
+    if (commaMatch && commaMatch[1]) {
+      const cleanedVal = this.cleanOcrRupeeArtifact(commaMatch[1]);
+      if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
+        digitsAmount = cleanedVal;
+      }
+    }
+
+    // Pattern B: Decimal & standard digit patterns if no comma match
+    if (digitsAmount === null) {
+      const amountRegexes = [
+        /(?:amount|paid|total|sent)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:\.[0-9]{1,2})?)/i,
+        /[?₹RsINR]\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+        /\b([0-9]+\.[0-9]{2})\b/,
+        /\b([0-9]{2,7})\b/,
+      ];
+
+      for (const rx of amountRegexes) {
+        const match = textWithoutDates.match(rx);
+        if (match && match[1]) {
+          const cleanedVal = this.cleanOcrRupeeArtifact(match[1]);
+          if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
+            digitsAmount = cleanedVal;
+            break;
+          }
         }
       }
     }
@@ -173,17 +214,7 @@ export class PaymentOcrService {
     if (wordsAmount !== null && wordsAmount > 0) {
       finalAmount = wordsAmount;
     } else if (digitsAmount !== null) {
-      // Fix common OCR artifact where Indian Rupee symbol '₹' is misread as digit '7' (e.g. ₹300 -> 7300)
-      if (digitsAmount >= 7000 && digitsAmount < 8000) {
-        const sub = digitsAmount - 7000;
-        if (sub > 0 && sub < 1000 && text.includes(String(sub))) {
-          finalAmount = sub;
-        } else {
-          finalAmount = digitsAmount;
-        }
-      } else {
-        finalAmount = digitsAmount;
-      }
+      finalAmount = digitsAmount;
     }
 
     // 4. Extract Receiver Name
