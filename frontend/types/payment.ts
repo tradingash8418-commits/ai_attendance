@@ -5,8 +5,9 @@ export type PaymentMethod = 'gpay' | 'phonepe' | 'paytm' | 'upi' | 'cash' | 'ban
 
 export interface PaymentLedgerEntry {
   id: string;
-  workerId: string;
-  workerName: string;
+  paidTo: string; // Name of person / worker / vendor to whom payment was made (e.g. MUBARAK)
+  workerId?: string; // Optional worker document link
+  workerName?: string; // Optional worker name link
   workerCode?: string;
   workerPhone?: string;
   siteId?: string;
@@ -20,7 +21,7 @@ export interface PaymentLedgerEntry {
   paymentTime?: string; // HH:MM AM/PM
   receiptPhotoUrl?: string;
   notes?: string;
-  recordedBy: string; // e.g. 'WhatsApp AI OCR (+919876543210)' or 'Admin Dashboard'
+  recordedBy: string; // e.g. 'ai_screenshot_ocr', 'whatsapp_bot', 'admin_dashboard'
   rawOcrText?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

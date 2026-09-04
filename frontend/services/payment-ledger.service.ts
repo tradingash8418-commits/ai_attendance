@@ -35,8 +35,9 @@ export class PaymentLedgerService {
    * Records a new payment / advance entry into the Khata Ledger.
    */
   public static async recordPayment(data: {
-    workerId: string;
-    workerName: string;
+    paidTo: string;
+    workerId?: string;
+    workerName?: string;
     workerCode?: string;
     workerPhone?: string;
     siteId?: string;
@@ -56,9 +57,12 @@ export class PaymentLedgerService {
     const colRef = collection(db, COLLECTION_NAME);
     const now = serverTimestamp();
 
+    const recipientName = (data.paidTo || data.workerName || 'Unknown').trim();
+
     const docRef = await addDoc(colRef, {
-      workerId: data.workerId,
-      workerName: data.workerName,
+      paidTo: recipientName,
+      workerId: data.workerId || '',
+      workerName: data.workerName || recipientName,
       workerCode: data.workerCode || '',
       workerPhone: data.workerPhone || '',
       siteId: data.siteId || '',
@@ -98,10 +102,14 @@ export class PaymentLedgerService {
     }
 
     const snapshot = await getDocs(q);
-    let entries = snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
-    })) as PaymentLedgerEntry[];
+    let entries = snapshot.docs.map((docSnap) => {
+      const d = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...d,
+        paidTo: d.paidTo || d.workerName || 'Recipient',
+      };
+    }) as PaymentLedgerEntry[];
 
     if (filters?.siteId) {
       entries = entries.filter((e) => e.siteId === filters.siteId);

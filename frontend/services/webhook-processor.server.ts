@@ -248,6 +248,7 @@ export class WebhookProcessorServer {
 
         // Record entry in Khata Ledger
         await PaymentLedgerService.recordPayment({
+          paidTo: paymentData.receiverName || resolvedWorkerName,
           workerId: resolvedWorkerId,
           workerName: resolvedWorkerName,
           workerCode: matchedWorker?.workerCode,

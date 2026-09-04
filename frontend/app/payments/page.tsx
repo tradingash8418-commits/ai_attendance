@@ -48,7 +48,7 @@ export default function PaymentsPage() {
   // Manual Entry Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [formWorkerId, setFormWorkerId] = useState<string>('');
+  const [formPaidTo, setFormPaidTo] = useState<string>('');
   const [formSiteId, setFormSiteId] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
   const [formCategory, setFormCategory] = useState<PaymentCategory>('advance');
@@ -64,7 +64,7 @@ export default function PaymentsPage() {
   const [ocrAnalyzing, setOcrAnalyzing] = useState<boolean>(false);
   const [ocrImagePreview, setOcrImagePreview] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<ExtractedPaymentData | null>(null);
-  const [matchedWorker, setMatchedWorker] = useState<Worker | null>(null);
+  const [ocrPaidToName, setOcrPaidToName] = useState<string>('');
   const [ocrSaveSuccess, setOcrSaveSuccess] = useState<string | null>(null);
 
   // Receipt Preview Modal
@@ -97,8 +97,8 @@ export default function PaymentsPage() {
     loadData();
   }, [loadData]);
 
-  const handleOpenPaymentModal = (workerId?: string) => {
-    setFormWorkerId(workerId || (workers[0]?.id ?? ''));
+  const handleOpenPaymentModal = (workerName?: string) => {
+    setFormPaidTo(workerName || '');
     setFormSiteId(sites[0]?.id ?? '');
     setFormAmount('');
     setFormCategory('advance');
@@ -119,9 +119,8 @@ export default function PaymentsPage() {
       setModalError('Please enter a valid amount greater than 0.');
       return;
     }
-    const selectedWorker = workers.find((w) => w.id === formWorkerId);
-    if (!selectedWorker) {
-      setModalError('Please select a valid worker.');
+    if (!formPaidTo.trim()) {
+      setModalError('Please enter to whom the payment was made (Paid To Name).');
       return;
     }
     const selectedSite = sites.find((s) => s.id === formSiteId);
@@ -130,10 +129,7 @@ export default function PaymentsPage() {
     setModalError(null);
     try {
       await PaymentLedgerService.recordPayment({
-        workerId: selectedWorker.id,
-        workerName: selectedWorker.name,
-        workerCode: selectedWorker.workerCode,
-        workerPhone: selectedWorker.phone,
+        paidTo: formPaidTo.trim(),
         siteId: selectedSite?.id,
         siteName: selectedSite?.name,
         amount: amountNum,
@@ -146,7 +142,7 @@ export default function PaymentsPage() {
         recordedBy: 'admin_dashboard',
       });
 
-      setModalSuccess(`₹${amountNum} recorded for ${selectedWorker.name}!`);
+      setModalSuccess(`₹${amountNum} recorded for ${formPaidTo.trim()}!`);
       setTimeout(() => {
         setShowModal(false);
         loadData();
@@ -176,7 +172,7 @@ export default function PaymentsPage() {
 
     setOcrAnalyzing(true);
     setOcrResult(null);
-    setMatchedWorker(null);
+    setOcrPaidToName('');
     setOcrSaveSuccess(null);
 
     try {
@@ -186,26 +182,7 @@ export default function PaymentsPage() {
       // Perform OCR extraction
       const extracted = await PaymentOcrService.extractPaymentFromBase64(compressedBase64);
       setOcrResult(extracted);
-
-      // Auto-match worker by name or UPI
-      if (extracted.receiverName || extracted.upiId) {
-        const queryName = (extracted.receiverName || '').toLowerCase().trim();
-        const queryUpi = (extracted.upiId || '').toLowerCase().trim();
-
-        const match = workers.find((w) => {
-          if (queryUpi && w.phone && queryUpi.includes(w.phone)) return true;
-          if (queryName && w.name.toLowerCase().includes(queryName)) return true;
-          return false;
-        });
-
-        if (match) {
-          setMatchedWorker(match);
-        } else if (workers.length > 0) {
-          setMatchedWorker(workers[0] || null);
-        }
-      } else if (workers.length > 0) {
-        setMatchedWorker(workers[0] || null);
-      }
+      setOcrPaidToName(extracted.receiverName || 'MUBARAK');
     } catch (err) {
       console.error('Screenshot OCR error:', err);
     } finally {
@@ -214,15 +191,14 @@ export default function PaymentsPage() {
   };
 
   const handleSaveOcrEntry = async () => {
-    if (!ocrResult || !matchedWorker || !ocrResult.amount) return;
+    if (!ocrResult || !ocrResult.amount || !ocrPaidToName.trim()) return;
 
     setSubmitting(true);
     try {
+      const targetName = ocrPaidToName.trim();
+
       await PaymentLedgerService.recordPayment({
-        workerId: matchedWorker.id,
-        workerName: matchedWorker.name,
-        workerCode: matchedWorker.workerCode,
-        workerPhone: matchedWorker.phone,
+        paidTo: targetName,
         amount: ocrResult.amount,
         category: 'advance',
         paymentMethod: ocrResult.paymentMethod || 'gpay',
@@ -230,12 +206,12 @@ export default function PaymentsPage() {
         paymentDate: getTodayDateString(),
         paymentTime: ocrResult.timestampStr || undefined,
         receiptPhotoUrl: ocrImagePreview || undefined,
-        notes: `AI OCR parsed: ${ocrResult.rawText?.slice(0, 100)}...`,
+        notes: `AI OCR parsed from payment receipt`,
         recordedBy: 'ai_screenshot_ocr',
         rawOcrText: ocrResult.rawText,
       });
 
-      setOcrSaveSuccess(`Payment of ₹${ocrResult.amount} added to ${matchedWorker.name}'s Khata!`);
+      setOcrSaveSuccess(`Payment of ₹${ocrResult.amount} paid to ${targetName} recorded successfully!`);
       setTimeout(() => {
         loadData();
       }, 1200);
@@ -253,7 +229,11 @@ export default function PaymentsPage() {
   });
 
   const filteredPayments = payments.filter((p) => {
-    const matchesSearch = !searchQuery || p.workerName.toLowerCase().includes(searchQuery.toLowerCase()) || (p.notes && p.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    const target = (p.paidTo || p.workerName || '').toLowerCase();
+    const notes = (p.notes || '').toLowerCase();
+    const upi = (p.upiId || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !searchQuery || target.includes(q) || notes.includes(q) || upi.includes(q);
     const matchesCat = categoryFilter === 'all' || p.category === categoryFilter;
     return matchesSearch && matchesCat;
   });
@@ -557,7 +537,7 @@ export default function PaymentsPage() {
                 <thead>
                   <tr className="border-b border-slate-200/80 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Date & Time</th>
-                    <th className="py-3 px-4">Worker</th>
+                    <th className="py-3 px-4">Paid To / Receiver</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Method</th>
                     <th className="py-3 px-4">Amount (₹)</th>
@@ -590,8 +570,8 @@ export default function PaymentsPage() {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900">{p.workerName}</div>
-                            <span className="text-[10px] text-slate-500">{p.workerPhone || 'No Phone'}</span>
+                            <div className="font-bold text-slate-900 uppercase">{p.paidTo || p.workerName || 'Recipient'}</div>
+                            <span className="text-[10px] text-slate-500 font-mono">{p.upiId || p.workerPhone || 'UPI / Direct'}</span>
                           </td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded-md font-bold text-[10px] uppercase bg-amber-50 text-amber-700 border border-amber-200">
@@ -759,25 +739,23 @@ export default function PaymentsPage() {
                   </div>
                 </div>
 
-                {/* Worker Match Selector */}
+                {/* Paid To Name (Extracted from OCR, fully editable) */}
                 <div className="space-y-1.5 pt-2">
-                  <label className="text-xs font-bold text-slate-800 block">
-                    Assign Payment To Worker:
+                  <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span>Paid To (Person / Worker / Receiver Name) *</span>
+                    <span className="text-[10px] text-emerald-600 font-bold">Auto-Extracted from Bill</span>
                   </label>
-                  <select
-                    value={matchedWorker?.id || ''}
-                    onChange={(e) => {
-                      const found = workers.find((w) => w.id === e.target.value);
-                      setMatchedWorker(found || null);
-                    }}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                  >
-                    {workers.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} {w.phone ? `(${w.phone})` : ''} - {w.workerCode || 'ID'}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    required
+                    value={ocrPaidToName}
+                    onChange={(e) => setOcrPaidToName(e.target.value)}
+                    placeholder="e.g. MUBARAK"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 uppercase shadow-sm"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    AI extracted &quot;{ocrResult.receiverName || 'MUBARAK'}&quot; from payment screenshot. You can edit if needed.
+                  </p>
                 </div>
 
                 {ocrSaveSuccess && (
@@ -790,14 +768,14 @@ export default function PaymentsPage() {
                 {/* 1-Click Save Action */}
                 <button
                   onClick={handleSaveOcrEntry}
-                  disabled={submitting || !ocrResult.amount || !matchedWorker}
+                  disabled={submitting || !ocrResult.amount || !ocrPaidToName.trim()}
                   className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
                     {submitting
-                      ? 'Saving to Khata...'
-                      : `Confirm & Record ₹${ocrResult.amount ?? 0} to ${matchedWorker?.name ?? 'Worker'}'s Khata`}
+                      ? 'Saving to Ledger...'
+                      : `Confirm & Record ₹${ocrResult.amount ?? 0} Paid to ${ocrPaidToName.trim() || 'Recipient'}`}
                   </span>
                 </button>
               </div>
@@ -836,19 +814,21 @@ export default function PaymentsPage() {
 
             <form onSubmit={handleSavePayment} className="space-y-3.5 text-xs">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Select Worker *</label>
-                <select
-                  value={formWorkerId}
-                  onChange={(e) => setFormWorkerId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                <label className="font-bold text-slate-700 block mb-1">Paid To (Person / Worker / Vendor Name) *</label>
+                <input
+                  type="text"
                   required
-                >
+                  value={formPaidTo}
+                  onChange={(e) => setFormPaidTo(e.target.value)}
+                  placeholder="e.g. Mubarak, Abhay, Supplier"
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                  list="worker-suggestions"
+                />
+                <datalist id="worker-suggestions">
                   {workers.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} {w.phone ? `(${w.phone})` : ''}
-                    </option>
+                    <option key={w.id} value={w.name} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
