@@ -488,6 +488,7 @@ Do NOT include currency symbols or commas in the amount number. Return ONLY the 
                 confidence: 0.99,
                 rawText: jsonText
               };
+            }
           } else {
             const errBody = await res.text();
             console.warn(`[PaymentOcrService] Gemini model ${modelName} returned status ${res.status}: ${errBody.slice(0, 120)}, trying next candidate model...`);
