@@ -42,7 +42,7 @@ interface VendorSummary {
 }
 
 export default function PaymentsPage() {
-  const [activeTab, setActiveTab] = useState<'khata' | 'vendors' | 'ledger' | 'ocr'>('khata');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'worker_payments' | 'vendors' | 'ledger' | 'ocr'>('attendance');
   const [loading, setLoading] = useState<boolean>(true);
   const [summaries, setSummaries] = useState<WorkerKhataSummary[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
@@ -403,14 +403,33 @@ export default function PaymentsPage() {
     }
   };
 
-  // 1. Worker Summaries (ONLY Enrolled Workers)
-  const filteredSummaries = summaries.filter((s) => {
+  // 1. Registered Karigars (Face Attendance & Hajri Wages Calculation)
+  const registeredSummaries = summaries.filter((s) => !s.workerId.startsWith('temp_'));
+  const filteredAttendanceSummaries = registeredSummaries.filter((s) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return s.workerName.toLowerCase().includes(q) || (s.phone && s.phone.includes(q)) || (s.workerCode && s.workerCode.toLowerCase().includes(q));
+    return (
+      s.workerName.toLowerCase().includes(q) ||
+      (s.phone && s.phone.includes(q)) ||
+      (s.workerCode && s.workerCode.toLowerCase().includes(q))
+    );
   });
 
-  // 2. Vendor Summaries (Grouped by Vendor/Supplier Name - STRICTLY non-labour categories)
+  // 2. Worker Payments Done (All advance and wage payments processed for workers via WhatsApp/OCR/Manual)
+  const workerPayments = payments.filter(
+    (p) => p.category === 'advance' || p.category === 'kharcha' || p.category === 'wage'
+  );
+  const totalWorkerPaymentsDone = workerPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  const filteredWorkerPayments = workerPayments.filter((p) => {
+    const q = searchQuery.toLowerCase();
+    const name = (p.workerName || p.paidTo || '').toLowerCase();
+    const notes = (p.notes || '').toLowerCase();
+    const upi = (p.upiId || '').toLowerCase();
+    return !searchQuery || name.includes(q) || notes.includes(q) || upi.includes(q);
+  });
+
+  // 3. Vendor Summaries (Grouped by Vendor/Supplier Name - STRICTLY non-labour categories)
   const vendorPayments = payments.filter(
     (p) =>
       p.category === 'vendor' ||
@@ -444,7 +463,7 @@ export default function PaymentsPage() {
     return v.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  // 3. All Payments (Chronological timeline)
+  // 4. All Payments (Chronological timeline)
   const filteredPayments = payments.filter((p) => {
     const target = (p.paidTo || p.workerName || '').toLowerCase();
     const notes = (p.notes || '').toLowerCase();
@@ -457,6 +476,37 @@ export default function PaymentsPage() {
 
   const totalCalculatedWages = totalHajri * dailyRate;
   const totalNetBalance = totalCalculatedWages - totalAdvances;
+
+  // Helper to render Main Payee Name in bold with Grey Subtext for AI extracted A/C beneficiary
+  const renderPayeeCell = (p: PaymentLedgerEntry, isVendor: boolean = false) => {
+    const mainName = isVendor ? (p.paidTo || 'Vendor / Expense') : (p.workerName || p.paidTo || 'Worker');
+    let beneficiary = '';
+
+    if (p.paidTo && p.workerName && p.paidTo.toLowerCase() !== p.workerName.toLowerCase()) {
+      beneficiary = p.paidTo;
+    } else if (p.notes && p.notes.includes('A/C:')) {
+      const acMatch = p.notes.match(/A\/C:\s*([^|()]+)/i);
+      if (acMatch) beneficiary = acMatch[1].trim();
+    }
+
+    return (
+      <div>
+        <div className="font-bold text-slate-900 uppercase flex items-center gap-1.5">
+          <span>{mainName}</span>
+        </div>
+        <div className="flex flex-col text-[10px] text-slate-400 mt-0.5">
+          {beneficiary && beneficiary.toLowerCase() !== mainName.toLowerCase() && (
+            <span className="text-slate-600 font-medium">
+              A/C: {beneficiary}
+            </span>
+          )}
+          <span className="font-mono text-slate-400">
+            {p.upiId || p.workerPhone || p.paymentMethod?.toUpperCase() || 'Direct'}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -512,11 +562,11 @@ export default function PaymentsPage() {
             <ArrowDownRight className="w-4 h-4 text-rose-600" />
           </div>
           <div className="text-3xl font-black text-rose-600 tracking-tight">
-            ₹{totalAdvances.toLocaleString('en-IN')}
+            ₹{totalWorkerPaymentsDone.toLocaleString('en-IN')}
           </div>
           <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span>Enrolled Karigar Advances</span>
-            <span className="font-bold text-slate-700">{summaries.length} Workers</span>
+            <span>Worker Advances Done</span>
+            <span className="font-bold text-slate-700">{workerPayments.length} Payments</span>
           </div>
         </div>
 
@@ -576,24 +626,36 @@ export default function PaymentsPage() {
 
       {/* 3. Navigation Tabs */}
       <div className="border-b border-slate-200">
-        <nav className="flex space-x-6" aria-label="Tabs">
+        <nav className="flex space-x-6 overflow-x-auto" aria-label="Tabs">
           <button
-            onClick={() => setActiveTab('khata')}
-            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
-              activeTab === 'khata'
+            onClick={() => setActiveTab('attendance')}
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
+              activeTab === 'attendance'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Worker Khata Sheet ({summaries.length})</span>
+            <span>Attendance &amp; Hajri ({filteredAttendanceSummaries.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('worker_payments')}
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
+              activeTab === 'worker_payments'
+                ? 'border-emerald-600 text-emerald-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Wallet className="w-4 h-4 text-emerald-600" />
+            <span>Payment Done ({workerPayments.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('vendors')}
-            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
               activeTab === 'vendors'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-amber-600 text-amber-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
@@ -603,32 +665,32 @@ export default function PaymentsPage() {
 
           <button
             onClick={() => setActiveTab('ledger')}
-            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
               activeTab === 'ledger'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             <Receipt className="w-4 h-4" />
-            <span>Full Payment History ({payments.length})</span>
+            <span>Full History ({payments.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('ocr')}
-            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
               activeTab === 'ocr'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
             <Sparkles className="w-4 h-4 text-emerald-600" />
-            <span>AI Payment Screenshot Scanner</span>
+            <span>AI Payment Scanner</span>
           </button>
         </nav>
       </div>
 
-      {/* 4. Tab Content: Worker Khata Sheet (ONLY Registered Workers) */}
-      {activeTab === 'khata' && (
+      {/* 4. Tab Content: Attendance & Hajri Wages (ONLY Enrolled Attendance Workers) */}
+      {activeTab === 'attendance' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
@@ -643,7 +705,7 @@ export default function PaymentsPage() {
             </div>
 
             <div className="text-xs text-slate-500">
-              Worker & Labour Advance Khata ({filteredSummaries.length} entries)
+              Registered Workers Hajri Calculation ({filteredAttendanceSummaries.length} workers)
             </div>
           </div>
 
@@ -656,7 +718,7 @@ export default function PaymentsPage() {
                     <th className="py-3 px-4">Phone / Code</th>
                     <th className="py-3 px-4 text-center">Hajri Earned</th>
                     <th className="py-3 px-4 text-right">Hajri Wages (₹)</th>
-                    <th className="py-3 px-4 text-right">Advances Paid (₹)</th>
+                    <th className="py-3 px-4 text-right">Advances Deducted (₹)</th>
                     <th className="py-3 px-4 text-right">Net Payable Balance (₹)</th>
                     <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
@@ -665,17 +727,17 @@ export default function PaymentsPage() {
                   {loading ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-slate-500">
-                        Loading Khata balances...
+                        Loading attendance &amp; wage balances...
                       </td>
                     </tr>
-                  ) : filteredSummaries.length === 0 ? (
+                  ) : filteredAttendanceSummaries.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-slate-500">
                         No registered workers found. Enroll workers from the Workers page.
                       </td>
                     </tr>
                   ) : (
-                    filteredSummaries.map((summary) => {
+                    filteredAttendanceSummaries.map((summary) => {
                       const isPositive = summary.netPayableBalance >= 0;
 
                       return (
@@ -714,40 +776,141 @@ export default function PaymentsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={() => handleOpenPaymentModal(summary.workerId, false)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Give Advance</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Tab Content: Worker Payments Done (All WhatsApp & Manual Worker Advances) */}
+      {activeTab === 'worker_payments' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search worker by name, remark, UPI..."
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={() => handleOpenPaymentModal(undefined, false)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Record Worker Advance</span>
+            </button>
+          </div>
+
+          <div className="razorpay-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200/80 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Worker / Payee Name</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4">Method</th>
+                    <th className="py-3 px-4 text-right">Amount (₹)</th>
+                    <th className="py-3 px-4 text-center">Receipt</th>
+                    <th className="py-3 px-4">Recorded By</th>
+                    <th className="py-3 px-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                        Loading worker payments...
+                      </td>
+                    </tr>
+                  ) : filteredWorkerPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                        No worker payments or advances recorded yet. Send payment screenshot on WhatsApp with caption 'w' or 'workerName, w'.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWorkerPayments.map((p) => {
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-slate-700">
+                            <div>{p.paymentDate}</div>
+                            {p.paymentTime && (
+                              <span className="text-[10px] text-slate-400 font-normal">{p.paymentTime}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {renderPayeeCell(p, false)}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] uppercase bg-blue-50 text-blue-800 border border-blue-200">
+                              {p.category === 'advance' ? 'Advance / Kharcha' : p.category.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-700 capitalize">
+                            {p.paymentMethod}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-black text-rose-600 text-base">
+                            ₹{p.amount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            {p.receiptPhotoUrl ? (
+                              <button
+                                onClick={() => setPreviewImage(p.receiptPhotoUrl || null)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                                title="View Receipt"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Receipt</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-[11px] text-slate-500">
+                            {p.recordedBy?.includes('WhatsApp') ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
+                                <Sparkles className="w-3 h-3" /> WhatsApp OCR
+                              </span>
+                            ) : (
+                              'Admin'
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => handleOpenPaymentModal(summary.workerId, false)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                                onClick={() => handleOpenMigration(p, 'vendor')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 transition-colors shadow-2xs"
+                                title="Move this entry to Vendor / Material Ledger"
                               >
-                                <Plus className="w-3 h-3" />
-                                <span>Give Advance</span>
+                                <ArrowLeftRight className="w-3 h-3 text-amber-600" />
+                                <span>Move to Vendor</span>
                               </button>
-                              {(() => {
-                                const latestPayment =
-                                  summary.recentPayments?.[0] ||
-                                  payments.find(
-                                    (p) =>
-                                      (p.category === 'advance' || p.category === 'kharcha' || p.category === 'wage') &&
-                                      ((p.workerId && p.workerId === summary.workerId) ||
-                                        (p.workerName &&
-                                          p.workerName.toLowerCase() ===
-                                            summary.workerName.replace(' (Daily/Temp)', '').toLowerCase()) ||
-                                        (p.paidTo &&
-                                          p.paidTo.toLowerCase() ===
-                                            summary.workerName.replace(' (Daily/Temp)', '').toLowerCase()))
-                                  );
-
-                                return latestPayment ? (
-                                  <button
-                                    onClick={() => handleOpenMigration(latestPayment, 'vendor')}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-[11px] border border-amber-200 transition-colors shadow-2xs"
-                                    title="Move this advance entry to Vendor / Material Ledger"
-                                  >
-                                    <ArrowLeftRight className="w-3 h-3 text-amber-600" />
-                                    <span>Move to Vendor</span>
-                                  </button>
-                                ) : null;
-                              })()}
+                              <button
+                                onClick={() => handleDeletePayment(p.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
+                                title="Delete Record"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -947,8 +1110,7 @@ export default function PaymentsPage() {
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900 uppercase">{p.paidTo || p.workerName || 'Recipient'}</div>
-                            <span className="text-[10px] text-slate-500 font-mono">{p.upiId || p.workerPhone || 'UPI / Direct'}</span>
+                            {renderPayeeCell(p, p.category !== 'advance')}
                           </td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase border ${

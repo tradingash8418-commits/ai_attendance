@@ -35,12 +35,11 @@ export class WebhookProcessorServer {
       const normalizedSender = normalizeWhatsAppNumber(rawSenderNumber);
       const messageType = messageObj.type || 'unknown';
       const mediaId = messageObj.document?.id || messageObj.image?.id;
+      const documentCaption = messageObj.document?.caption || '';
       const textBody = (
         messageObj.text?.body ||
         messageObj.image?.caption ||
-        messageObj.document?.caption ||
-        messageObj.document?.filename ||
-        ''
+        documentCaption
       ).trim();
 
       // Extract authoritative WhatsApp message timestamp (in milliseconds)
@@ -148,6 +147,98 @@ export class WebhookProcessorServer {
         }
       }
 
+      // =====================================================================
+      // PATH 1B: FOLLOW-UP CAPTION / REMARK FOR RECENT PDF / IMAGE RECEIPT
+      // e.g. User sent PDF receipt first, and immediately typed 'abc, w' or 'abc, v' or 'w' as a text message
+      // =====================================================================
+      if (messageType === 'text') {
+        const captionInfo = parsePaymentCaption(textBody);
+        if (captionInfo.explicitCategory || captionInfo.workerOrPayeeRemark) {
+          const todayPayments = await PaymentLedgerService.getPayments({ date: today });
+          // Find latest payment from WhatsApp today
+          const recentPayment = todayPayments.find((p) => {
+            return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
+          });
+
+          if (recentPayment) {
+            const allWorkers = await WorkersService.getWorkers();
+            let matchedWorker = allWorkers.find((w) => {
+              if (captionInfo.workerOrPayeeRemark) {
+                const rLower = captionInfo.workerOrPayeeRemark.toLowerCase();
+                const nLower = w.name.toLowerCase();
+                if (nLower === rLower || nLower.includes(rLower) || rLower.includes(nLower)) return true;
+              }
+              return false;
+            });
+
+            let paymentCategory: 'vendor' | 'advance' =
+              captionInfo.explicitCategory ||
+              (matchedWorker ? 'advance' : (recentPayment.category === 'advance' ? 'advance' : 'vendor'));
+            const isWorkerPayment = paymentCategory === 'advance';
+            const ocrBeneficiary =
+              recentPayment.paidTo && !recentPayment.paidTo.startsWith('Worker')
+                ? recentPayment.paidTo
+                : '';
+
+            let finalPaidTo = '';
+            let resolvedWorkerId = '';
+            let resolvedWorkerName = '';
+
+            if (isWorkerPayment) {
+              resolvedWorkerName = matchedWorker
+                ? getWorkerDisplayName(matchedWorker)
+                : (captionInfo.workerOrPayeeRemark || recentPayment.workerName || 'Worker / Karigar');
+              resolvedWorkerId = matchedWorker ? matchedWorker.id : '';
+              finalPaidTo = ocrBeneficiary || resolvedWorkerName;
+            } else {
+              finalPaidTo =
+                captionInfo.workerOrPayeeRemark || ocrBeneficiary || recentPayment.paidTo || 'Vendor / Payee';
+              resolvedWorkerId = '';
+              resolvedWorkerName = '';
+            }
+
+            let structuredNotes = captionInfo.workerOrPayeeRemark
+              ? `Remark: ${captionInfo.workerOrPayeeRemark}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`
+              : (ocrBeneficiary ? `A/C: ${ocrBeneficiary}` : '');
+
+            await PaymentLedgerService.updatePaymentCategory(recentPayment.id, {
+              category: paymentCategory,
+              workerId: resolvedWorkerId,
+              workerName: resolvedWorkerName,
+              workerCode: (isWorkerPayment && matchedWorker) ? matchedWorker?.workerCode : '',
+              paidTo: finalPaidTo,
+            });
+
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+
+            const typeLabel = isWorkerPayment ? 'Worker Advance / Kharcha' : 'Vendor / Material Expense';
+            const displayName = isWorkerPayment ? resolvedWorkerName : finalPaidTo;
+
+            let confirmationMsg =
+              `🔄 *Recent Payment Updated in Ledger!*\n\n` +
+              `👤 *${isWorkerPayment ? 'Worker / Karigar' : 'Vendor / Payee'}:* ${displayName}\n`;
+
+            if (ocrBeneficiary && ocrBeneficiary.toLowerCase() !== displayName.toLowerCase()) {
+              confirmationMsg += `🏦 *A/C Beneficiary:* ${ocrBeneficiary}\n`;
+            }
+
+            confirmationMsg +=
+              `💵 *Amount:* ₹${recentPayment.amount.toFixed(2)}\n` +
+              `📒 *Khata Category:* ${typeLabel}\n` +
+              `📅 *Date:* ${recentPayment.paymentDate}\n\n` +
+              `Ledger & Khata have been updated with your remark! 📊`;
+
+            await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
+
+            return {
+              status: 'completed',
+              reason: `Updated recent payment ${recentPayment.id} with remark: ${textBody}`,
+              messageId: rawMessageId,
+            };
+          }
+        }
+      }
+
       // Ignore any message that is not an image or a document (PDF)
       if (messageType !== 'image' && messageType !== 'document') {
         console.log(`[WebhookProcessor] Non-image/document message type received: ${messageType}`);
@@ -208,52 +299,25 @@ export class WebhookProcessorServer {
         `Method=${paymentData.paymentMethod}, UPI=${paymentData.upiId}`
       );
 
-      // 1. Check Caption Priority (User defined intent via WhatsApp caption)
-      // Supports full words: 'vendor', 'material', 'supplier', 'thekedar' vs 'worker', 'labour', 'advance', 'karigar', 'kharcha', 'wage'
-      // Supports single letters / short codes: 'v', 'm' (vendor) vs 'w', 'l', 'a', 'k' (worker advance)
-      const cleanCaption = textBody.toLowerCase().trim();
-      let explicitCategory: 'vendor' | 'advance' | null = null;
+      // 1. Smart Caption Parsing: Extracts category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
+      const { explicitCategory, workerOrPayeeRemark } = parsePaymentCaption(textBody || '');
 
-      if (
-        cleanCaption === 'v' ||
-        cleanCaption === 'vendor' ||
-        cleanCaption === 'm' ||
-        cleanCaption === 'material' ||
-        cleanCaption.startsWith('vendor') ||
-        cleanCaption.startsWith('material') ||
-        cleanCaption.includes('supplier') ||
-        cleanCaption.includes('thekedar') ||
-        cleanCaption.includes('dukaan') ||
-        cleanCaption.includes('shop')
-      ) {
-        explicitCategory = 'vendor';
-      } else if (
-        cleanCaption === 'w' ||
-        cleanCaption === 'worker' ||
-        cleanCaption === 'a' ||
-        cleanCaption === 'advance' ||
-        cleanCaption === 'l' ||
-        cleanCaption === 'labour' ||
-        cleanCaption === 'k' ||
-        cleanCaption === 'karigar' ||
-        cleanCaption.startsWith('worker') ||
-        cleanCaption.startsWith('advance') ||
-        cleanCaption.startsWith('labour') ||
-        cleanCaption.startsWith('karigar') ||
-        cleanCaption.includes('kharcha') ||
-        cleanCaption.includes('wage') ||
-        cleanCaption.includes('majdoor')
-      ) {
-        explicitCategory = 'advance';
-      }
-
-      // Check if recipient matches an EXISTING registered worker in Firestore
+      // Check if recipient matches an EXISTING registered worker in Firestore (by OCR name, phone, or caption remark)
       const allWorkers = await WorkersService.getWorkers();
-      const matchedWorker = allWorkers.find((w) => {
-        const nameLower = w.name.toLowerCase();
+      let matchedWorker = allWorkers.find((w) => {
+        if (workerOrPayeeRemark) {
+          const remarkLower = workerOrPayeeRemark.toLowerCase();
+          const nameLower = w.name.toLowerCase();
+          if (nameLower === remarkLower || nameLower.includes(remarkLower) || remarkLower.includes(nameLower)) {
+            return true;
+          }
+        }
         const targetName = (paymentData.receiverName || '').toLowerCase();
-        if (targetName && (nameLower === targetName || nameLower.includes(targetName) || targetName.includes(nameLower))) {
-          return true;
+        if (targetName) {
+          const nameLower = w.name.toLowerCase();
+          if (nameLower === targetName || nameLower.includes(targetName) || targetName.includes(nameLower)) {
+            return true;
+          }
         }
         if (paymentData.upiId && w.phone) {
           const cleanPhone = w.phone.replace(/\D/g, '');
@@ -278,9 +342,34 @@ export class WebhookProcessorServer {
 
       const isWorkerPayment = paymentCategory === 'advance';
       const finalAmount = paymentData.amount || 0;
-      const finalPaidTo = paymentData.receiverName || (matchedWorker ? getWorkerDisplayName(matchedWorker) : (isWorkerPayment ? 'Worker / Karigar' : 'Vendor / Payee'));
-      const resolvedWorkerId = (isWorkerPayment && matchedWorker) ? matchedWorker.id : '';
-      const resolvedWorkerName = (isWorkerPayment && matchedWorker) ? getWorkerDisplayName(matchedWorker) : (isWorkerPayment ? finalPaidTo : '');
+      const ocrBeneficiary = paymentData.receiverName || '';
+
+      let finalPaidTo = '';
+      let resolvedWorkerId = '';
+      let resolvedWorkerName = '';
+
+      if (isWorkerPayment) {
+        resolvedWorkerName = matchedWorker
+          ? getWorkerDisplayName(matchedWorker)
+          : (workerOrPayeeRemark || ocrBeneficiary || 'Worker / Karigar');
+        resolvedWorkerId = matchedWorker ? matchedWorker.id : '';
+        finalPaidTo = ocrBeneficiary || resolvedWorkerName;
+      } else {
+        finalPaidTo = workerOrPayeeRemark || ocrBeneficiary || 'Vendor / Payee';
+        resolvedWorkerId = '';
+        resolvedWorkerName = '';
+      }
+
+      // Build structured notes for Remarks & Beneficiary account tracking
+      let structuredNotes: string | undefined = undefined;
+      if (workerOrPayeeRemark) {
+        structuredNotes = `Remark: ${workerOrPayeeRemark}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`;
+      } else if (ocrBeneficiary) {
+        structuredNotes = `A/C: ${ocrBeneficiary}`;
+      }
+      if (textBody && (!structuredNotes || !structuredNotes.includes(textBody))) {
+        structuredNotes = structuredNotes ? `${structuredNotes} (Caption: ${textBody})` : `Caption: ${textBody}`;
+      }
 
       // Record entry in Khata Ledger (DO NOT auto-create workers for vendors!)
       await PaymentLedgerService.recordPayment({
@@ -296,7 +385,7 @@ export class WebhookProcessorServer {
         paymentDate: today,
         paymentTime: paymentData.timestampStr || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         receiptPhotoUrl: photoUrl,
-        notes: textBody ? `Caption: ${textBody}` : undefined,
+        notes: structuredNotes,
         recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
         rawOcrText: paymentData.rawText,
       });
@@ -314,37 +403,115 @@ export class WebhookProcessorServer {
       }
 
       const typeLabel = isWorkerPayment ? 'Worker Advance / Kharcha' : 'Vendor / Material Expense';
+      const displayName = isWorkerPayment ? resolvedWorkerName : finalPaidTo;
 
       if (finalAmount > 0) {
-        await WhatsAppService.sendMessage(
-          normalizedSender,
+        let confirmationMsg =
           `✅ *Payment Recorded in Ledger!*\n\n` +
-          `👤 *Paid To:* ${finalPaidTo}\n` +
+          `👤 *${isWorkerPayment ? 'Worker / Karigar' : 'Vendor / Payee'}:* ${displayName}\n`;
+        
+        if (ocrBeneficiary && ocrBeneficiary.toLowerCase() !== displayName.toLowerCase()) {
+          confirmationMsg += `🏦 *A/C Beneficiary:* ${ocrBeneficiary}\n`;
+        }
+
+        confirmationMsg +=
           `💵 *Amount:* ₹${finalAmount.toFixed(2)}\n` +
           `📒 *Khata Category:* ${typeLabel}\n` +
           `💳 *Method / App:* ${paymentData.paymentMethod.toUpperCase()}\n` +
           `📱 *UPI / Ref:* ${paymentData.upiId || 'Direct UPI'}\n` +
           `📅 *Date:* ${dateDisplay}\n\n` +
-          `Ledger & Khata balance have been successfully updated! 📊`
-        );
+          `Ledger & Khata balance have been successfully updated! 📊`;
+
+        await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
       } else {
         await WhatsAppService.sendMessage(
           normalizedSender,
           `📸 *Payment Screenshot Saved in Ledger!*\n\n` +
-          `👤 *Paid To:* ${finalPaidTo}\n` +
+          `👤 *Paid To:* ${displayName}\n` +
           `📅 *Date:* ${today}\n\n` +
           `Aapka receipt save ho gaya hai aur Khata / Payments page par live dikh raha hai! 📊`
         );
       }
 
-      return {
-        status: 'completed',
-        reason: `Payment receipt recorded for ${finalPaidTo}: ₹${finalAmount}`,
-        messageId: rawMessageId,
-      };
-    } catch (err: any) {
-      console.error('[WebhookProcessor] Critical processing error:', err);
-      return { status: 'failed', reason: err?.message || 'Internal processing error' };
+        return {
+          status: 'completed',
+          reason: `Payment receipt recorded for ${finalPaidTo}: ₹${finalAmount}`,
+          messageId: rawMessageId,
+        };
+      } catch (err: any) {
+        console.error('[WebhookProcessor] Critical processing error:', err);
+        return { status: 'failed', reason: err?.message || 'Internal processing error' };
+      }
     }
   }
+
+/**
+ * Smart Caption Parser: Extracts user category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
+ */
+export function parsePaymentCaption(rawText: string): {
+  explicitCategory: 'vendor' | 'advance' | null;
+  workerOrPayeeRemark: string | null;
+} {
+  if (!rawText || !rawText.trim()) {
+    return { explicitCategory: null, workerOrPayeeRemark: null };
+  }
+
+  const text = rawText.trim();
+  const lower = text.toLowerCase();
+
+  const vendorKeywords = ['v', 'vendor', 'm', 'material', 'supplier', 'thekedar', 'dukaan', 'shop', 'expense'];
+  const workerKeywords = ['w', 'worker', 'a', 'advance', 'l', 'labour', 'k', 'karigar', 'kharcha', 'wage', 'majdoor'];
+
+  // 1. Standalone single keyword
+  if (vendorKeywords.includes(lower)) {
+    return { explicitCategory: 'vendor', workerOrPayeeRemark: null };
+  }
+  if (workerKeywords.includes(lower)) {
+    return { explicitCategory: 'advance', workerOrPayeeRemark: null };
+  }
+
+  // 2. Delimiter separated: e.g. "abc, w", "abc - v", "amit: w", "abc / worker"
+  const delimiterMatch = text.match(/^(.+?)\s*[,:\-\/|]\s*([a-zA-Z]+)$/);
+  if (delimiterMatch) {
+    const remarkPart = delimiterMatch[1].trim();
+    const tagPart = delimiterMatch[2].toLowerCase().trim();
+
+    if (vendorKeywords.includes(tagPart)) {
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    }
+    if (workerKeywords.includes(tagPart)) {
+      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    }
+  }
+
+  // 3. Trailing space separated: e.g. "abc w", "abc v", "amit advance"
+  const trailingMatch = text.match(/^(.+?)\s+([a-zA-Z]+)$/);
+  if (trailingMatch) {
+    const remarkPart = trailingMatch[1].trim();
+    const tagPart = trailingMatch[2].toLowerCase().trim();
+
+    if (vendorKeywords.includes(tagPart)) {
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    }
+    if (workerKeywords.includes(tagPart)) {
+      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    }
+  }
+
+  // 4. Leading tag separated: e.g. "w abc", "v abc", "vendor sri cements"
+  const leadingMatch = text.match(/^([a-zA-Z]+)\s+[,:\-\/|]?\s*(.+)$/);
+  if (leadingMatch) {
+    const tagPart = leadingMatch[1].toLowerCase().trim();
+    const remarkPart = leadingMatch[2].trim();
+
+    if (vendorKeywords.includes(tagPart)) {
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    }
+    if (workerKeywords.includes(tagPart)) {
+      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    }
+  }
+
+  // 5. Custom name without explicit tag
+  return { explicitCategory: null, workerOrPayeeRemark: text };
 }
