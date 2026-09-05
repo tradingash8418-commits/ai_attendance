@@ -124,19 +124,36 @@ export class PaymentLedgerService {
 
   /**
    * Calculates real-time Khata balance (Hajri Wages vs Total Advances Paid) across all workers.
+   * Supports optional date range filtering for Month-End / Week-End consolidated charts.
    */
   public static async getAllWorkersKhataSummary(
-    defaultDailyRate = 500
+    defaultDailyRate = 500,
+    dateRange?: { startDate?: string; endDate?: string }
   ): Promise<{
     summaries: WorkerKhataSummary[];
     totalAdvancesPaidAll: number;
     totalHajriAll: number;
   }> {
-    const [workers, attendanceRecords, payments] = await Promise.all([
+    const [workers, allAttendanceRecords, allPayments] = await Promise.all([
       WorkersService.getWorkers(),
       AttendanceService.getAttendanceRecords(),
       this.getPayments(),
     ]);
+
+    // Apply date range filters if specified
+    const attendanceRecords = allAttendanceRecords.filter((r) => {
+      if (!dateRange?.startDate && !dateRange?.endDate) return true;
+      if (dateRange.startDate && r.date < dateRange.startDate) return false;
+      if (dateRange.endDate && r.date > dateRange.endDate) return false;
+      return true;
+    });
+
+    const payments = allPayments.filter((p) => {
+      if (!dateRange?.startDate && !dateRange?.endDate) return true;
+      if (dateRange.startDate && p.paymentDate < dateRange.startDate) return false;
+      if (dateRange.endDate && p.paymentDate > dateRange.endDate) return false;
+      return true;
+    });
 
     let totalAdvancesPaidAll = 0;
     let totalHajriAll = 0;

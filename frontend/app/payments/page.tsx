@@ -21,6 +21,9 @@ import {
   Truck,
   FileText,
   ArrowLeftRight,
+  Download,
+  Printer,
+  CalendarRange,
 } from 'lucide-react';
 import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
@@ -42,13 +45,18 @@ interface VendorSummary {
 }
 
 export default function PaymentsPage() {
-  const [activeTab, setActiveTab] = useState<'attendance' | 'worker_payments' | 'vendors' | 'ledger' | 'ocr'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'worker_payments' | 'consolidated' | 'vendors' | 'ledger' | 'ocr'>('attendance');
   const [loading, setLoading] = useState<boolean>(true);
   const [summaries, setSummaries] = useState<WorkerKhataSummary[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [dailyRate, setDailyRate] = useState<number>(500);
+
+  // Period / Date Range Filter for Month-End & Week-End Consolidated Sheet
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | 'last_month' | 'this_week' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
 
   // Totals
   const [totalAdvances, setTotalAdvances] = useState<number>(0);
@@ -96,11 +104,70 @@ export default function PaymentsPage() {
   const [migrationVendorCategory, setMigrationVendorCategory] = useState<PaymentCategory>('vendor');
   const [migrationSubmitting, setMigrationSubmitting] = useState<boolean>(false);
 
+  const getDateRangeForPeriod = (
+    period: 'all' | 'this_month' | 'last_month' | 'this_week' | 'custom',
+    customStart?: string,
+    customEnd?: string
+  ) => {
+    const today = new Date();
+    if (period === 'this_month') {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const formatLocal = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      return {
+        startDate: formatLocal(start),
+        endDate: formatLocal(end),
+      };
+    }
+    if (period === 'last_month') {
+      const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const end = new Date(today.getFullYear(), today.getMonth(), 0);
+      const formatLocal = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      return {
+        startDate: formatLocal(start),
+        endDate: formatLocal(end),
+      };
+    }
+    if (period === 'this_week') {
+      const end = new Date(today);
+      const start = new Date(today);
+      start.setDate(today.getDate() - 6);
+      const formatLocal = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
+      return {
+        startDate: formatLocal(start),
+        endDate: formatLocal(end),
+      };
+    }
+    if (period === 'custom') {
+      return {
+        startDate: customStart || undefined,
+        endDate: customEnd || undefined,
+      };
+    }
+    return undefined;
+  };
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const dateRange = getDateRangeForPeriod(periodFilter, customStartDate, customEndDate);
       const [khataRes, paymentList, workerList, siteList] = await Promise.all([
-        PaymentLedgerService.getAllWorkersKhataSummary(dailyRate),
+        PaymentLedgerService.getAllWorkersKhataSummary(dailyRate, dateRange),
         PaymentLedgerService.getPayments(),
         WorkersService.getWorkers(),
         SitesService.getSites(),
@@ -117,7 +184,64 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dailyRate]);
+  }, [dailyRate, periodFilter, customStartDate, customEndDate]);
+
+  const handleExportCsv = () => {
+    const headers = [
+      'Worker Name',
+      'Worker Type',
+      'Worker Code',
+      'Phone',
+      'Hajri Days',
+      'Daily Rate (INR)',
+      'Gross Wages (INR)',
+      'Advances Paid (INR)',
+      'Wages Paid (INR)',
+      'Net Payable Balance (INR)',
+      'Settlement Status',
+    ];
+    const rows = summaries.map((s) => {
+      const isTemp = s.workerId.startsWith('temp_');
+      const status =
+        s.netPayableBalance > 0
+          ? 'PAYMENT DUE'
+          : s.netPayableBalance === 0
+          ? 'SETTLED'
+          : 'EXCESS ADVANCE';
+      return [
+        `"${s.workerName.replace(/"/g, '""')}"`,
+        `"${isTemp ? 'Daily / Temp Worker' : 'Enrolled Karigar'}"`,
+        `"${s.workerCode || ''}"`,
+        `"${s.phone || ''}"`,
+        s.totalHajriEarned,
+        s.dailyRate,
+        s.totalEarnedAmount,
+        s.totalAdvancesPaid,
+        s.totalWagesPaid,
+        s.netPayableBalance,
+        `"${status}"`,
+      ].join(',');
+    });
+
+    const periodLabel =
+      periodFilter === 'this_month'
+        ? 'This_Month'
+        : periodFilter === 'last_month'
+        ? 'Last_Month'
+        : periodFilter === 'this_week'
+        ? 'This_Week'
+        : 'All_Time';
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Contractor_Hajri_Salary_Sheet_${periodLabel}_${getTodayDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
     loadData();
@@ -652,6 +776,18 @@ export default function PaymentsPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('consolidated')}
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
+              activeTab === 'consolidated'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <CalendarRange className="w-4 h-4 text-indigo-600" />
+            <span>Consolidated Hajri &amp; Payout ({summaries.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('vendors')}
             className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all shrink-0 ${
               activeTab === 'vendors'
@@ -924,7 +1060,257 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* 5. Tab Content: Vendor & Material Ledger */}
+      {/* 5. Tab Content: Consolidated Hajri Chart & Month/Week-End Payroll Settlement */}
+      {activeTab === 'consolidated' && (
+        <div className="space-y-4">
+          {/* Top Period Selector & Export Actions */}
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 mr-1">
+                <CalendarRange className="w-4 h-4 text-indigo-600" />
+                <span>Period:</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setPeriodFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  periodFilter === 'all'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                All Time
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriodFilter('this_month')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  periodFilter === 'this_month'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                This Month
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriodFilter('last_month')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  periodFilter === 'last_month'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Last Month
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriodFilter('this_week')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  periodFilter === 'this_week'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                This Week (7 Days)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPeriodFilter('custom')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  periodFilter === 'custom'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Custom Range
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+              <button
+                onClick={handleExportCsv}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-all"
+                title="Download Excel / CSV sheet for accountants and thekedar payroll"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Download Excel (CSV)</span>
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs transition-all"
+                title="Print physical payroll signature sheet"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+                <span>Print Sheet</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Date Pickers if selected */}
+          {periodFilter === 'custom' && (
+            <div className="flex items-center gap-3 p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs font-semibold">
+              <span className="text-indigo-900 font-bold">Select Date Range:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-slate-800"
+              />
+              <span className="text-indigo-400 font-bold">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-slate-800"
+              />
+            </div>
+          )}
+
+          {/* Search bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter by worker name, code, phone..."
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="text-xs text-slate-500 font-medium">
+              Showing {summaries.length} total workers (Registered + Daily/Temp)
+            </div>
+          </div>
+
+          {/* Consolidated Table */}
+          <div className="razorpay-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200/80 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Worker / Karigar</th>
+                    <th className="py-3 px-4">Worker Type</th>
+                    <th className="py-3 px-4 text-center">Hajri Days</th>
+                    <th className="py-3 px-4 text-right">Rate (₹/day)</th>
+                    <th className="py-3 px-4 text-right">Gross Wages (₹)</th>
+                    <th className="py-3 px-4 text-right">Advances Paid (₹)</th>
+                    <th className="py-3 px-4 text-right">Net Settlement (₹)</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        Calculating consolidated payroll &amp; Hajri chart...
+                      </td>
+                    </tr>
+                  ) : summaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                        No worker records found for the selected period.
+                      </td>
+                    </tr>
+                  ) : (
+                    summaries.map((s) => {
+                      const isTemp = s.workerId.startsWith('temp_');
+                      const isPositive = s.netPayableBalance > 0;
+                      const isSettled = s.netPayableBalance === 0;
+
+                      return (
+                        <tr key={s.workerId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900">{s.workerName}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {s.workerCode || s.phone || '—'}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase border ${
+                                isTemp
+                                  ? 'bg-slate-50 text-slate-600 border-slate-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}
+                            >
+                              {isTemp ? 'Daily / Temp' : 'Enrolled Karigar'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-[11px] border border-slate-200">
+                              {s.totalHajriEarned} Hajri
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-semibold text-slate-700">
+                            ₹{s.dailyRate}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-bold text-slate-900">
+                            ₹{s.totalEarnedAmount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-bold text-rose-600">
+                            ₹{s.totalAdvancesPaid.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-black text-sm">
+                            <span
+                              className={
+                                isPositive
+                                  ? 'text-emerald-600'
+                                  : isSettled
+                                  ? 'text-slate-500'
+                                  : 'text-amber-600'
+                              }
+                            >
+                              ₹{s.netPayableBalance.toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase border ${
+                                isPositive
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : isSettled
+                                  ? 'bg-slate-50 text-slate-600 border-slate-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              {isPositive
+                                ? 'Payment Due'
+                                : isSettled
+                                ? 'Settled'
+                                : 'Advance Excess'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <button
+                              onClick={() => handleOpenPaymentModal(s.workerId, false)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Give Advance</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Tab Content: Vendor & Material Ledger */}
       {activeTab === 'vendors' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
