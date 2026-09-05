@@ -1366,10 +1366,13 @@ export default function PaymentsPage() {
                       return (
                         <tr key={v.vendorName} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900 uppercase flex items-center gap-2">
-                              <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
-                              <span>{v.vendorName}</span>
-                            </div>
+                            <Link
+                              href={`/vendors/${encodeURIComponent(v.vendorName.toLowerCase().replace(/\s+/g, '-'))}`}
+                              className="font-bold text-slate-900 hover:text-amber-700 uppercase flex items-center gap-2 group transition-colors"
+                            >
+                              <Building2 className="w-4 h-4 text-amber-600 shrink-0 group-hover:scale-110 transition-transform" />
+                              <span className="group-hover:underline">{v.vendorName}</span>
+                            </Link>
                             <span className="text-[10px] text-slate-400 block ml-6">
                               {latestPayment?.upiId || latestPayment?.paymentMethod?.toUpperCase() || 'Direct Payment'}
                             </span>
@@ -1392,6 +1395,14 @@ export default function PaymentsPage() {
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
+                              <Link
+                                href={`/vendors/${encodeURIComponent(v.vendorName.toLowerCase().replace(/\s+/g, '-'))}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 transition-colors shadow-2xs"
+                                title="View Vendor Profile & Dossier"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Profile</span>
+                              </Link>
                               {latestPayment?.receiptPhotoUrl && (
                                 <button
                                   onClick={() => setPreviewImage(latestPayment.receiptPhotoUrl || null)}

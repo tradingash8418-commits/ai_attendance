@@ -15,6 +15,7 @@ import {
   LogOut,
   ChevronDown,
   IndianRupee,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthService } from '@/services/auth.service';
@@ -36,6 +37,7 @@ export const Header: React.FC = () => {
     { href: '/payments', label: 'Khata / Payments', icon: IndianRupee },
     { href: '/sites', label: 'Sites', icon: Building2 },
     { href: '/workers', label: 'Workers', icon: Users },
+    { href: '/vendors', label: 'Vendors', icon: Store },
     { href: '/supervisors', label: 'Supervisors', icon: UserCheck },
     { href: '/test-whatsapp', label: 'AI Diagnostics', icon: Activity },
   ];
