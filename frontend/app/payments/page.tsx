@@ -237,7 +237,7 @@ export default function PaymentsPage() {
         : 'worker');
 
     setMigrationTargetType(target);
-    const currentName = payment.paidTo || payment.workerName || '';
+    const currentName = (payment.paidTo || payment.workerName || '').replace(' (Daily/Temp)', '').trim();
     setMigrationCustomName(currentName);
     setMigrationVendorCategory('vendor');
 
@@ -714,13 +714,41 @@ export default function PaymentsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleOpenPaymentModal(summary.workerId, false)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Give Advance</span>
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleOpenPaymentModal(summary.workerId, false)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Give Advance</span>
+                              </button>
+                              {(() => {
+                                const latestPayment =
+                                  summary.recentPayments?.[0] ||
+                                  payments.find(
+                                    (p) =>
+                                      (p.category === 'advance' || p.category === 'kharcha' || p.category === 'wage') &&
+                                      ((p.workerId && p.workerId === summary.workerId) ||
+                                        (p.workerName &&
+                                          p.workerName.toLowerCase() ===
+                                            summary.workerName.replace(' (Daily/Temp)', '').toLowerCase()) ||
+                                        (p.paidTo &&
+                                          p.paidTo.toLowerCase() ===
+                                            summary.workerName.replace(' (Daily/Temp)', '').toLowerCase()))
+                                  );
+
+                                return latestPayment ? (
+                                  <button
+                                    onClick={() => handleOpenMigration(latestPayment, 'vendor')}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-[11px] border border-amber-200 transition-colors shadow-2xs"
+                                    title="Move this advance entry to Vendor / Material Ledger"
+                                  >
+                                    <ArrowLeftRight className="w-3 h-3 text-amber-600" />
+                                    <span>Move to Vendor</span>
+                                  </button>
+                                ) : null;
+                              })()}
+                            </div>
                           </td>
                         </tr>
                       );
