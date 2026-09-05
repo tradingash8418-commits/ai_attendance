@@ -511,8 +511,6 @@ export class WebhookProcessorServer {
       }
 
       const isWorkerPayment = paymentCategory === 'advance';
-      const finalAmount = paymentData.amount || 0;
-      const ocrBeneficiary = paymentData.receiverName || '';
 
       let finalPaidTo = '';
       let resolvedWorkerId = '';
