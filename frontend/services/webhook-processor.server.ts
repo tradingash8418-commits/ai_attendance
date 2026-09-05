@@ -196,6 +196,45 @@ export class WebhookProcessorServer {
         `Method=${paymentData.paymentMethod}, UPI=${paymentData.upiId}`
       );
 
+      // 1. Check Caption Priority (User defined intent via WhatsApp caption)
+      // Supports full words: 'vendor', 'material', 'supplier', 'thekedar' vs 'worker', 'labour', 'advance', 'karigar', 'kharcha', 'wage'
+      // Supports single letters / short codes: 'v', 'm' (vendor) vs 'w', 'l', 'a', 'k' (worker advance)
+      const cleanCaption = textBody.toLowerCase().trim();
+      let explicitCategory: 'vendor' | 'advance' | null = null;
+
+      if (
+        cleanCaption === 'v' ||
+        cleanCaption === 'vendor' ||
+        cleanCaption === 'm' ||
+        cleanCaption === 'material' ||
+        cleanCaption.startsWith('vendor') ||
+        cleanCaption.startsWith('material') ||
+        cleanCaption.includes('supplier') ||
+        cleanCaption.includes('thekedar') ||
+        cleanCaption.includes('dukaan') ||
+        cleanCaption.includes('shop')
+      ) {
+        explicitCategory = 'vendor';
+      } else if (
+        cleanCaption === 'w' ||
+        cleanCaption === 'worker' ||
+        cleanCaption === 'a' ||
+        cleanCaption === 'advance' ||
+        cleanCaption === 'l' ||
+        cleanCaption === 'labour' ||
+        cleanCaption === 'k' ||
+        cleanCaption === 'karigar' ||
+        cleanCaption.startsWith('worker') ||
+        cleanCaption.startsWith('advance') ||
+        cleanCaption.startsWith('labour') ||
+        cleanCaption.startsWith('karigar') ||
+        cleanCaption.includes('kharcha') ||
+        cleanCaption.includes('wage') ||
+        cleanCaption.includes('majdoor')
+      ) {
+        explicitCategory = 'advance';
+      }
+
       // Check if recipient matches an EXISTING registered worker in Firestore
       const allWorkers = await WorkersService.getWorkers();
       const matchedWorker = allWorkers.find((w) => {
@@ -213,21 +252,31 @@ export class WebhookProcessorServer {
         return false;
       });
 
-      // If matched to an enrolled worker, it is an Advance. Otherwise it is a Vendor / Material Expense.
-      const isWorkerPayment = Boolean(matchedWorker);
-      const paymentCategory = isWorkerPayment ? 'advance' : 'vendor';
+      // CATEGORY DETERMINATION RULES:
+      // Priority 1: Explicit WhatsApp Caption ('vendor'/'v' -> Vendor Ledger, 'worker'/'w' -> Worker Advance)
+      // Priority 2: Auto-match registered workers if no explicit caption provided
+      let paymentCategory: 'vendor' | 'advance' = 'vendor';
+      if (explicitCategory) {
+        paymentCategory = explicitCategory;
+      } else if (matchedWorker) {
+        paymentCategory = 'advance';
+      } else {
+        paymentCategory = 'vendor';
+      }
+
+      const isWorkerPayment = paymentCategory === 'advance';
       const finalAmount = paymentData.amount || 0;
-      const finalPaidTo = paymentData.receiverName || (matchedWorker ? getWorkerDisplayName(matchedWorker) : 'Vendor / Payee');
-      const resolvedWorkerId = matchedWorker?.id || '';
-      const resolvedWorkerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : '';
+      const finalPaidTo = paymentData.receiverName || (matchedWorker ? getWorkerDisplayName(matchedWorker) : (isWorkerPayment ? 'Worker / Karigar' : 'Vendor / Payee'));
+      const resolvedWorkerId = (isWorkerPayment && matchedWorker) ? matchedWorker.id : '';
+      const resolvedWorkerName = (isWorkerPayment && matchedWorker) ? getWorkerDisplayName(matchedWorker) : (isWorkerPayment ? finalPaidTo : '');
 
       // Record entry in Khata Ledger (DO NOT auto-create workers for vendors!)
       await PaymentLedgerService.recordPayment({
         paidTo: finalPaidTo,
         workerId: resolvedWorkerId,
         workerName: resolvedWorkerName,
-        workerCode: matchedWorker?.workerCode,
-        workerPhone: matchedWorker?.phone,
+        workerCode: (isWorkerPayment && matchedWorker) ? matchedWorker?.workerCode : undefined,
+        workerPhone: (isWorkerPayment && matchedWorker) ? matchedWorker?.phone : undefined,
         amount: finalAmount,
         category: paymentCategory,
         paymentMethod: paymentData.paymentMethod || 'gpay',
@@ -235,6 +284,7 @@ export class WebhookProcessorServer {
         paymentDate: today,
         paymentTime: paymentData.timestampStr || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         receiptPhotoUrl: photoUrl,
+        notes: textBody ? `Caption: ${textBody}` : undefined,
         recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
         rawOcrText: paymentData.rawText,
       });

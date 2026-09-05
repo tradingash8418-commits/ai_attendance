@@ -124,7 +124,8 @@ export default function PaymentsPage() {
       if (workerId) {
         setSelectedWorkerId(workerId);
         const w = workers.find((x) => x.id === workerId);
-        setFormPaidTo(w?.name || '');
+        const s = summaries.find((x) => x.workerId === workerId);
+        setFormPaidTo(w?.name || s?.workerName.replace(' (Daily/Temp)', '') || '');
       } else {
         setSelectedWorkerId(workers[0]?.id || '');
         setFormPaidTo(workers[0]?.name || '');
@@ -536,8 +537,8 @@ export default function PaymentsPage() {
               />
             </div>
 
-            <div className="text-xs text-slate-500 font-semibold">
-              Showing strictly registered workforce ({filteredSummaries.length} workers)
+            <div className="text-xs text-slate-500">
+              Worker & Labour Advance Khata ({filteredSummaries.length} entries)
             </div>
           </div>
 

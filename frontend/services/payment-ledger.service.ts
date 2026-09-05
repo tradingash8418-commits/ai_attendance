@@ -185,6 +185,51 @@ export class PaymentLedgerService {
       };
     });
 
+    // 3. Find temporary / un-enrolled worker advances (e.g. 2-3 day workers with category 'advance')
+    const registeredWorkerIds = new Set(workers.map((w) => w.id));
+    const registeredWorkerCodes = new Set(workers.map((w) => w.workerCode).filter(Boolean));
+
+    const unlinkedWorkerPayments = payments.filter((p) => {
+      if (p.category !== 'advance' && p.category !== 'kharcha' && p.category !== 'wage') return false;
+      const isLinkedToRegistered =
+        (p.workerId && registeredWorkerIds.has(p.workerId)) ||
+        (p.workerCode && registeredWorkerCodes.has(p.workerCode));
+      return !isLinkedToRegistered;
+    });
+
+    const unlinkedGrouped: Record<string, PaymentLedgerEntry[]> = {};
+    for (const p of unlinkedWorkerPayments) {
+      const nameKey = (p.workerName || p.paidTo || 'Temporary Worker').trim();
+      if (!unlinkedGrouped[nameKey]) unlinkedGrouped[nameKey] = [];
+      unlinkedGrouped[nameKey].push(p);
+    }
+
+    for (const [tempName, tempPayments] of Object.entries(unlinkedGrouped)) {
+      const totalAdvancesPaid = tempPayments
+        .filter((p) => p.category === 'advance' || p.category === 'kharcha')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const totalWagesPaid = tempPayments
+        .filter((p) => p.category === 'wage')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      totalAdvancesPaidAll += totalAdvancesPaid;
+
+      summaries.push({
+        workerId: `temp_${tempName.toLowerCase().replace(/\s+/g, '_')}`,
+        workerName: `${tempName} (Daily/Temp)`,
+        workerCode: 'DAILY',
+        phone: tempPayments[0]?.workerPhone || '',
+        dailyRate: defaultDailyRate,
+        totalHajriEarned: 0,
+        totalEarnedAmount: 0,
+        totalAdvancesPaid,
+        totalWagesPaid,
+        netPayableBalance: -(totalAdvancesPaid + totalWagesPaid),
+        recentPayments: tempPayments.slice(0, 5),
+      });
+    }
+
     return {
       summaries,
       totalAdvancesPaidAll,
