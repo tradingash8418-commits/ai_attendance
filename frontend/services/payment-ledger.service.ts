@@ -3,6 +3,7 @@ import {
   doc,
   getDocs,
   addDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
@@ -235,6 +236,32 @@ export class PaymentLedgerService {
       totalAdvancesPaidAll,
       totalHajriAll: Number(totalHajriAll.toFixed(1)),
     };
+  }
+
+  /**
+   * Migrates/Updates the category of a payment between Vendor and Worker Advance.
+   */
+  public static async updatePaymentCategory(
+    id: string,
+    data: {
+      category: PaymentCategory;
+      workerId?: string;
+      workerName?: string;
+      workerCode?: string;
+      paidTo?: string;
+    }
+  ): Promise<void> {
+    const docRef = doc(db, COLLECTION_NAME, id);
+    const updatePayload: any = {
+      category: data.category,
+      updatedAt: serverTimestamp(),
+    };
+    if (data.workerId !== undefined) updatePayload.workerId = data.workerId;
+    if (data.workerName !== undefined) updatePayload.workerName = data.workerName;
+    if (data.workerCode !== undefined) updatePayload.workerCode = data.workerCode;
+    if (data.paidTo !== undefined) updatePayload.paidTo = data.paidTo;
+
+    await updateDoc(docRef, updatePayload);
   }
 
   /**

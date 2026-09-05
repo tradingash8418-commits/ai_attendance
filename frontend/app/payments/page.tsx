@@ -20,6 +20,7 @@ import {
   X,
   Truck,
   FileText,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
@@ -85,6 +86,15 @@ export default function PaymentsPage() {
 
   // Receipt Preview Modal
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Migration Modal State (Migrate between Vendor & Worker)
+  const [migrationPayment, setMigrationPayment] = useState<PaymentLedgerEntry | null>(null);
+  const [migrationTargetType, setMigrationTargetType] = useState<'worker' | 'vendor'>('worker');
+  const [migrationWorkerMode, setMigrationWorkerMode] = useState<'registered' | 'temp'>('registered');
+  const [migrationSelectedWorkerId, setMigrationSelectedWorkerId] = useState<string>('');
+  const [migrationCustomName, setMigrationCustomName] = useState<string>('');
+  const [migrationVendorCategory, setMigrationVendorCategory] = useState<PaymentCategory>('vendor');
+  const [migrationSubmitting, setMigrationSubmitting] = useState<boolean>(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -215,6 +225,78 @@ export default function PaymentsPage() {
       loadData();
     } catch (err) {
       console.error('Delete payment error:', err);
+    }
+  };
+
+  const handleOpenMigration = (payment: PaymentLedgerEntry, targetType?: 'worker' | 'vendor') => {
+    setMigrationPayment(payment);
+    const target =
+      targetType ||
+      (payment.category === 'advance' || payment.category === 'kharcha' || payment.category === 'wage'
+        ? 'vendor'
+        : 'worker');
+
+    setMigrationTargetType(target);
+    const currentName = payment.paidTo || payment.workerName || '';
+    setMigrationCustomName(currentName);
+    setMigrationVendorCategory('vendor');
+
+    // Auto-match if worker exists
+    const matched = workers.find(
+      (w) =>
+        w.name.toLowerCase() === currentName.toLowerCase() ||
+        (payment.workerId && w.id === payment.workerId)
+    );
+
+    if (matched) {
+      setMigrationWorkerMode('registered');
+      setMigrationSelectedWorkerId(matched.id);
+    } else {
+      setMigrationWorkerMode('registered');
+      setMigrationSelectedWorkerId(workers[0]?.id || '');
+    }
+  };
+
+  const handleConfirmMigration = async () => {
+    if (!migrationPayment) return;
+    setMigrationSubmitting(true);
+    try {
+      if (migrationTargetType === 'worker') {
+        if (migrationWorkerMode === 'registered') {
+          const selectedWorker = workers.find((w) => w.id === migrationSelectedWorkerId);
+          await PaymentLedgerService.updatePaymentCategory(migrationPayment.id, {
+            category: 'advance',
+            workerId: selectedWorker?.id || '',
+            workerName: selectedWorker?.name || migrationCustomName,
+            workerCode: selectedWorker?.workerCode || '',
+            paidTo: selectedWorker?.name || migrationCustomName,
+          });
+        } else {
+          // Keep as temporary/daily worker advance
+          await PaymentLedgerService.updatePaymentCategory(migrationPayment.id, {
+            category: 'advance',
+            workerId: '',
+            workerName: migrationCustomName.trim(),
+            workerCode: '',
+            paidTo: migrationCustomName.trim(),
+          });
+        }
+      } else {
+        // Migrate to Vendor
+        await PaymentLedgerService.updatePaymentCategory(migrationPayment.id, {
+          category: migrationVendorCategory,
+          workerId: '',
+          workerName: '',
+          workerCode: '',
+          paidTo: migrationCustomName.trim(),
+        });
+      }
+      setMigrationPayment(null);
+      await loadData();
+    } catch (err) {
+      console.error('Migration error:', err);
+    } finally {
+      setMigrationSubmitting(false);
     }
   };
 
@@ -732,17 +814,28 @@ export default function PaymentsPage() {
                             ₹{v.totalPaid.toLocaleString('en-IN')}
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            {latestPayment?.receiptPhotoUrl ? (
-                              <button
-                                onClick={() => setPreviewImage(latestPayment.receiptPhotoUrl || null)}
-                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View Receipt</span>
-                              </button>
-                            ) : (
-                              <span className="text-slate-400 text-[11px]">—</span>
-                            )}
+                            <div className="flex items-center justify-center gap-2">
+                              {latestPayment?.receiptPhotoUrl && (
+                                <button
+                                  onClick={() => setPreviewImage(latestPayment.receiptPhotoUrl || null)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                                  title="View Receipt"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Receipt</span>
+                                </button>
+                              )}
+                              {latestPayment && (
+                                <button
+                                  onClick={() => handleOpenMigration(latestPayment, 'worker')}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200 transition-colors shadow-2xs"
+                                  title="Move this entry to Worker Advance Khata"
+                                >
+                                  <ArrowLeftRight className="w-3 h-3 text-blue-600" />
+                                  <span>Move to Worker</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -868,13 +961,22 @@ export default function PaymentsPage() {
                             )}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleDeletePayment(p.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
-                              title="Delete Record"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleOpenMigration(p)}
+                                className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title={p.category === 'advance' ? "Migrate to Vendor / Material Expense" : "Migrate to Worker Advance"}
+                              >
+                                <ArrowLeftRight className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePayment(p.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Delete Record"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1326,6 +1428,172 @@ export default function PaymentsPage() {
             </div>
             <div className="max-h-[70vh] overflow-auto rounded-xl bg-black/5 flex items-center justify-center">
               <img src={previewImage} alt="Receipt preview" className="max-h-[70vh] object-contain" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Migration Modal (Vendor <-> Worker) */}
+      {migrationPayment && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="relative max-w-md w-full bg-white rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                  <ArrowLeftRight className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Migrate Payment Entry</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    ₹{migrationPayment.amount.toLocaleString('en-IN')} • {migrationPayment.paymentDate}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMigrationPayment(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700">Migrate Destination *</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMigrationTargetType('worker')}
+                  className={`py-2 px-3 rounded-xl font-bold text-xs border flex items-center justify-center gap-2 transition-all ${
+                    migrationTargetType === 'worker'
+                      ? 'bg-blue-50 text-blue-700 border-blue-500 ring-2 ring-blue-500/20'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Worker Khata</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMigrationTargetType('vendor')}
+                  className={`py-2 px-3 rounded-xl font-bold text-xs border flex items-center justify-center gap-2 transition-all ${
+                    migrationTargetType === 'vendor'
+                      ? 'bg-amber-50 text-amber-700 border-amber-500 ring-2 ring-amber-500/20'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>Vendor Ledger</span>
+                </button>
+              </div>
+
+              {migrationTargetType === 'worker' ? (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center gap-4 text-xs font-semibold text-slate-600">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={migrationWorkerMode === 'registered'}
+                        onChange={() => setMigrationWorkerMode('registered')}
+                        className="text-blue-600"
+                      />
+                      <span>Enrolled Worker</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={migrationWorkerMode === 'temp'}
+                        onChange={() => setMigrationWorkerMode('temp')}
+                        className="text-blue-600"
+                      />
+                      <span>Daily / Temp Worker</span>
+                    </label>
+                  </div>
+
+                  {migrationWorkerMode === 'registered' ? (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Select Worker *</label>
+                      <select
+                        value={migrationSelectedWorkerId}
+                        onChange={(e) => {
+                          setMigrationSelectedWorkerId(e.target.value);
+                          const w = workers.find((x) => x.id === e.target.value);
+                          if (w) setMigrationCustomName(w.name);
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs focus:outline-none focus:border-blue-500"
+                      >
+                        {workers.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.workerCode || 'ID'}) - ₹{w.dailyRate || dailyRate}/day
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Worker / Karigar Name *</label>
+                      <input
+                        type="text"
+                        value={migrationCustomName}
+                        onChange={(e) => setMigrationCustomName(e.target.value)}
+                        placeholder="e.g. RAJKUMAR"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs uppercase focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Vendor / Payee Name *</label>
+                    <input
+                      type="text"
+                      value={migrationCustomName}
+                      onChange={(e) => setMigrationCustomName(e.target.value)}
+                      placeholder="e.g. SRI LINGALA SLAB INDUSTRIES"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs uppercase focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Expense Category *</label>
+                    <select
+                      value={migrationVendorCategory}
+                      onChange={(e) => setMigrationVendorCategory(e.target.value as PaymentCategory)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold text-xs focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="vendor">Vendor / Supplier</option>
+                      <option value="material">Material Purchase</option>
+                      <option value="equipment">Machinery Rental</option>
+                      <option value="other">Site Expense / Other</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setMigrationPayment(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  migrationSubmitting ||
+                  (migrationTargetType === 'worker' &&
+                    migrationWorkerMode === 'temp' &&
+                    !migrationCustomName.trim()) ||
+                  (migrationTargetType === 'vendor' && !migrationCustomName.trim())
+                }
+                onClick={handleConfirmMigration}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-blue-600/20"
+              >
+                {migrationSubmitting ? 'Migrating...' : 'Confirm Migration'}
+              </button>
             </div>
           </div>
         </div>
