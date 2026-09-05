@@ -47,12 +47,9 @@ export class WebhookProcessorServer {
         `Type: ${messageType}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`
       );
 
-      // 1. Deduplication check
-      const isDuplicate = await WhatsAppService.isMessageProcessed(rawMessageId);
-      if (isDuplicate) {
-        console.log(`[WebhookProcessor] Message ${rawMessageId} already processed. Skipping.`);
-        return { status: 'ignored', reason: 'Duplicate message', messageId: rawMessageId };
-      }
+      // Deduplication check removed per user request:
+      // Allow all incoming payment screenshots to be processed and registered in the ledger without being discarded as duplicates.
+      // (Even same person, same amount, or retried webhooks must be registered).
 
       // 2. Save raw message log
       const savedMsgId = await WhatsAppService.saveIncomingMessage({

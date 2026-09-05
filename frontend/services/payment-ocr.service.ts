@@ -321,20 +321,20 @@ export class PaymentOcrService {
 
     const isPaymentScreenshot = Boolean(
       (finalAmount !== null && (receiverName !== null || upiId !== null)) ||
-        textLower.includes('paid to') ||
-        textLower.includes('banking name') ||
-        textLower.includes('beneficiary name') ||
-        textLower.includes('payment successful') ||
-        textLower.includes('transaction successful') ||
-        textLower.includes('pay again') ||
-        textLower.includes('view history') ||
-        textLower.includes('@yespop') ||
-        textLower.includes('@okhdfcbank') ||
-        textLower.includes('@okaxis') ||
-        textLower.includes('@ptyes') ||
-        textLower.includes('@pthdfc') ||
-        textLower.includes('@ybl') ||
-        textLower.includes('@axl')
+      textLower.includes('paid to') ||
+      textLower.includes('banking name') ||
+      textLower.includes('beneficiary name') ||
+      textLower.includes('payment successful') ||
+      textLower.includes('transaction successful') ||
+      textLower.includes('pay again') ||
+      textLower.includes('view history') ||
+      textLower.includes('@yespop') ||
+      textLower.includes('@okhdfcbank') ||
+      textLower.includes('@okaxis') ||
+      textLower.includes('@ptyes') ||
+      textLower.includes('@pthdfc') ||
+      textLower.includes('@ybl') ||
+      textLower.includes('@axl')
     );
 
     let confidence = 0.5;
@@ -429,7 +429,7 @@ Extract the following exact fields in strict JSON format:
 
     let rawText = '';
 
-    // Strategy 2: OCR.space Cloud OCR API with scale & auto-engine
+    // Strategy 2: OCR.space Cloud OCR API (Free API, Engine 2 optimized for numbers/receipts)
     try {
       const form = new URLSearchParams();
       if (imageBuffer) {
@@ -456,20 +456,38 @@ Extract the following exact fields in strict JSON format:
         }
       }
     } catch (ocrErr) {
-      console.warn('[PaymentOcrService] OCR.space API failed, attempting local Tesseract OCR:', ocrErr);
+      console.warn('[PaymentOcrService] OCR.space Engine 2 failed:', ocrErr);
     }
 
-    // Strategy 3: Tesseract.js local fallback if OCR.space produced empty result
-    if (!rawText && imageBuffer) {
+    // Strategy 3: OCR.space Cloud OCR Engine 1 fallback if Engine 2 was empty
+    if (!rawText || rawText.trim().length === 0) {
       try {
-        const { createWorker } = await import('tesseract.js');
-        const worker = await createWorker('eng');
-        const ret = await worker.recognize(imageBuffer);
-        await worker.terminate();
-        rawText = ret.data.text || '';
-        console.log('[PaymentOcrService] Tesseract.js extracted text:', rawText.slice(0, 150));
-      } catch (tessErr) {
-        console.warn('[PaymentOcrService] Tesseract.js local OCR error:', tessErr);
+        const form1 = new URLSearchParams();
+        if (imageBuffer) {
+          form1.append('base64Image', `data:image/jpeg;base64,${imageBuffer.toString('base64')}`);
+        } else if (imageUrl) {
+          form1.append('url', imageUrl);
+        }
+        form1.append('apikey', 'helloworld');
+        form1.append('scale', 'true');
+        form1.append('detectOrientation', 'true');
+        form1.append('OCREngine', '1');
+
+        const ocrRes1 = await fetch('https://api.ocr.space/parse/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form1,
+        });
+
+        if (ocrRes1.ok) {
+          const ocrData1 = await ocrRes1.json();
+          if (ocrData1.ParsedResults && ocrData1.ParsedResults.length > 0) {
+            rawText = ocrData1.ParsedResults[0].ParsedText || '';
+            console.log('[PaymentOcrService] OCR.space (Engine 1 fallback) extracted text:', rawText.slice(0, 150));
+          }
+        }
+      } catch (ocrErr1) {
+        console.warn('[PaymentOcrService] OCR.space Engine 1 fallback failed:', ocrErr1);
       }
     }
 
