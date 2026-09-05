@@ -162,14 +162,9 @@ export class WebhookProcessorServer {
 
           if (recentPayment) {
             const allWorkers = await WorkersService.getWorkers();
-            let matchedWorker = allWorkers.find((w) => {
-              if (captionInfo.workerOrPayeeRemark) {
-                const rLower = captionInfo.workerOrPayeeRemark.toLowerCase();
-                const nLower = w.name.toLowerCase();
-                if (nLower === rLower || nLower.includes(rLower) || rLower.includes(nLower)) return true;
-              }
-              return false;
-            });
+            const matchedWorker = captionInfo.workerOrPayeeRemark
+              ? findBestWorkerMatch(allWorkers, captionInfo.workerOrPayeeRemark)
+              : undefined;
 
             let paymentCategory: 'vendor' | 'advance' =
               captionInfo.explicitCategory ||
@@ -302,31 +297,18 @@ export class WebhookProcessorServer {
       // 1. Smart Caption Parsing: Extracts category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
       const { explicitCategory, workerOrPayeeRemark } = parsePaymentCaption(textBody || '');
 
-      // Check if recipient matches an EXISTING registered worker in Firestore (by OCR name, phone, or caption remark)
+      // Check if recipient matches an EXISTING registered worker in Firestore using Strict Tiered Matching
       const allWorkers = await WorkersService.getWorkers();
-      let matchedWorker = allWorkers.find((w) => {
-        if (workerOrPayeeRemark) {
-          const remarkLower = workerOrPayeeRemark.toLowerCase();
-          const nameLower = w.name.toLowerCase();
-          if (nameLower === remarkLower || nameLower.includes(remarkLower) || remarkLower.includes(nameLower)) {
-            return true;
-          }
-        }
-        const targetName = (paymentData.receiverName || '').toLowerCase();
-        if (targetName) {
-          const nameLower = w.name.toLowerCase();
-          if (nameLower === targetName || nameLower.includes(targetName) || targetName.includes(nameLower)) {
-            return true;
-          }
-        }
-        if (paymentData.upiId && w.phone) {
-          const cleanPhone = w.phone.replace(/\D/g, '');
-          if (cleanPhone.length >= 10 && paymentData.upiId.includes(cleanPhone.slice(-10))) {
-            return true;
-          }
-        }
-        return false;
-      });
+      let matchedWorker: any = undefined;
+
+      // Priority A: Match by explicit caption remark (e.g. 'mubarak, w' -> exactly matches 'mubarak')
+      if (workerOrPayeeRemark) {
+        matchedWorker = findBestWorkerMatch(allWorkers, workerOrPayeeRemark);
+      }
+      // Priority B: Match by AI OCR Beneficiary Name / UPI
+      if (!matchedWorker && paymentData.receiverName) {
+        matchedWorker = findBestWorkerMatch(allWorkers, paymentData.receiverName, paymentData.upiId);
+      }
 
       // CATEGORY DETERMINATION RULES:
       // Priority 1: Explicit WhatsApp Caption ('vendor'/'v' -> Vendor Ledger, 'worker'/'w' -> Worker Advance)
@@ -515,3 +497,62 @@ export function parsePaymentCaption(rawText: string): {
   // 5. Custom name without explicit tag
   return { explicitCategory: null, workerOrPayeeRemark: text };
 }
+
+/**
+ * Strict Tiered Worker Matcher:
+ * Ensures exact names (e.g. 'mubarak') ALWAYS match 'mubarak' and NEVER 'mubarakaaa'.
+ * Tier 1: Exact Name Match ('mubarak' === 'mubarak')
+ * Tier 2: Exact Worker Code Match ('WRK-001' === 'WRK-001')
+ * Tier 3: Word Boundary Token Match ('mubarak' in 'mubarak khan')
+ * Tier 4: UPI ID Phone Number Match (phone ending matches UPI handle)
+ */
+export function findBestWorkerMatch(
+  allWorkers: any[],
+  targetName: string,
+  targetUpiId?: string
+): any | undefined {
+  if (!targetName && !targetUpiId) return undefined;
+
+  const rawClean = (targetName || '').trim().toLowerCase();
+
+  // Tier 1: EXACT Full Name Match (Case-Insensitive)
+  // E.g. "mubarak" === "mubarak". Prevents collision with "mubarakaaa".
+  if (rawClean) {
+    const exactMatch = allWorkers.find(
+      (w) => (w.name || '').trim().toLowerCase() === rawClean
+    );
+    if (exactMatch) return exactMatch;
+  }
+
+  // Tier 2: EXACT Worker Code Match (e.g. "WRK-001" or "0692")
+  if (rawClean) {
+    const codeMatch = allWorkers.find(
+      (w) => w.workerCode && w.workerCode.trim().toLowerCase() === rawClean
+    );
+    if (codeMatch) return codeMatch;
+  }
+
+  // Tier 3: EXACT Word Boundary Token Match (e.g. "mubarak" in "mubarak khan" or "md mubarak")
+  // "mubarak" matches "mubarak khan", but DOES NOT match "mubarakaaa" because "mubarakaaa" has no word break.
+  if (rawClean) {
+    const wordMatch = allWorkers.find((w) => {
+      const words = (w.name || '').trim().toLowerCase().split(/[\s,._-]+/);
+      return words.includes(rawClean);
+    });
+    if (wordMatch) return wordMatch;
+  }
+
+  // Tier 4: UPI ID Phone Number Match (e.g. UPI is 9876543210@upi and worker phone is +919876543210)
+  if (targetUpiId) {
+    const cleanUpi = targetUpiId.toLowerCase();
+    const phoneMatch = allWorkers.find((w) => {
+      if (!w.phone) return false;
+      const cleanPhone = w.phone.replace(/\D/g, '');
+      return cleanPhone.length >= 10 && cleanUpi.includes(cleanPhone.slice(-10));
+    });
+    if (phoneMatch) return phoneMatch;
+  }
+
+  return undefined;
+}
+
