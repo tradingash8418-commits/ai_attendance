@@ -53,9 +53,15 @@ export class WebhookProcessorServer {
         `Type: ${messageType}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`
       );
 
-      // Deduplication check removed per user request:
-      // Allow all incoming payment screenshots to be processed and registered in the ledger without being discarded as duplicates.
-      // (Even same person, same amount, or retried webhooks must be registered).
+      // 1. WhatsApp Network Retry Deduplication:
+      // Meta WhatsApp Cloud API retries webhook delivery up to 6 times if processing takes >3 seconds.
+      // Checking rawMessageId ensures that ONE WhatsApp message is processed and recorded EXACTLY ONCE,
+      // while allowing different/new payment messages to be processed freely without blocking.
+      const isAlreadyProcessed = await WhatsAppService.isMessageProcessed(rawMessageId);
+      if (isAlreadyProcessed) {
+        console.log(`[WebhookProcessor] Meta webhook retry acknowledged for message ID: ${rawMessageId}`);
+        return { status: 'completed', reason: 'Meta retry duplicate acknowledged', messageId: rawMessageId };
+      }
 
       // 2. Save raw message log
       const savedMsgId = await WhatsAppService.saveIncomingMessage({

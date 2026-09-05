@@ -400,10 +400,22 @@ export class PaymentOcrService {
           const listData = await listRes.json();
           if (listData.models && Array.isArray(listData.models)) {
             const supported = listData.models
-              .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-              .map((m: any) => m.name.replace(/^models\//, ''));
+              .filter((m: any) => {
+                const name = (m.name || '').toLowerCase();
+                return (
+                  m.supportedGenerationMethods?.includes('generateContent') &&
+                  (name.includes('flash') || name.includes('pro')) &&
+                  !name.includes('tts') &&
+                  !name.includes('embedding') &&
+                  !name.includes('gemma') &&
+                  !name.includes('imagen')
+                );
+              })
+              .map((m: any) => m.name.replace(/^models\//, ''))
+              .sort((a: string, b: string) => (a.includes('2.0') ? -1 : b.includes('2.0') ? 1 : a.includes('flash') ? -1 : 1));
+
             if (supported.length > 0) {
-              console.log('[PaymentOcrService] Auto-discovered Gemini models for this key:', supported);
+              console.log('[PaymentOcrService] Active Gemini Vision models:', supported);
               candidateModels = supported;
             }
           }
