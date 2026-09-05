@@ -377,17 +377,18 @@ export class PaymentOcrService {
               {
                 parts: [
                   {
-                    text: `You are a financial AI receipt auditor for Indian businesses and construction contractors.
-Analyze this payment receipt screenshot (Google Pay, PhonePe, Paytm, BHIM UPI, Net Banking).
-Extract the following exact fields in strict JSON format:
+                    text: `You are an expert financial AI receipt auditor for Indian businesses and construction contractors.
+Analyze this payment transaction screenshot (Google Pay, PhonePe, Paytm, BHIM UPI, Amazon Pay, or Net Banking).
+Extract the transaction details accurately in strict JSON format:
 {
   "is_payment": true,
-  "amount": number,
-  "receiver_name": string,
-  "payment_method": "phonepe" | "gpay" | "paytm" | "upi",
-  "upi_id": string | null,
-  "timestamp": string | null
-}`
+  "amount": number (exact amount paid in INR without currency symbol, e.g. 2000, 7400, 45000),
+  "receiver_name": string (the recipient / payee person or shop or company name, e.g. "ANSHU PAL", "LALIT KUMAR JAIN", "MOHD JAKIR"),
+  "payment_method": "phonepe" | "gpay" | "paytm" | "upi" | "bank_transfer",
+  "upi_id": string or null (recipient's UPI ID / VPA or phone number, e.g. "anshu@okaxis"),
+  "timestamp": string or null (date and time of transaction as shown on receipt, e.g. "1 September 2024, 05:43 PM")
+}
+Do NOT include currency symbols or commas in the amount number. Return ONLY the valid JSON object.`
                   },
                   {
                     inline_data: {
@@ -513,6 +514,23 @@ Extract the following exact fields in strict JSON format:
    * Client-side OCR extract from base64 string
    */
   public static async extractPaymentFromBase64(base64Data: string): Promise<ExtractedPaymentData> {
+    // If running in browser, call secure backend API route
+    if (typeof window !== 'undefined') {
+      try {
+        const response = await fetch('/api/payments/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64Data }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return data;
+        }
+      } catch (clientErr) {
+        console.warn('[PaymentOcrService] Client API fetch failed, trying local parse:', clientErr);
+      }
+    }
+
     const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     const buf = Buffer.from(cleanBase64 || '', 'base64');
     return this.extractPaymentFromImage('', buf);
