@@ -583,7 +583,7 @@ export class WebhookProcessorServer {
         let confirmationMsg =
           `✅ *Payment Recorded in Ledger!*\n\n` +
           `👤 *${isWorkerPayment ? 'Worker / Karigar' : 'Vendor / Payee'}:* ${displayName}\n`;
-        
+
         if (ocrBeneficiary && ocrBeneficiary.toLowerCase() !== displayName.toLowerCase()) {
           confirmationMsg += `🏦 *A/C Beneficiary:* ${ocrBeneficiary}\n`;
         }
@@ -607,17 +607,17 @@ export class WebhookProcessorServer {
         );
       }
 
-        return {
-          status: 'completed',
-          reason: `Payment receipt recorded for ${finalPaidTo}: ₹${finalAmount}`,
-          messageId: rawMessageId,
-        };
-      } catch (err: any) {
-        console.error('[WebhookProcessor] Critical processing error:', err);
-        return { status: 'failed', reason: err?.message || 'Internal processing error' };
-      }
+      return {
+        status: 'completed',
+        reason: `Payment receipt recorded for ${finalPaidTo}: ₹${finalAmount}`,
+        messageId: rawMessageId,
+      };
+    } catch (err: any) {
+      console.error('[WebhookProcessor] Critical processing error:', err);
+      return { status: 'failed', reason: err?.message || 'Internal processing error' };
     }
   }
+}
 
 export const VENDOR_CATEGORY_KEYWORDS = [
   'v',

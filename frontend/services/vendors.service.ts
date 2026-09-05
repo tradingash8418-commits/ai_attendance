@@ -55,9 +55,37 @@ function extractRealVendorName(p: PaymentLedgerEntry): string {
   return name || 'Vendor / Material Supplier';
 }
 
+export function detectPaymentVendorCategory(p: PaymentLedgerEntry, fallbackName?: string): 'material' | 'thekedar' | 'transport' | 'service' | 'general' {
+  const text = [
+    fallbackName || '',
+    p.paidTo || '',
+    p.notes || '',
+    p.rawOcrText || '',
+  ].join(' ').toLowerCase();
+
+  if (
+    /\b(thekedar|contractor|subcontractor|fabricator|plumber|carpenter|mason|mistri|pop|civil)\b/i.test(text)
+  ) {
+    return 'thekedar';
+  }
+  if (
+    /\b(transport|tempo|truck|dumper|driver|diesel|petrol|vehicle|bhada|freight|auto|trolley|tractor|gaadi)\b/i.test(text) ||
+    /\bcaption:\s*(t|transport)\b/i.test(text)
+  ) {
+    return 'transport';
+  }
+  if (
+    /\b(service|rent|repair|maintenance|electricity|generator|chai|khana)\b/i.test(text)
+  ) {
+    return 'service';
+  }
+  return 'material';
+}
+
 export class VendorsService {
   /**
    * Automatically aggregates all unique vendors and suppliers from the Khata Payment Ledger.
+   * Groups strictly by (Vendor Name + Category) to avoid merging distinct entities sharing the same person's name (e.g. Rajkumar Contractor vs Rajkumar Transport).
    */
   public static async getVendorsSummary(dateRange?: { startDate?: string; endDate?: string }): Promise<{
     vendors: VendorSummary[];
@@ -82,12 +110,13 @@ export class VendorsService {
       vendorPayments = vendorPayments.filter((p) => (p.paymentDate || '') <= dateRange.endDate!);
     }
 
-    // Group payments by Vendor Entity Name (case-insensitive)
+    // Group payments strictly by (Vendor Entity Name + Category)
     const grouped: Record<string, PaymentLedgerEntry[]> = {};
 
     for (const p of vendorPayments) {
       const rawName = extractRealVendorName(p);
-      const normalizedKey = rawName.toUpperCase();
+      const category = detectPaymentVendorCategory(p, rawName);
+      const normalizedKey = `${rawName.toUpperCase()}::${category}`;
 
       if (!grouped[normalizedKey]) {
         grouped[normalizedKey] = [];
@@ -108,42 +137,9 @@ export class VendorsService {
       totalBillsAll += billsCount;
 
       const latest = payments[0];
-      const displayName = extractRealVendorName(latest) || key;
-
-      // Collect all contextual text across all payments for this vendor:
-      // (displayName, payment notes, WhatsApp captions, raw OCR receipt text)
-      const allText = [
-        displayName,
-        ...payments.map((p) => `${p.notes || ''} ${p.rawOcrText || ''}`),
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      let category: 'material' | 'thekedar' | 'transport' | 'service' | 'general' = 'material';
-
-      // 1. Subcontractors / Thekedar keywords
-      if (
-        /\b(thekedar|contractor|subcontractor|fabricator|plumber|carpenter|mason|mistri|pop|civil)\b/i.test(allText)
-      ) {
-        category = 'thekedar';
-      }
-      // 2. Transport & Vehicles keywords
-      else if (
-        /\b(transport|tempo|truck|dumper|driver|diesel|petrol|vehicle|bhada|freight|auto|trolley|tractor|gaadi)\b/i.test(allText) ||
-        /\bcaption:\s*(t|transport)\b/i.test(allText)
-      ) {
-        category = 'transport';
-      }
-      // 3. Service & Utility keywords
-      else if (
-        /\b(service|rent|repair|maintenance|electricity|generator|chai|khana)\b/i.test(allText)
-      ) {
-        category = 'service';
-      }
-      // 4. Default is Material & Hardware (all supplier, cement, steel, sand, hardware, general material shops)
-      else {
-        category = 'material';
-      }
+      const [keyName, keyCat] = key.split('::');
+      const displayName = extractRealVendorName(latest) || keyName;
+      const category = (keyCat as VendorSummary['category']) || detectPaymentVendorCategory(latest, displayName);
 
       // Group by site
       const siteGroup: Record<string, { amount: number; count: number }> = {};
@@ -163,8 +159,8 @@ export class VendorsService {
         count: data.count,
       }));
 
-      // Create URL-safe ID
-      const safeId = encodeURIComponent(displayName.toLowerCase().replace(/\s+/g, '-'));
+      // Create URL-safe ID containing category (e.g. rajkumar-thekedar, rajkumar-transport)
+      const safeId = encodeURIComponent(`${displayName.toLowerCase().replace(/\s+/g, '-')}-${category}`);
 
       return {
         id: safeId,
@@ -198,13 +194,16 @@ export class VendorsService {
    */
   public static async getVendorById(idOrName: string): Promise<VendorSummary | null> {
     const { vendors } = await this.getVendorsSummary();
-    const decoded = decodeURIComponent(idOrName).toLowerCase().replace(/-/g, ' ').trim();
+    const clean = decodeURIComponent(idOrName).toLowerCase().trim();
 
     return (
       vendors.find(
         (v) =>
           v.id === idOrName ||
-          v.name.toLowerCase().trim() === decoded ||
+          v.id.toLowerCase() === clean ||
+          encodeURIComponent(v.id) === idOrName ||
+          v.name.toLowerCase().trim() === clean ||
+          encodeURIComponent(`${v.name.toLowerCase().replace(/\s+/g, '-')}-${v.category}`) === idOrName ||
           encodeURIComponent(v.name.toLowerCase().replace(/\s+/g, '-')) === idOrName
       ) || null
     );

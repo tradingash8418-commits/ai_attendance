@@ -584,17 +584,29 @@ export default function PaymentsPage() {
     }
     vName = vName || 'Vendor / Expense';
 
-    if (!vendorMap.has(vName)) {
-      vendorMap.set(vName, {
+    const text = [vName, p.notes || '', p.rawOcrText || ''].join(' ').toLowerCase();
+    let cat = 'material';
+    if (/\b(thekedar|contractor|subcontractor|fabricator|plumber|carpenter|mason|mistri|pop|civil)\b/i.test(text)) {
+      cat = 'thekedar';
+    } else if (/\b(transport|tempo|truck|dumper|driver|diesel|petrol|vehicle|bhada|freight|auto|trolley|tractor|gaadi)\b/i.test(text) || /\bcaption:\s*(t|transport)\b/i.test(text)) {
+      cat = 'transport';
+    } else if (/\b(service|rent|repair|maintenance|electricity|generator|chai|khana)\b/i.test(text)) {
+      cat = 'service';
+    }
+
+    const groupKey = `${vName.toUpperCase()}::${cat}`;
+
+    if (!vendorMap.has(groupKey)) {
+      vendorMap.set(groupKey, {
         vendorName: vName,
         totalPaid: 0,
         billsCount: 0,
         latestDate: p.paymentDate,
-        category: p.category || 'vendor',
+        category: cat,
         payments: [],
       });
     }
-    const item = vendorMap.get(vName)!;
+    const item = vendorMap.get(groupKey)!;
     item.totalPaid += p.amount;
     item.billsCount += 1;
     item.payments.push(p);
@@ -1381,11 +1393,12 @@ export default function PaymentsPage() {
                   ) : (
                     vendorList.map((v) => {
                       const latestPayment = v.payments[0];
+                      const vendorSlug = encodeURIComponent(`${v.vendorName.toLowerCase().replace(/\s+/g, '-')}-${v.category}`);
                       return (
-                        <tr key={v.vendorName} className="hover:bg-slate-50/80 transition-colors">
+                        <tr key={`${v.vendorName}-${v.category}`} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4">
                             <Link
-                              href={`/vendors/${encodeURIComponent(v.vendorName.toLowerCase().replace(/\s+/g, '-'))}`}
+                              href={`/vendors/${vendorSlug}`}
                               className="font-bold text-slate-900 hover:text-amber-700 uppercase flex items-center gap-2 group transition-colors"
                             >
                               <Building2 className="w-4 h-4 text-amber-600 shrink-0 group-hover:scale-110 transition-transform" />
@@ -1414,7 +1427,7 @@ export default function PaymentsPage() {
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <Link
-                                href={`/vendors/${encodeURIComponent(v.vendorName.toLowerCase().replace(/\s+/g, '-'))}`}
+                                href={`/vendors/${vendorSlug}`}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 transition-colors shadow-2xs"
                                 title="View Vendor Profile & Dossier"
                               >
