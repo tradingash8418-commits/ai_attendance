@@ -95,6 +95,19 @@ export default function VendorsPage() {
     }
   };
 
+  const materialCount = useMemo(
+    () => vendors.filter((v) => v.category === 'material' || v.category === 'general').length,
+    [vendors]
+  );
+  const thekedarCount = useMemo(
+    () => vendors.filter((v) => v.category === 'thekedar').length,
+    [vendors]
+  );
+  const transportCount = useMemo(
+    () => vendors.filter((v) => v.category === 'transport').length,
+    [vendors]
+  );
+
   const filteredVendors = useMemo(() => {
     return vendors.filter((v) => {
       const term = searchTerm.toLowerCase();
@@ -105,8 +118,14 @@ export default function VendorsPage() {
 
       if (!matchesSearch) return false;
 
-      if (categoryFilter !== 'all') {
-        return v.category === categoryFilter;
+      if (categoryFilter === 'material') {
+        return v.category === 'material' || v.category === 'general';
+      }
+      if (categoryFilter === 'thekedar') {
+        return v.category === 'thekedar';
+      }
+      if (categoryFilter === 'transport') {
+        return v.category === 'transport';
       }
       return true;
     });
@@ -201,7 +220,7 @@ export default function VendorsPage() {
               categoryFilter === 'material' ? 'bg-white text-amber-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
             }`}
           >
-            Material & Hardware
+            Material & Hardware ({materialCount})
           </button>
           <button
             onClick={() => setCategoryFilter('thekedar')}
@@ -209,7 +228,7 @@ export default function VendorsPage() {
               categoryFilter === 'thekedar' ? 'bg-white text-amber-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
             }`}
           >
-            Subcontractors / Thekedar
+            Subcontractors / Thekedar ({thekedarCount})
           </button>
           <button
             onClick={() => setCategoryFilter('transport')}
@@ -217,7 +236,7 @@ export default function VendorsPage() {
               categoryFilter === 'transport' ? 'bg-white text-amber-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
             }`}
           >
-            Transport & Vehicles
+            Transport & Vehicles ({transportCount})
           </button>
         </div>
 

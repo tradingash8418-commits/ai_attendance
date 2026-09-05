@@ -78,18 +78,39 @@ export class VendorsService {
       const latest = payments[0];
       const displayName = latest.paidTo || key;
 
-      // Classify vendor category based on name keywords
-      const lower = displayName.toLowerCase();
-      let category: 'material' | 'thekedar' | 'transport' | 'service' | 'general' = 'general';
+      // Collect all contextual text across all payments for this vendor:
+      // (displayName, payment notes, WhatsApp captions, raw OCR receipt text)
+      const allText = [
+        displayName,
+        ...payments.map((p) => `${p.notes || ''} ${p.rawOcrText || ''}`),
+      ]
+        .join(' ')
+        .toLowerCase();
 
-      if (lower.includes('cement') || lower.includes('steel') || lower.includes('sand') || lower.includes('ret') || lower.includes('hardware') || lower.includes('trader') || lower.includes('supplier') || lower.includes('paint') || lower.includes('electric') || lower.includes('shop') || lower.includes('store')) {
-        category = 'material';
-      } else if (lower.includes('thekedar') || lower.includes('contractor') || lower.includes('fabricator') || lower.includes('plumber') || lower.includes('carpenter')) {
+      let category: 'material' | 'thekedar' | 'transport' | 'service' | 'general' = 'material';
+
+      // 1. Subcontractors / Thekedar keywords
+      if (
+        /\b(thekedar|contractor|subcontractor|fabricator|plumber|carpenter|mason|mistri|pop|civil)\b/i.test(allText)
+      ) {
         category = 'thekedar';
-      } else if (lower.includes('transport') || lower.includes('tempo') || lower.includes('truck') || lower.includes('dumper') || lower.includes('driver')) {
+      }
+      // 2. Transport & Vehicles keywords
+      else if (
+        /\b(transport|tempo|truck|dumper|driver|diesel|petrol|vehicle|bhada|freight|auto|trolley|tractor|gaadi)\b/i.test(allText) ||
+        /\bcaption:\s*(t|transport)\b/i.test(allText)
+      ) {
         category = 'transport';
-      } else if (lower.includes('diesel') || lower.includes('petrol') || lower.includes('rent') || lower.includes('repair')) {
+      }
+      // 3. Service & Utility keywords
+      else if (
+        /\b(service|rent|repair|maintenance|electricity|generator|chai|khana)\b/i.test(allText)
+      ) {
         category = 'service';
+      }
+      // 4. Default is Material & Hardware (all supplier, cement, steel, sand, hardware, general material shops)
+      else {
+        category = 'material';
       }
 
       // Group by site
