@@ -35,7 +35,6 @@ import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
 import type { Worker, WorkerPhoto } from '@/types/worker';
 import type { AttendanceRecord } from '@/types/attendance';
 import { compressImageFile } from '@/lib/image-compress';
-import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -44,9 +43,6 @@ export default function WorkersPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [workerFilterTab, setWorkerFilterTab] = useState<'all' | 'present_today' | 'enrolled'>('all');
-
-  // Selected Worker for 360 Profile Dossier
-  const [selectedWorkerForProfile, setSelectedWorkerForProfile] = useState<Worker | null>(null);
   
   // Add Worker Form State
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -539,15 +535,15 @@ export default function WorkersPage() {
                   </div>
                 )}
 
-                {/* Card Primary Action: 360 Degree Profile & Khata */}
+                {/* Card Primary Action: View Details */}
                 <div className="space-y-2 pt-1 border-t border-slate-100 text-xs font-semibold">
-                  <button
-                    onClick={() => setSelectedWorkerForProfile(worker)}
+                  <Link
+                    href={`/workers/${worker.id}`}
                     className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold shadow transition-all active:scale-95"
                   >
                     <Eye className="w-4 h-4" />
-                    <span>View 360° Profile & Khata</span>
-                  </button>
+                    <span>View Details</span>
+                  </Link>
 
                   <div className="flex items-center gap-2">
                     <button
@@ -571,15 +567,6 @@ export default function WorkersPage() {
             );
           })}
         </div>
-      )}
-
-      {/* Worker 360° Profile Dossier Modal */}
-      {selectedWorkerForProfile && (
-        <WorkerProfileDossierModal
-          worker={selectedWorkerForProfile}
-          onClose={() => setSelectedWorkerForProfile(null)}
-          onWorkerUpdated={loadWorkers}
-        />
       )}
 
       {/* Add / Enroll Worker Modal */}

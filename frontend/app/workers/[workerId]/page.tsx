@@ -8,7 +8,7 @@ import { WorkersService } from '@/services/workers.service';
 import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
 import type { Worker } from '@/types/worker';
 
-export default function WorkerAttendancePage() {
+export default function WorkerDetailPage() {
   const params = useParams();
   const workerId = params?.workerId as string;
 
@@ -33,15 +33,15 @@ export default function WorkerAttendancePage() {
   }, [loadWorker]);
 
   return (
-    <div className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <Link
           href="/workers"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-extrabold text-slate-700 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs font-extrabold text-slate-700 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Workers Directory</span>
+          <span>← Back to Workers Directory</span>
         </Link>
       </div>
 
@@ -75,4 +75,3 @@ export default function WorkerAttendancePage() {
     </div>
   );
 }
-
