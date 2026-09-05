@@ -360,11 +360,22 @@ export class PaymentOcrService {
    */
   public static async extractPaymentFromImage(
     imageUrl: string,
-    imageBuffer?: Buffer
+    imageBuffer?: Buffer,
+    mimeType: string = 'image/jpeg'
   ): Promise<ExtractedPaymentData> {
     const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
 
-    // Strategy 1: Multimodal AI Vision (Gemini 1.5 Flash) for 100% Zero-Error Understanding
+    // Detect actual MIME type (Supports Image or PDF)
+    let cleanMimeType = mimeType || 'image/jpeg';
+    if (imageBuffer && imageBuffer.length > 4) {
+      if (imageBuffer.slice(0, 4).toString() === '%PDF') {
+        cleanMimeType = 'application/pdf';
+      } else if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+        cleanMimeType = 'image/png';
+      }
+    }
+
+    // Strategy 1: Multimodal AI Vision (Gemini 1.5 Flash) for 100% Zero-Error Understanding of Images & PDFs
     if (geminiKey && imageBuffer) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
@@ -378,21 +389,29 @@ export class PaymentOcrService {
                 parts: [
                   {
                     text: `You are an expert financial AI receipt auditor for Indian businesses and construction contractors.
-Analyze this payment transaction screenshot (Google Pay, PhonePe, Paytm, BHIM UPI, Amazon Pay, or Net Banking).
+Analyze this payment transaction screenshot OR bank transfer PDF receipt (Google Pay, PhonePe, Paytm, BHIM UPI, Net Banking, Axis/HDFC/SBI/Kotak/ICICI Payment Complete PDF).
+
+Key extraction instructions:
+1. "receiver_name": Look for "SENT TO", "Paid To", "Beneficiary Name", or account owner name (e.g. "Dinesh Bhai Kotak Bank", "ANSHU PAL", "LALIT KUMAR JAIN", "MOHD JAKIR").
+2. "amount": Look for the transaction AMOUNT (in the same row as beneficiary or under amount header, e.g. "₹ 5,00,000.00" -> 500000, "₹50,000" -> 50000, "₹2,000" -> 2000). Extract as a pure positive number.
+3. "payment_method": "bank_transfer" | "phonepe" | "gpay" | "paytm" | "upi". (Use "bank_transfer" for NetBanking / IMPS / NEFT PDF receipts).
+4. "upi_id": Extract the RECEIPT NO, RRN, UTR, UPI ID, or Beneficiary Account Number (e.g. "5RJK43LM0064", "624709173441", "XXXX-0345", or "user@okhdfcbank").
+5. "timestamp": Extract the transaction date & time (e.g. "04/09/2026" or "2 September 2026, 9:22 am").
+
 Extract the transaction details accurately in strict JSON format:
 {
   "is_payment": true,
-  "amount": number (exact amount paid in INR without currency symbol, e.g. 2000, 7400, 45000),
-  "receiver_name": string (the recipient / payee person or shop or company name, e.g. "ANSHU PAL", "LALIT KUMAR JAIN", "MOHD JAKIR"),
-  "payment_method": "phonepe" | "gpay" | "paytm" | "upi" | "bank_transfer",
-  "upi_id": string or null (recipient's UPI ID / VPA or phone number, e.g. "anshu@okaxis"),
-  "timestamp": string or null (date and time of transaction as shown on receipt, e.g. "1 September 2024, 05:43 PM")
+  "amount": number (exact amount paid in INR without currency symbol or commas, e.g. 500000, 50000, 2000),
+  "receiver_name": string (recipient / beneficiary person or company name),
+  "payment_method": "bank_transfer" | "phonepe" | "gpay" | "paytm" | "upi",
+  "upi_id": string or null (Receipt No, RRN, UTR, UPI ID, or Account Ref),
+  "timestamp": string or null (date and time of transaction)
 }
 Do NOT include currency symbols or commas in the amount number. Return ONLY the valid JSON object.`
                   },
                   {
                     inline_data: {
-                      mime_type: 'image/jpeg',
+                      mime_type: cleanMimeType,
                       data: base64Clean
                     }
                   }
@@ -410,14 +429,14 @@ Do NOT include currency symbols or commas in the amount number. Return ONLY the 
           const jsonText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
           if (jsonText) {
             const parsed = JSON.parse(jsonText);
-            console.log('[PaymentOcrService] Gemini AI Vision extracted:', parsed);
+            console.log('[PaymentOcrService] Gemini AI Vision extracted from receipt:', parsed);
             return {
               isPaymentScreenshot: Boolean(parsed.is_payment),
               amount: parsed.amount ? parseFloat(parsed.amount) : null,
               receiverName: parsed.receiver_name || null,
               upiId: parsed.upi_id || null,
               timestampStr: parsed.timestamp || null,
-              paymentMethod: (parsed.payment_method || 'upi') as PaymentMethod,
+              paymentMethod: (parsed.payment_method || 'bank_transfer') as PaymentMethod,
               confidence: 0.99,
               rawText: jsonText
             };
@@ -511,16 +530,23 @@ Do NOT include currency symbols or commas in the amount number. Return ONLY the 
   }
 
   /**
-   * Client-side OCR extract from base64 string
+   * Client-side OCR extract from base64 string (Supports Images & PDF documents)
    */
-  public static async extractPaymentFromBase64(base64Data: string): Promise<ExtractedPaymentData> {
+  public static async extractPaymentFromBase64(base64Data: string, mimeType = 'image/jpeg'): Promise<ExtractedPaymentData> {
+    let cleanMime = mimeType;
+    if (base64Data.startsWith('data:application/pdf')) {
+      cleanMime = 'application/pdf';
+    } else if (base64Data.startsWith('data:image/png')) {
+      cleanMime = 'image/png';
+    }
+
     // If running in browser, call secure backend API route
     if (typeof window !== 'undefined') {
       try {
         const response = await fetch('/api/payments/ocr', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64Data }),
+          body: JSON.stringify({ imageBase64: base64Data, mimeType: cleanMime }),
         });
         if (response.ok) {
           const data = await response.json();
@@ -533,7 +559,7 @@ Do NOT include currency symbols or commas in the amount number. Return ONLY the 
 
     const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
     const buf = Buffer.from(cleanBase64 || '', 'base64');
-    return this.extractPaymentFromImage('', buf);
+    return this.extractPaymentFromImage('', buf, cleanMime);
   }
 
   /**

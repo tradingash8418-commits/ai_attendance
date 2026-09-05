@@ -136,21 +136,21 @@ export class WebhookProcessorServer {
         }
       }
 
-      // Ignore any other non-image text messages
-      if (messageType !== 'image') {
-        console.log(`[WebhookProcessor] Non-image message type received: ${messageType}`);
+      // Ignore any message that is not an image or a document (PDF)
+      if (messageType !== 'image' && messageType !== 'document') {
+        console.log(`[WebhookProcessor] Non-image/document message type received: ${messageType}`);
         await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored');
-        return { status: 'ignored', reason: 'Non-image message type', messageId: rawMessageId };
+        return { status: 'ignored', reason: 'Non-image/document message type', messageId: rawMessageId };
       }
 
       // =====================================================================
-      // PATH 2: AI PAYMENT SCREENSHOT OCR & KHATA LEDGER (Zero-Selfie Workflow)
-      // All images sent to WhatsApp are processed as payment receipts / bills
+      // PATH 2: AI PAYMENT SCREENSHOT & PDF RECEIPT OCR / KHATA LEDGER
+      // All images and PDF payment receipts sent to WhatsApp are processed as payment receipts / bills
       // =====================================================================
 
-      // Download image buffer from Meta Cloud API
+      // Download image/document buffer from Meta Cloud API
       let imageBuffer: Buffer | null = null;
-      let contentType = 'image/jpeg';
+      let contentType = messageObj.document?.mime_type || (messageType === 'document' ? 'application/pdf' : 'image/jpeg');
       let photoUrl = '';
 
       if (mediaId) {
@@ -158,13 +158,13 @@ export class WebhookProcessorServer {
           const metadata = await MetaWhatsAppServer.getMediaMetadata(mediaId);
           const downloaded = await MetaWhatsAppServer.downloadMediaBuffer(metadata.url);
           imageBuffer = downloaded.buffer;
-          contentType = downloaded.contentType;
+          contentType = downloaded.contentType || contentType;
         } catch (mediaErr: any) {
           console.error('[WebhookProcessor] Failed to download payment receipt media:', mediaErr);
           await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
           await WhatsAppService.sendMessage(
             normalizedSender,
-            `⚠️ Could not download your payment screenshot from WhatsApp. Please try sending it again.`
+            `⚠️ Could not download your payment receipt from WhatsApp. Please try sending it again.`
           );
           return { status: 'failed', reason: 'Media download error', messageId: rawMessageId };
         }
@@ -172,10 +172,10 @@ export class WebhookProcessorServer {
 
       if (!imageBuffer) {
         await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
-        return { status: 'failed', reason: 'No image buffer', messageId: rawMessageId };
+        return { status: 'failed', reason: 'No image/document buffer', messageId: rawMessageId };
       }
 
-      // Save receipt image to Supabase storage
+      // Save receipt image or PDF to Supabase storage
       try {
         photoUrl = await ImageStorageServer.saveAttendancePhoto({
           date: today,
@@ -185,11 +185,11 @@ export class WebhookProcessorServer {
           mimeType: contentType,
         });
       } catch (storageErr) {
-        console.warn('[WebhookProcessor] Error saving payment receipt photo to Supabase:', storageErr);
+        console.warn('[WebhookProcessor] Error saving payment receipt to Supabase:', storageErr);
       }
 
-      // Extract Payment Information using OCR pipeline
-      const paymentData = await PaymentOcrService.extractPaymentFromImage('', imageBuffer);
+      // Extract Payment Information using multimodal AI / OCR pipeline (Supports Images & PDFs)
+      const paymentData = await PaymentOcrService.extractPaymentFromImage('', imageBuffer, contentType);
 
       console.log(
         `[WebhookProcessor] Payment OCR Result: Amount=${paymentData.amount}, Receiver=${paymentData.receiverName}, ` +

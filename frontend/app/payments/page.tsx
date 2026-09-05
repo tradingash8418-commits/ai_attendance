@@ -19,6 +19,7 @@ import {
   Eye,
   X,
   Truck,
+  FileText,
 } from 'lucide-react';
 import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
@@ -228,11 +229,27 @@ export default function PaymentsPage() {
     setOcrSaveSuccess(null);
 
     try {
-      const compressedBase64 = await compressImageClient(file, 1280, 0.85);
-      setOcrImagePreview(compressedBase64);
+      let payloadBase64 = '';
+      let isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
-      // Perform OCR extraction
-      const extracted = await PaymentOcrService.extractPaymentFromBase64(compressedBase64);
+      if (isPdf) {
+        payloadBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      } else {
+        payloadBase64 = await compressImageClient(file, 1280, 0.85);
+      }
+
+      setOcrImagePreview(payloadBase64);
+
+      // Perform OCR / Multimodal AI extraction (Supports both Images & PDF receipts)
+      const extracted = await PaymentOcrService.extractPaymentFromBase64(
+        payloadBase64,
+        isPdf ? 'application/pdf' : 'image/jpeg'
+      );
       setOcrResult(extracted);
       setOcrAmount(extracted.amount ? String(extracted.amount) : '');
       const rawName = extracted.receiverName || '';
@@ -251,7 +268,7 @@ export default function PaymentsPage() {
         setOcrCategory('vendor');
       }
     } catch (err) {
-      console.error('Screenshot OCR error:', err);
+      console.error('Screenshot / PDF OCR error:', err);
     } finally {
       setOcrAnalyzing(false);
     }
@@ -870,39 +887,49 @@ export default function PaymentsPage() {
           {/* Left: Upload Area */}
           <div className="razorpay-card p-6 space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Upload Google Pay / UPI Screenshot</h3>
+              <h3 className="text-sm font-bold text-slate-900">Upload Payment Screenshot or PDF Receipt</h3>
               <p className="text-xs text-slate-500">
-                AI extracts Amount (₹), Paid-To Name, UPI ID, and Date automatically.
+                AI extracts Amount (₹), Beneficiary/Receiver Name, Reference/RRN, and Date automatically.
               </p>
             </div>
 
             <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl cursor-pointer bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center">
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.pdf"
                 onChange={handleScreenshotUpload}
                 className="hidden"
               />
               <div className="p-3 bg-blue-50 text-blue-600 rounded-full mb-2">
-                <FileImage className="w-6 h-6" />
+                <FileText className="w-6 h-6" />
               </div>
               <span className="text-xs font-bold text-slate-700">
-                Click to select or drop payment screenshot
+                Click to select or drop payment screenshot / PDF
               </span>
               <span className="text-[11px] text-slate-400 mt-1">
-                Supports Google Pay, PhonePe, Paytm, BHIM UPI images (PNG, JPG)
+                Supports UPI (GPay, PhonePe, Paytm) & Bank Transfer PDF receipts
               </span>
             </label>
 
             {ocrImagePreview && (
               <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-700">Uploaded Screenshot:</span>
-                <div className="relative max-h-64 overflow-hidden rounded-xl border border-slate-200 bg-black/5 flex items-center justify-center">
-                  <img
-                    src={ocrImagePreview}
-                    alt="Payment receipt preview"
-                    className="max-h-64 object-contain"
-                  />
+                <span className="text-xs font-bold text-slate-700">Uploaded Receipt Preview:</span>
+                <div className="relative max-h-64 overflow-hidden rounded-xl border border-slate-200 bg-black/5 flex items-center justify-center p-2">
+                  {ocrImagePreview.startsWith('data:application/pdf') ? (
+                    <div className="p-6 text-center space-y-2">
+                      <FileText className="w-12 h-12 text-rose-500 mx-auto" />
+                      <div className="text-xs font-bold text-slate-800">Bank Transfer PDF Document</div>
+                      <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-extrabold uppercase">
+                        PDF Receipt
+                      </span>
+                    </div>
+                  ) : (
+                    <img
+                      src={ocrImagePreview}
+                      alt="Payment receipt preview"
+                      className="max-h-64 object-contain"
+                    />
+                  )}
                 </div>
               </div>
             )}
