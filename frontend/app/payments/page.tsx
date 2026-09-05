@@ -328,8 +328,14 @@ export default function PaymentsPage() {
     return s.workerName.toLowerCase().includes(q) || (s.phone && s.phone.includes(q)) || (s.workerCode && s.workerCode.toLowerCase().includes(q));
   });
 
-  // 2. Vendor Summaries (Grouped by Vendor/Supplier Name)
-  const vendorPayments = payments.filter((p) => p.category === 'vendor' || p.category === 'material' || p.category === 'equipment' || p.category === 'other' || !p.workerId);
+  // 2. Vendor Summaries (Grouped by Vendor/Supplier Name - STRICTLY non-labour categories)
+  const vendorPayments = payments.filter(
+    (p) =>
+      p.category === 'vendor' ||
+      p.category === 'material' ||
+      p.category === 'equipment' ||
+      p.category === 'other'
+  );
   const totalVendorExpense = vendorPayments.reduce((sum, p) => sum + p.amount, 0);
 
   const vendorMap = new Map<string, VendorSummary>();
