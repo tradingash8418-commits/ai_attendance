@@ -488,16 +488,13 @@ Do NOT include currency symbols or commas in the amount number. Return ONLY the 
                 confidence: 0.99,
                 rawText: jsonText
               };
-            }
-          } else if (res.status === 404) {
-            console.warn(`[PaymentOcrService] Gemini model ${modelName} returned 404, trying next candidate model...`);
-            continue;
           } else {
             const errBody = await res.text();
-            console.error(`[PaymentOcrService] Gemini (${modelName}) API error response (Status ${res.status}):`, errBody);
+            console.warn(`[PaymentOcrService] Gemini model ${modelName} returned status ${res.status}: ${errBody.slice(0, 120)}, trying next candidate model...`);
+            continue;
           }
         } catch (geminiErr) {
-          console.warn(`[PaymentOcrService] Gemini Vision (${modelName}) error:`, geminiErr);
+          console.warn(`[PaymentOcrService] Gemini Vision (${modelName}) error, trying next:`, geminiErr);
         }
       }
     }

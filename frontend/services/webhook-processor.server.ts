@@ -34,8 +34,14 @@ export class WebhookProcessorServer {
       const rawSenderNumber = messageObj.from || value?.contacts?.[0]?.wa_id || '';
       const normalizedSender = normalizeWhatsAppNumber(rawSenderNumber);
       const messageType = messageObj.type || 'unknown';
-      const mediaId = messageObj.image?.id;
-      const textBody = (messageObj.text?.body || messageObj.image?.caption || '').trim();
+      const mediaId = messageObj.document?.id || messageObj.image?.id;
+      const textBody = (
+        messageObj.text?.body ||
+        messageObj.image?.caption ||
+        messageObj.document?.caption ||
+        messageObj.document?.filename ||
+        ''
+      ).trim();
 
       // Extract authoritative WhatsApp message timestamp (in milliseconds)
       const rawTimestampSeconds = messageObj.timestamp ? parseInt(messageObj.timestamp, 10) : 0;
