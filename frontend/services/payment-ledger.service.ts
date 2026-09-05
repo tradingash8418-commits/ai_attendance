@@ -266,6 +266,8 @@ export class PaymentLedgerService {
       workerName?: string;
       workerCode?: string;
       paidTo?: string;
+      amount?: number;
+      notes?: string;
     }
   ): Promise<void> {
     const docRef = doc(db, COLLECTION_NAME, id);
@@ -277,6 +279,8 @@ export class PaymentLedgerService {
     if (data.workerName !== undefined) updatePayload.workerName = data.workerName;
     if (data.workerCode !== undefined) updatePayload.workerCode = data.workerCode;
     if (data.paidTo !== undefined) updatePayload.paidTo = data.paidTo;
+    if (data.amount !== undefined) updatePayload.amount = data.amount;
+    if (data.notes !== undefined) updatePayload.notes = data.notes;
 
     await updateDoc(docRef, updatePayload);
   }

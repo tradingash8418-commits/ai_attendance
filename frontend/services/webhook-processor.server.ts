@@ -149,9 +149,109 @@ export class WebhookProcessorServer {
 
       // =====================================================================
       // PATH 1B: FOLLOW-UP CAPTION / REMARK FOR RECENT PDF / IMAGE RECEIPT
-      // e.g. User sent PDF receipt first, and immediately typed 'abc, w' or 'abc, v' or 'w' as a text message
+      // e.g. User sent PDF receipt first, and immediately typed 'abc, w' or multi-worker split like 'pintu: 2000 durgesh: 3000'
       // =====================================================================
       if (messageType === 'text') {
+        const splitItems = parseBatchWorkerSplitCaption(textBody);
+
+        // Subcase 1B-1: Multi-Worker Batch Advance Split on Recent Receipt
+        if (splitItems.length > 0) {
+          const todayPayments = await PaymentLedgerService.getPayments({ date: today });
+          const recentPayment = todayPayments.find((p) => {
+            return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
+          });
+
+          if (recentPayment) {
+            const allWorkers = await WorkersService.getWorkers();
+            const ocrBeneficiary =
+              recentPayment.paidTo && !recentPayment.paidTo.startsWith('Worker')
+                ? recentPayment.paidTo
+                : '';
+            const receiptPhotoUrl = recentPayment.receiptPhotoUrl || '';
+            const origAmount = recentPayment.amount;
+
+            // 1. Update the original payment record with the 1st worker's advance
+            const firstItem = splitItems[0];
+            const firstMatch = findBestWorkerMatch(allWorkers, firstItem.workerName);
+            const firstWorkerName = firstMatch ? getWorkerDisplayName(firstMatch) : firstItem.workerName;
+            const firstWorkerId = firstMatch ? firstMatch.id : '';
+            const firstPaidTo = ocrBeneficiary || firstWorkerName;
+
+            await PaymentLedgerService.updatePaymentCategory(recentPayment.id, {
+              category: 'advance',
+              workerId: firstWorkerId,
+              workerName: firstWorkerName,
+              workerCode: firstMatch?.workerCode || '',
+              paidTo: firstPaidTo,
+              amount: firstItem.amount,
+              notes: `Split Advance (Receipt Total: ₹${origAmount}) | ${textBody}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`,
+            });
+
+            // 2. Insert new payment records for remaining workers (2nd, 3rd, etc.)
+            for (let i = 1; i < splitItems.length; i++) {
+              const item = splitItems[i];
+              const match = findBestWorkerMatch(allWorkers, item.workerName);
+              const wName = match ? getWorkerDisplayName(match) : item.workerName;
+              const wId = match ? match.id : '';
+              const paidTo = ocrBeneficiary || wName;
+
+              await PaymentLedgerService.recordPayment({
+                paidTo: paidTo,
+                workerId: wId,
+                workerName: wName,
+                workerCode: match?.workerCode || undefined,
+                workerPhone: match?.phone || undefined,
+                amount: item.amount,
+                category: 'advance',
+                paymentMethod: recentPayment.paymentMethod || 'gpay',
+                upiId: recentPayment.upiId || '',
+                paymentDate: recentPayment.paymentDate || today,
+                paymentTime: recentPayment.paymentTime || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+                receiptPhotoUrl: receiptPhotoUrl,
+                notes: `Split Advance (Receipt Total: ₹${origAmount}) | ${textBody}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`,
+                recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
+                rawOcrText: recentPayment.rawOcrText || '',
+              });
+            }
+
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+
+            let confirmationMsg =
+              `🔄 *Recent Payment Split & Recorded in Worker Khata!* 👥\n\n`;
+
+            if (ocrBeneficiary) {
+              confirmationMsg += `🏦 *A/C Beneficiary:* ${ocrBeneficiary}\n`;
+            }
+
+            confirmationMsg +=
+              `🧾 *Original Receipt Total:* ₹${origAmount.toFixed(2)}\n` +
+              `📒 *Khata Category:* Worker Advance / Kharcha (Strictly Worker)\n\n` +
+              `*Distributed Advances:*\n`;
+
+            let splitTotal = 0;
+            for (const item of splitItems) {
+              const wMatch = findBestWorkerMatch(allWorkers, item.workerName);
+              const wName = wMatch ? getWorkerDisplayName(wMatch) : item.workerName;
+              confirmationMsg += `▫️ *${wName}:* ₹${item.amount.toLocaleString('en-IN')}\n`;
+              splitTotal += item.amount;
+            }
+
+            confirmationMsg +=
+              `\n💰 *Total Distributed:* ₹${splitTotal.toLocaleString('en-IN')}\n` +
+              `📅 *Date:* ${recentPayment.paymentDate}\n\n` +
+              `Sabhi workers ke individual khate mein advance update ho gaya hai! 📊`;
+
+            await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
+
+            return {
+              status: 'completed',
+              reason: `Split recent payment ${recentPayment.id} into ${splitItems.length} worker advances`,
+              messageId: rawMessageId,
+            };
+          }
+        }
+
+        // Subcase 1B-2: Single Caption / Remark on Recent Receipt
         const captionInfo = parsePaymentCaption(textBody);
         if (captionInfo.explicitCategory || captionInfo.workerOrPayeeRemark) {
           const todayPayments = await PaymentLedgerService.getPayments({ date: today });
@@ -294,11 +394,99 @@ export class WebhookProcessorServer {
         `Method=${paymentData.paymentMethod}, UPI=${paymentData.upiId}`
       );
 
-      // 1. Smart Caption Parsing: Extracts category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
+      const allWorkers = await WorkersService.getWorkers();
+      const finalAmount = paymentData.amount || 0;
+      const ocrBeneficiary = paymentData.receiverName || '';
+
+      // Check if caption contains multi-worker split instructions (e.g. 'pintu: 2000' 'durgesh: 3000' 'mubarak: 6000')
+      const batchSplitItems = parseBatchWorkerSplitCaption(textBody || '');
+
+      if (batchSplitItems.length > 0) {
+        console.log(`[WebhookProcessor] Multi-worker batch split detected in caption:`, batchSplitItems);
+
+        // Record each worker's split advance individually in Firestore
+        for (const item of batchSplitItems) {
+          const matchedWorker = findBestWorkerMatch(allWorkers, item.workerName);
+          const resolvedWorkerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : item.workerName;
+          const resolvedWorkerId = matchedWorker ? matchedWorker.id : '';
+          const finalPaidTo = ocrBeneficiary || resolvedWorkerName;
+
+          const splitNotes = `Split Advance (Receipt Total: ₹${finalAmount})${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}${textBody ? ` | Caption: ${textBody}` : ''}`;
+
+          await PaymentLedgerService.recordPayment({
+            paidTo: finalPaidTo,
+            workerId: resolvedWorkerId,
+            workerName: resolvedWorkerName,
+            workerCode: matchedWorker?.workerCode || undefined,
+            workerPhone: matchedWorker?.phone || undefined,
+            amount: item.amount,
+            category: 'advance',
+            paymentMethod: paymentData.paymentMethod || 'gpay',
+            upiId: paymentData.upiId || '',
+            paymentDate: today,
+            paymentTime: paymentData.timestampStr || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+            receiptPhotoUrl: photoUrl,
+            notes: splitNotes,
+            recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
+            rawOcrText: paymentData.rawText,
+          });
+        }
+
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+
+        // Send itemized WhatsApp confirmation for multi-worker split
+        let dateDisplay = today;
+        if (paymentData.timestampStr) {
+          if (paymentData.timestampStr.match(/202[4-9]/)) {
+            dateDisplay = paymentData.timestampStr;
+          } else {
+            dateDisplay = `${today} (${paymentData.timestampStr})`;
+          }
+        }
+
+        let confirmationMsg =
+          `✅ *Multi-Worker Split Payment Recorded!* 👥\n\n`;
+
+        if (ocrBeneficiary) {
+          confirmationMsg += `🏦 *A/C Beneficiary:* ${ocrBeneficiary}\n`;
+        }
+
+        if (finalAmount > 0) {
+          confirmationMsg += `🧾 *Receipt Total:* ₹${finalAmount.toFixed(2)}\n`;
+        }
+
+        confirmationMsg +=
+          `📒 *Khata Category:* Worker Advance / Kharcha (Strictly Worker)\n\n` +
+          `*Distributed Advances:*\n`;
+
+        let splitTotal = 0;
+        for (const item of batchSplitItems) {
+          const wMatch = findBestWorkerMatch(allWorkers, item.workerName);
+          const wName = wMatch ? getWorkerDisplayName(wMatch) : item.workerName;
+          confirmationMsg += `▫️ *${wName}:* ₹${item.amount.toLocaleString('en-IN')}\n`;
+          splitTotal += item.amount;
+        }
+
+        confirmationMsg +=
+          `\n💰 *Total Distributed:* ₹${splitTotal.toLocaleString('en-IN')}\n` +
+          `💳 *Method / App:* ${paymentData.paymentMethod.toUpperCase()}\n` +
+          `📱 *UPI / Ref:* ${paymentData.upiId || 'Direct UPI'}\n` +
+          `📅 *Date:* ${dateDisplay}\n\n` +
+          `Sabhi workers ke individual khate mein advance credit/record ho chuka hai! 📊`;
+
+        await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
+
+        return {
+          status: 'completed',
+          reason: `Split receipt into ${batchSplitItems.length} worker advances totaling ₹${splitTotal}`,
+          messageId: rawMessageId,
+        };
+      }
+
+      // 1. Standard Single Caption Parsing: Extracts category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
       const { explicitCategory, workerOrPayeeRemark } = parsePaymentCaption(textBody || '');
 
       // Check if recipient matches an EXISTING registered worker in Firestore using Strict Tiered Matching
-      const allWorkers = await WorkersService.getWorkers();
       let matchedWorker: any = undefined;
 
       // Priority A: Match by explicit caption remark (e.g. 'mubarak, w' -> exactly matches 'mubarak')
@@ -554,5 +742,66 @@ export function findBestWorkerMatch(
   }
 
   return undefined;
+}
+
+export interface WorkerSplitItem {
+  workerName: string;
+  amount: number;
+}
+
+/**
+ * Parses multi-worker advance split captions like:
+ * - 'pintu: 2000' 'durgesh: 3000' 'mubarak: 6000'
+ * - pintu: 2000, durgesh: 3000, mubarak: 6000
+ * - pintu: 2000 durgesh: 3000 mubarak: 6000
+ * - pintu = 2000, durgesh = 3000
+ * - pintu - ₹2000, durgesh - ₹3000
+ * Strictly assigns each amount to the respective worker's Advance Khata.
+ */
+export function parseBatchWorkerSplitCaption(rawText: string): WorkerSplitItem[] {
+  if (!rawText || !rawText.trim()) return [];
+  const text = rawText.trim();
+
+  // Primary Regex: matches name followed by : or = or - and a numeric amount
+  // Allows optional surrounding quotes e.g. 'pintu: 2000' or "pintu": 2000 or pintu: 2000
+  const splitRegex = /(?:['"‘“])?([a-zA-Z\s._]+?)(?:['"’”])?\s*[:=-]\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)(?:\/-)?(?:['"’”])?/gi;
+
+  const results: WorkerSplitItem[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = splitRegex.exec(text)) !== null) {
+    const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
+    const rawAmt = match[2].replace(/,/g, '').trim();
+    const amount = parseFloat(rawAmt);
+
+    // Ensure valid name (not empty, not pure numbers) and positive amount
+    if (rawName.length > 0 && !isNaN(amount) && amount > 0) {
+      results.push({
+        workerName: rawName,
+        amount: amount,
+      });
+    }
+  }
+
+  // Fallback: If no colon/equal/dash was used, test space-separated name + number
+  // e.g. "'pintu 2000' 'durgesh 3000'" or "pintu 2000, durgesh 3000"
+  if (results.length === 0) {
+    const spaceRegex = /(?:['"‘“])?([a-zA-Z\s._]+?)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)(?:\/-)?(?:['"’”])?(?:,|$|\n)/gi;
+    while ((match = spaceRegex.exec(text)) !== null) {
+      const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
+      const rawAmt = match[2].replace(/,/g, '').trim();
+      const amount = parseFloat(rawAmt);
+
+      const reservedKeywords = ['checkin', 'vendor', 'advance', 'worker', 'total'];
+      if (rawName.length > 0 && !isNaN(amount) && amount > 0 && !reservedKeywords.includes(rawName.toLowerCase())) {
+        results.push({
+          workerName: rawName,
+          amount: amount,
+        });
+      }
+    }
+  }
+
+  return results;
 }
 

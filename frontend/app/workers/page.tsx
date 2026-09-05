@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Users,
@@ -19,18 +19,34 @@ import {
   Save,
   X,
   Smartphone,
+  Eye,
+  DollarSign,
+  TrendingUp,
+  Award,
+  Clock,
+  ShieldCheck,
 } from 'lucide-react';
 import { WorkersService } from '@/services/workers.service';
 import { WorkerPhotosService } from '@/services/workerPhotos.service';
 import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
-import { getWorkerDisplayName } from '@/lib/formatters';
+import { AttendanceService } from '@/services/attendance.service';
+import { PaymentLedgerService, WorkerKhataSummary } from '@/services/payment-ledger.service';
+import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
 import type { Worker, WorkerPhoto } from '@/types/worker';
+import type { AttendanceRecord } from '@/types/attendance';
 import { compressImageFile } from '@/lib/image-compress';
+import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([]);
+  const [khataSummaries, setKhataSummaries] = useState<WorkerKhataSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [workerFilterTab, setWorkerFilterTab] = useState<'all' | 'present_today' | 'enrolled'>('all');
+
+  // Selected Worker for 360 Profile Dossier
+  const [selectedWorkerForProfile, setSelectedWorkerForProfile] = useState<Worker | null>(null);
   
   // Add Worker Form State
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -62,17 +78,25 @@ export default function WorkersPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
   const [embeddingNotice, setEmbeddingNotice] = useState<string | null>(null);
 
+  const today = getTodayDateString();
+
   const loadWorkers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await WorkersService.getWorkers();
-      setWorkers(data);
+      const [workersData, todayAtt, khataData] = await Promise.all([
+        WorkersService.getWorkers(),
+        AttendanceService.getAttendanceRecords({ date: today }).catch(() => []),
+        PaymentLedgerService.getAllWorkersKhataSummary().catch(() => ({ summaries: [] })),
+      ]);
+      setWorkers(workersData);
+      setTodayRecords(todayAtt);
+      setKhataSummaries(khataData.summaries || []);
     } catch (err) {
       console.error('Failed to load workers:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [today]);
 
   useEffect(() => {
     loadWorkers();
@@ -246,24 +270,43 @@ export default function WorkersPage() {
     }
   };
 
-  const filteredWorkers = workers.filter((w) => {
-    const term = searchTerm.toLowerCase();
-    return (
-      w.name.toLowerCase().includes(term) ||
-      (w.workerCode && w.workerCode.toLowerCase().includes(term)) ||
-      (w.role && w.role.toLowerCase().includes(term))
-    );
-  });
+  const totalRegistered = workers.length;
+  const presentTodayWorkerIds = useMemo(() => new Set(todayRecords.map((r) => r.workerId)), [todayRecords]);
+  const presentTodayCount = presentTodayWorkerIds.size;
+  const totalHajriAll = useMemo(() => khataSummaries.reduce((sum, s) => sum + s.totalHajriEarned, 0), [khataSummaries]);
+  const totalAdvancesAll = useMemo(() => khataSummaries.reduce((sum, s) => sum + s.totalAdvancesPaid, 0), [khataSummaries]);
+
+  const filteredWorkers = useMemo(() => {
+    return workers.filter((w) => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch =
+        w.name.toLowerCase().includes(term) ||
+        (w.workerCode && w.workerCode.toLowerCase().includes(term)) ||
+        (w.role && w.role.toLowerCase().includes(term)) ||
+        (w.phone && w.phone.includes(term));
+
+      if (!matchesSearch) return false;
+
+      if (workerFilterTab === 'present_today') {
+        return presentTodayWorkerIds.has(w.id);
+      }
+      if (workerFilterTab === 'enrolled') {
+        return Boolean(w.photoUrl);
+      }
+      return true;
+    });
+  }, [workers, searchTerm, workerFilterTab, presentTodayWorkerIds]);
 
   return (
-    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">
-            Workforce Registry
+          <span className="text-xs font-black text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Workforce OS & Professional Khata</span>
           </span>
-          <h1 className="text-2xl font-extrabold text-slate-900">Workers ({workers.length})</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Workers Directory ({workers.length})</h1>
         </div>
 
         <button
@@ -271,7 +314,7 @@ export default function WorkersPage() {
             setWorkerCode(`WRK-00${workers.length + 1}`);
             setShowAddModal(true);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-95"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg transition-all active:scale-95"
         >
           <Plus className="w-4 h-4" />
           <span>Enroll New Worker</span>
@@ -285,21 +328,93 @@ export default function WorkersPage() {
         </div>
       )}
 
-      {/* Search Input */}
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-        <input
-          type="text"
-          placeholder="Search by worker name, code, or role..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-600 shadow-sm"
-        />
+      {/* Workforce Top Summary KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+            <span>Total Registered</span>
+            <Users className="w-4 h-4 text-blue-600" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-slate-900">{totalRegistered}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">Active & enrolled staff</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+            <span>Present Today</span>
+            <Clock className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-emerald-700">{presentTodayCount}</div>
+          <p className="mt-1 text-[11px] text-emerald-600 font-bold">
+            {totalRegistered > 0 ? Math.round((presentTodayCount / totalRegistered) * 100) : 0}% Turnout ({today})
+          </p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+            <span>Total Hajri Logged</span>
+            <Calendar className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-indigo-700">{totalHajriAll.toFixed(1)}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">Workforce Days</p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-bold">
+            <span>Advances Disbursed</span>
+            <DollarSign className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-amber-700">₹{totalAdvancesAll.toLocaleString('en-IN')}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">From WhatsApp receipts</p>
+        </div>
+      </div>
+
+      {/* Filter Tabs & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Filter Tabs */}
+        <div className="inline-flex p-1 rounded-xl bg-slate-200/80 text-slate-700 text-xs font-bold self-start">
+          <button
+            onClick={() => setWorkerFilterTab('all')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all ${
+              workerFilterTab === 'all' ? 'bg-white text-blue-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
+            }`}
+          >
+            All Workers ({workers.length})
+          </button>
+          <button
+            onClick={() => setWorkerFilterTab('present_today')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all ${
+              workerFilterTab === 'present_today' ? 'bg-white text-emerald-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
+            }`}
+          >
+            Present Today ({presentTodayCount})
+          </button>
+          <button
+            onClick={() => setWorkerFilterTab('enrolled')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all ${
+              workerFilterTab === 'enrolled' ? 'bg-white text-blue-700 shadow-sm font-extrabold' : 'hover:text-slate-900'
+            }`}
+          >
+            AI Face Enrolled
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative max-w-sm w-full">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <input
+            type="text"
+            placeholder="Search by worker name, code, phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-600 shadow-sm"
+          />
+        </div>
       </div>
 
       {/* Worker List Cards */}
       {loading ? (
-        <div className="py-12 text-center text-xs text-slate-500">Loading worker directory...</div>
+        <div className="py-16 text-center text-xs text-slate-500 animate-pulse">Loading worker intelligence directory...</div>
       ) : filteredWorkers.length === 0 ? (
         <div className="razorpay-card p-12 text-center space-y-3">
           <Users className="w-10 h-10 text-slate-400 mx-auto" />
@@ -310,106 +425,161 @@ export default function WorkersPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredWorkers.map((worker) => (
-            <div
-              key={worker.id}
-              className={`razorpay-card p-5 flex flex-col justify-between gap-4 ${
-                !worker.active ? 'opacity-60 bg-slate-50' : ''
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {worker.photoUrl ? (
-                    <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-sm">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={worker.photoUrl} alt={worker.name} className="w-full h-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-extrabold text-sm shrink-0">
-                      {worker.name.charAt(0)}
-                    </div>
-                  )}
+          {filteredWorkers.map((worker) => {
+            const todayRec = todayRecords.find((r) => r.workerId === worker.id);
+            const khata = khataSummaries.find(
+              (s) => s.workerId === worker.id || (worker.workerCode && s.workerCode === worker.workerCode)
+            );
 
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900">
-                      {getWorkerDisplayName(worker)}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-700 border border-slate-200">
-                        {worker.role || 'General Worker'}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
-                        ₹{worker.dailyRate || 500}/day
-                      </span>
-                      {worker.phone ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                          <Phone className="w-2.5 h-2.5" />
-                          <span>{worker.phone}</span>
+            return (
+              <div
+                key={worker.id}
+                className={`razorpay-card p-5 flex flex-col justify-between gap-4 hover:shadow-lg transition-all ${
+                  !worker.active ? 'opacity-60 bg-slate-50' : ''
+                }`}
+              >
+                {/* Top Worker Identity Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {worker.photoUrl ? (
+                      <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-sm">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={worker.photoUrl} alt={worker.name} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-extrabold text-sm shrink-0">
+                        {worker.name.charAt(0)}
+                      </div>
+                    )}
+
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900">
+                        {getWorkerDisplayName(worker)}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-700 border border-slate-200">
+                          {worker.role || 'General Worker'}
                         </span>
-                      ) : (
-                        <button
-                          onClick={() => handleOpenEditModal(worker)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 hover:bg-amber-100 transition-colors"
-                        >
-                          <Smartphone className="w-2.5 h-2.5" />
-                          <span>+ Link Phone</span>
-                        </button>
-                      )}
+                        <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
+                          ₹{worker.dailyRate || 500}/day
+                        </span>
+                        {worker.phone ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                            <Phone className="w-2.5 h-2.5" />
+                            <span>{worker.phone}</span>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenEditModal(worker)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 hover:bg-amber-100 transition-colors"
+                          >
+                            <Smartphone className="w-2.5 h-2.5" />
+                            <span>+ Link Phone</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleOpenEditModal(worker)}
+                      className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-colors"
+                      title="Edit Worker Info"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleToggleActive(worker.id, worker.active)}
+                      className={`p-1.5 rounded-lg border transition-colors ${
+                        worker.active
+                          ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
+                          : 'text-slate-400 border-slate-200 bg-slate-100'
+                      }`}
+                      title={worker.active ? 'Active Worker' : 'Inactive Worker'}
+                    >
+                      {worker.active ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1">
+                {/* Today's Live Attendance Status Banner */}
+                <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-[11px] text-slate-500 font-bold">Today:</span>
+                  {todayRec ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold text-[11px]">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Present ({todayRec.hajri || 1.0} Hajri)</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-slate-400 font-medium text-[11px]">
+                      <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Absent / Not checked-in</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Khata Quick Snapshot */}
+                {khata && (
+                  <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-blue-50/40 border border-blue-100/60 text-center text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-bold">Total Hajri</span>
+                      <span className="font-extrabold text-slate-900">{khata.totalHajriEarned}d</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-bold">Earned</span>
+                      <span className="font-extrabold text-indigo-700">₹{khata.totalEarnedAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block font-bold">Net Due</span>
+                      <span className={`font-black ${khata.netPayableBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        ₹{khata.netPayableBalance.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Card Primary Action: 360 Degree Profile & Khata */}
+                <div className="space-y-2 pt-1 border-t border-slate-100 text-xs font-semibold">
                   <button
-                    onClick={() => handleOpenEditModal(worker)}
-                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-colors"
-                    title="Edit Name & Phone"
+                    onClick={() => setSelectedWorkerForProfile(worker)}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold shadow transition-all active:scale-95"
                   >
-                    <Edit2 className="w-4 h-4" />
+                    <Eye className="w-4 h-4" />
+                    <span>View 360° Profile & Khata</span>
                   </button>
-                  <button
-                    onClick={() => handleToggleActive(worker.id, worker.active)}
-                    className={`p-1.5 rounded-lg border transition-colors ${
-                      worker.active
-                        ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
-                        : 'text-slate-400 border-slate-200 bg-slate-100'
-                    }`}
-                    title={worker.active ? 'Active Worker' : 'Inactive Worker'}
-                  >
-                    {worker.active ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenPhotoModal(worker)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors text-[11px]"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Photos & AI</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEditModal(worker)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors text-[11px]"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Edit Info</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              {/* Card Actions */}
-              <div className="flex items-center gap-2 pt-3 border-t border-slate-100 text-xs font-semibold">
-                <button
-                  onClick={() => handleOpenEditModal(worker)}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 transition-colors"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Edit Info</span>
-                </button>
-
-                <button
-                  onClick={() => handleOpenPhotoModal(worker)}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 transition-colors"
-                >
-                  <Camera className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Photos & AI</span>
-                </button>
-
-                <Link
-                  href={`/workers/${worker.id}/attendance`}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 transition-colors"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>History</span>
-                </Link>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {/* Worker 360° Profile Dossier Modal */}
+      {selectedWorkerForProfile && (
+        <WorkerProfileDossierModal
+          worker={selectedWorkerForProfile}
+          onClose={() => setSelectedWorkerForProfile(null)}
+          onWorkerUpdated={loadWorkers}
+        />
       )}
 
       {/* Add / Enroll Worker Modal */}
