@@ -14,9 +14,11 @@ import {
   FileImage,
   Trash2,
   Users,
+  Building2,
   Wallet,
   Eye,
   X,
+  Truck,
 } from 'lucide-react';
 import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
@@ -28,8 +30,17 @@ import type { PaymentLedgerEntry, PaymentCategory, PaymentMethod, ExtractedPayme
 import type { Worker } from '@/types/worker';
 import type { Site } from '@/types/site';
 
+interface VendorSummary {
+  vendorName: string;
+  totalPaid: number;
+  billsCount: number;
+  latestDate: string;
+  category: string;
+  payments: PaymentLedgerEntry[];
+}
+
 export default function PaymentsPage() {
-  const [activeTab, setActiveTab] = useState<'khata' | 'ledger' | 'ocr'>('khata');
+  const [activeTab, setActiveTab] = useState<'khata' | 'vendors' | 'ledger' | 'ocr'>('khata');
   const [loading, setLoading] = useState<boolean>(true);
   const [summaries, setSummaries] = useState<WorkerKhataSummary[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
@@ -48,6 +59,8 @@ export default function PaymentsPage() {
   // Manual Entry Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [recipientType, setRecipientType] = useState<'worker' | 'vendor'>('worker');
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [formPaidTo, setFormPaidTo] = useState<string>('');
   const [formSiteId, setFormSiteId] = useState<string>('');
   const [formAmount, setFormAmount] = useState<string>('');
@@ -66,6 +79,7 @@ export default function PaymentsPage() {
   const [ocrResult, setOcrResult] = useState<ExtractedPaymentData | null>(null);
   const [ocrAmount, setOcrAmount] = useState<string>('');
   const [ocrPaidToName, setOcrPaidToName] = useState<string>('');
+  const [ocrCategory, setOcrCategory] = useState<PaymentCategory>('vendor');
   const [ocrSaveSuccess, setOcrSaveSuccess] = useState<string | null>(null);
 
   // Receipt Preview Modal
@@ -98,11 +112,27 @@ export default function PaymentsPage() {
     loadData();
   }, [loadData]);
 
-  const handleOpenPaymentModal = (workerName?: string) => {
-    setFormPaidTo(workerName || '');
+  const handleOpenPaymentModal = (workerId?: string, isVendor = false) => {
+    if (isVendor) {
+      setRecipientType('vendor');
+      setFormCategory('vendor');
+      setFormPaidTo('');
+      setSelectedWorkerId('');
+    } else {
+      setRecipientType('worker');
+      setFormCategory('advance');
+      if (workerId) {
+        setSelectedWorkerId(workerId);
+        const w = workers.find((x) => x.id === workerId);
+        setFormPaidTo(w?.name || '');
+      } else {
+        setSelectedWorkerId(workers[0]?.id || '');
+        setFormPaidTo(workers[0]?.name || '');
+      }
+    }
+
     setFormSiteId(sites[0]?.id ?? '');
     setFormAmount('');
-    setFormCategory('advance');
     setFormMethod('gpay');
     setFormDate(getTodayDateString());
     setFormNotes('');
@@ -120,17 +150,37 @@ export default function PaymentsPage() {
       setModalError('Please enter a valid amount greater than 0.');
       return;
     }
-    if (!formPaidTo.trim()) {
-      setModalError('Please enter to whom the payment was made (Paid To Name).');
-      return;
+
+    let finalName = formPaidTo.trim();
+    let linkedWorkerId = '';
+    let linkedWorkerCode = '';
+
+    if (recipientType === 'worker') {
+      const selectedWorker = workers.find((w) => w.id === selectedWorkerId);
+      if (!selectedWorker) {
+        setModalError('Please select a registered worker.');
+        return;
+      }
+      finalName = selectedWorker.name;
+      linkedWorkerId = selectedWorker.id;
+      linkedWorkerCode = selectedWorker.workerCode || '';
+    } else {
+      if (!finalName) {
+        setModalError('Please enter Vendor / Payee Name.');
+        return;
+      }
     }
+
     const selectedSite = sites.find((s) => s.id === formSiteId);
 
     setSubmitting(true);
     setModalError(null);
     try {
       await PaymentLedgerService.recordPayment({
-        paidTo: formPaidTo.trim(),
+        paidTo: finalName,
+        workerId: linkedWorkerId,
+        workerName: linkedWorkerId ? finalName : '',
+        workerCode: linkedWorkerCode,
         siteId: selectedSite?.id,
         siteName: selectedSite?.name,
         amount: amountNum,
@@ -143,7 +193,7 @@ export default function PaymentsPage() {
         recordedBy: 'admin_dashboard',
       });
 
-      setModalSuccess(`₹${amountNum} recorded for ${formPaidTo.trim()}!`);
+      setModalSuccess(`₹${amountNum.toLocaleString('en-IN')} recorded for ${finalName}!`);
       setTimeout(() => {
         setShowModal(false);
         loadData();
@@ -184,7 +234,21 @@ export default function PaymentsPage() {
       const extracted = await PaymentOcrService.extractPaymentFromBase64(compressedBase64);
       setOcrResult(extracted);
       setOcrAmount(extracted.amount ? String(extracted.amount) : '');
-      setOcrPaidToName(extracted.receiverName || '');
+      const rawName = extracted.receiverName || '';
+      setOcrPaidToName(rawName);
+
+      // Automatically determine if payee is a registered worker or external vendor
+      const matched = workers.find((w) => {
+        const nameLower = w.name.toLowerCase();
+        const targetLower = rawName.toLowerCase();
+        return targetLower && (nameLower === targetLower || nameLower.includes(targetLower) || targetLower.includes(nameLower));
+      });
+
+      if (matched) {
+        setOcrCategory('advance');
+      } else {
+        setOcrCategory('vendor');
+      }
     } catch (err) {
       console.error('Screenshot OCR error:', err);
     } finally {
@@ -197,12 +261,27 @@ export default function PaymentsPage() {
     const targetName = ocrPaidToName.trim();
     if (!ocrResult || amountNum <= 0 || !targetName) return;
 
+    // Check if worker match
+    const matchedWorker = workers.find((w) => {
+      const nameLower = w.name.toLowerCase();
+      const targetLower = targetName.toLowerCase();
+      return targetLower && (nameLower === targetLower || nameLower.includes(targetLower) || targetLower.includes(nameLower));
+    });
+
+    const isWorkerAdvance = ocrCategory === 'advance' && Boolean(matchedWorker);
+    const resolvedWorkerId = isWorkerAdvance && matchedWorker ? matchedWorker.id : '';
+    const resolvedWorkerName = isWorkerAdvance && matchedWorker ? matchedWorker.name : '';
+    const resolvedWorkerCode = isWorkerAdvance && matchedWorker ? matchedWorker.workerCode : '';
+
     setSubmitting(true);
     try {
       await PaymentLedgerService.recordPayment({
         paidTo: targetName,
+        workerId: resolvedWorkerId,
+        workerName: resolvedWorkerName,
+        workerCode: resolvedWorkerCode,
         amount: amountNum,
-        category: 'advance',
+        category: ocrCategory,
         paymentMethod: ocrResult.paymentMethod || 'gpay',
         upiId: ocrResult.upiId || undefined,
         paymentDate: getTodayDateString(),
@@ -224,12 +303,42 @@ export default function PaymentsPage() {
     }
   };
 
+  // 1. Worker Summaries (ONLY Enrolled Workers)
   const filteredSummaries = summaries.filter((s) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return s.workerName.toLowerCase().includes(q) || (s.phone && s.phone.includes(q)) || (s.workerCode && s.workerCode.toLowerCase().includes(q));
   });
 
+  // 2. Vendor Summaries (Grouped by Vendor/Supplier Name)
+  const vendorPayments = payments.filter((p) => p.category === 'vendor' || p.category === 'material' || p.category === 'equipment' || p.category === 'other' || !p.workerId);
+  const totalVendorExpense = vendorPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  const vendorMap = new Map<string, VendorSummary>();
+  vendorPayments.forEach((p) => {
+    const vName = (p.paidTo || 'Vendor / Expense').trim();
+    if (!vendorMap.has(vName)) {
+      vendorMap.set(vName, {
+        vendorName: vName,
+        totalPaid: 0,
+        billsCount: 0,
+        latestDate: p.paymentDate,
+        category: p.category || 'vendor',
+        payments: [],
+      });
+    }
+    const item = vendorMap.get(vName)!;
+    item.totalPaid += p.amount;
+    item.billsCount += 1;
+    item.payments.push(p);
+  });
+
+  const vendorList = Array.from(vendorMap.values()).filter((v) => {
+    if (!searchQuery) return true;
+    return v.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  // 3. All Payments (Chronological timeline)
   const filteredPayments = payments.filter((p) => {
     const target = (p.paidTo || p.workerName || '').toLowerCase();
     const notes = (p.notes || '').toLowerCase();
@@ -249,14 +358,14 @@ export default function PaymentsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Worker Khata & Payments Ledger</h1>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Contractor Khata & Financial Ledger</h1>
             <span className="razorpay-badge-ai">
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span>AI OCR INTEGRATED</span>
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Automated advance tracking from Google Pay/PhonePe screenshots, wage reconciliation, and Hajri ledger.
+            Separated labour wages &amp; worker advances from material suppliers, vendors, and site expenses.
           </p>
         </div>
 
@@ -283,29 +392,44 @@ export default function PaymentsPage() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Log Payment / Advance</span>
+            <span>Record Payment</span>
           </button>
         </div>
       </div>
 
       {/* 2. Top Summary Metrics Cards (Razorpay SaaS Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Total Advances Given */}
+        {/* Metric 1: Total Labour Advances */}
         <div className="razorpay-card p-5 space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            <span>TOTAL ADVANCES (PAID)</span>
+            <span>WORKER ADVANCES (PAID)</span>
             <ArrowDownRight className="w-4 h-4 text-rose-600" />
           </div>
           <div className="text-3xl font-black text-rose-600 tracking-tight">
             ₹{totalAdvances.toLocaleString('en-IN')}
           </div>
           <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span>Kharcha / Advance payouts</span>
-            <span className="font-bold text-slate-700">{payments.length} Entries</span>
+            <span>Enrolled Karigar Advances</span>
+            <span className="font-bold text-slate-700">{summaries.length} Workers</span>
           </div>
         </div>
 
-        {/* Metric 2: Total Hajri Earned */}
+        {/* Metric 2: Total Vendor & Material Expenses */}
+        <div className="razorpay-card p-5 space-y-2 bg-gradient-to-br from-white to-amber-50/30">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span>VENDOR &amp; MATERIAL PAID</span>
+            <Truck className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="text-3xl font-black text-amber-700 tracking-tight">
+            ₹{totalVendorExpense.toLocaleString('en-IN')}
+          </div>
+          <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-slate-100 flex items-center justify-between">
+            <span>Material, Equipment &amp; Thekedar</span>
+            <span className="font-bold text-amber-700">{vendorList.length} Vendors</span>
+          </div>
+        </div>
+
+        {/* Metric 3: Total Hajri Earned */}
         <div className="razorpay-card p-5 space-y-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
             <span>TOTAL HAJRI EARNED</span>
@@ -315,38 +439,23 @@ export default function PaymentsPage() {
             {totalHajri.toFixed(1)} <span className="text-sm font-bold text-slate-400">Hajri</span>
           </div>
           <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span>All sites verified QR</span>
-            <span className="font-bold text-blue-600">{summaries.length} Workers</span>
-          </div>
-        </div>
-
-        {/* Metric 3: Total Hajri Value @ Daily Rate */}
-        <div className="razorpay-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            <span>TOTAL HAJRI WAGES</span>
-            <Wallet className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-3xl font-black text-emerald-600 tracking-tight">
-            ₹{totalCalculatedWages.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[11px] text-slate-500 font-medium pt-2 border-t border-slate-100 flex items-center justify-between">
             <span>Rate: ₹{dailyRate}/day</span>
             <button
               onClick={() => {
-                const newRate = prompt('Enter default daily wage rate (₹):', dailyRate.toString());
-                if (newRate && !isNaN(Number(newRate))) setDailyRate(Number(newRate));
+                const r = prompt('Enter default daily wage rate (₹/day):', String(dailyRate));
+                if (r && !isNaN(Number(r))) setDailyRate(Number(r));
               }}
-              className="text-blue-600 font-bold hover:underline"
+              className="font-bold text-blue-600 hover:underline"
             >
               Change Rate
             </button>
           </div>
         </div>
 
-        {/* Metric 4: Net Balance (To Pay) */}
+        {/* Metric 4: Net Labour Balance */}
         <div className="razorpay-card p-5 space-y-2 bg-gradient-to-br from-white to-blue-50/50">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            <span>NET OUTSTANDING PAYABLE</span>
+            <span>NET LABOUR BALANCE</span>
             <IndianRupee className="w-4 h-4 text-blue-600" />
           </div>
           <div className={`text-3xl font-black tracking-tight ${totalNetBalance >= 0 ? 'text-blue-700' : 'text-amber-600'}`}>
@@ -375,6 +484,18 @@ export default function PaymentsPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('vendors')}
+            className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
+              activeTab === 'vendors'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-amber-600" />
+            <span>Vendor &amp; Material Ledger ({vendorList.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('ledger')}
             className={`pb-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-all ${
               activeTab === 'ledger'
@@ -383,7 +504,7 @@ export default function PaymentsPage() {
             }`}
           >
             <Receipt className="w-4 h-4" />
-            <span>Payment History Ledger ({payments.length})</span>
+            <span>Full Payment History ({payments.length})</span>
           </button>
 
           <button
@@ -400,7 +521,7 @@ export default function PaymentsPage() {
         </nav>
       </div>
 
-      {/* 4. Tab Content: Worker Khata Sheet */}
+      {/* 4. Tab Content: Worker Khata Sheet (ONLY Registered Workers) */}
       {activeTab === 'khata' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -413,6 +534,10 @@ export default function PaymentsPage() {
                 placeholder="Search worker by name, code, phone..."
                 className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
               />
+            </div>
+
+            <div className="text-xs text-slate-500 font-semibold">
+              Showing strictly registered workforce ({filteredSummaries.length} workers)
             </div>
           </div>
 
@@ -440,7 +565,7 @@ export default function PaymentsPage() {
                   ) : filteredSummaries.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-slate-500">
-                        No workers found. Register workers to track their Khata.
+                        No registered workers found. Enroll workers from the Workers page.
                       </td>
                     </tr>
                   ) : (
@@ -484,7 +609,7 @@ export default function PaymentsPage() {
                           </td>
                           <td className="py-3 px-4 text-center">
                             <button
-                              onClick={() => handleOpenPaymentModal(summary.workerId)}
+                              onClick={() => handleOpenPaymentModal(summary.workerId, false)}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors"
                             >
                               <Plus className="w-3 h-3" />
@@ -502,7 +627,111 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* 5. Tab Content: Payments History Ledger */}
+      {/* 5. Tab Content: Vendor & Material Ledger */}
+      {activeTab === 'vendors' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search vendor, supplier, contractor..."
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={() => handleOpenPaymentModal(undefined, true)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Record Vendor Payment</span>
+            </button>
+          </div>
+
+          <div className="razorpay-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200/80 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 px-4">Vendor / Supplier / Entity</th>
+                    <th className="py-3 px-4">Category</th>
+                    <th className="py-3 px-4 text-center">Bills Count</th>
+                    <th className="py-3 px-4">Latest Bill Date</th>
+                    <th className="py-3 px-4 text-right">Total Paid (₹)</th>
+                    <th className="py-3 px-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        Loading vendor ledger...
+                      </td>
+                    </tr>
+                  ) : vendorList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        No vendor / material payments recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    vendorList.map((v) => {
+                      const latestPayment = v.payments[0];
+                      return (
+                        <tr key={v.vendorName} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 uppercase flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>{v.vendorName}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block ml-6">
+                              {latestPayment?.upiId || latestPayment?.paymentMethod?.toUpperCase() || 'Direct Payment'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] uppercase bg-amber-50 text-amber-800 border border-amber-200">
+                              {v.category || 'Vendor / Expense'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] border border-slate-200">
+                              {v.billsCount} Bills
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-slate-700">
+                            {v.latestDate}
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-black text-rose-600 text-base">
+                            ₹{v.totalPaid.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            {latestPayment?.receiptPhotoUrl ? (
+                              <button
+                                onClick={() => setPreviewImage(latestPayment.receiptPhotoUrl || null)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:underline"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View Receipt</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Tab Content: Payments History Ledger */}
       {activeTab === 'ledger' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -512,7 +741,7 @@ export default function PaymentsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search payments by worker, notes..."
+                placeholder="Search payments by name, UPI, notes..."
                 className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -525,10 +754,11 @@ export default function PaymentsPage() {
                 className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none"
               >
                 <option value="all">All Categories</option>
-                <option value="advance">Advance / Kharcha</option>
+                <option value="advance">Worker Advance</option>
+                <option value="vendor">Vendor / Supplier</option>
+                <option value="material">Material Expense</option>
+                <option value="equipment">Machinery / Equipment</option>
                 <option value="wage">Wage Settlement</option>
-                <option value="bonus">Bonus</option>
-                <option value="deduction">Deduction</option>
               </select>
             </div>
           </div>
@@ -538,7 +768,7 @@ export default function PaymentsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/80 bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Paid To / Receiver</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Method</th>
@@ -576,8 +806,12 @@ export default function PaymentsPage() {
                             <span className="text-[10px] text-slate-500 font-mono">{p.upiId || p.workerPhone || 'UPI / Direct'}</span>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 rounded-md font-bold text-[10px] uppercase bg-amber-50 text-amber-700 border border-amber-200">
-                              {p.category}
+                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase border ${
+                              p.category === 'advance'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {p.category === 'advance' ? 'Worker Advance' : p.category.toUpperCase()}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-semibold text-slate-700 capitalize">
@@ -629,35 +863,30 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* 6. Tab Content: AI Payment Screenshot OCR Scanner */}
+      {/* 7. Tab Content: AI Payment Screenshot Scanner */}
       {activeTab === 'ocr' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Uploader Card */}
+          {/* Left: Upload Area */}
           <div className="razorpay-card p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Upload Google Pay / UPI Screenshot</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  AI extracts Amount (₹), Paid-To Name, UPI ID, and Date automatically.
-                </p>
-              </div>
-              <Sparkles className="w-5 h-5 text-blue-600" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Upload Google Pay / UPI Screenshot</h3>
+              <p className="text-xs text-slate-500">
+                AI extracts Amount (₹), Paid-To Name, UPI ID, and Date automatically.
+              </p>
             </div>
 
-            {/* Dropzone */}
-            <label className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-blue-50/30 transition-all">
+            <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl cursor-pointer bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center">
               <input
                 type="file"
                 accept="image/*"
                 onChange={handleScreenshotUpload}
-                disabled={ocrAnalyzing}
                 className="hidden"
               />
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+              <div className="p-3 bg-blue-50 text-blue-600 rounded-full mb-2">
                 <FileImage className="w-6 h-6" />
               </div>
-              <span className="text-xs font-bold text-slate-800">
-                {ocrAnalyzing ? 'AI is scanning receipt...' : 'Click to select or drop payment screenshot'}
+              <span className="text-xs font-bold text-slate-700">
+                Click to select or drop payment screenshot
               </span>
               <span className="text-[11px] text-slate-400 mt-1">
                 Supports Google Pay, PhonePe, Paytm, BHIM UPI images (PNG, JPG)
@@ -678,16 +907,16 @@ export default function PaymentsPage() {
             )}
           </div>
 
-          {/* Right: AI Extraction Preview & Khata Match */}
+          {/* Right: AI Extraction Preview & Category Assignment */}
           <div className="razorpay-card p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600" />
                 <span>Extracted Receipt Details</span>
               </h3>
-              {ocrResult?.amount && (
+              {ocrAmount && (
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-xs border border-emerald-200">
-                  Detected ₹{ocrResult.amount}
+                  Detected ₹{Number(ocrAmount).toLocaleString('en-IN')}
                 </span>
               )}
             </div>
@@ -700,7 +929,7 @@ export default function PaymentsPage() {
               </div>
             ) : !ocrResult ? (
               <div className="py-12 text-center text-xs text-slate-400">
-                Upload a payment screenshot to view AI extraction and map it to a worker.
+                Upload a payment screenshot to view AI extraction and record it in the ledger.
               </div>
             ) : (
               <div className="space-y-4 text-xs">
@@ -709,7 +938,7 @@ export default function PaymentsPage() {
                   <div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase block">Extracted Amount</span>
                     <span className="text-lg font-black text-rose-600">
-                      {ocrResult.amount ? `₹${ocrResult.amount}` : 'Not Detected'}
+                      {ocrAmount ? `₹${Number(ocrAmount).toLocaleString('en-IN')}` : 'Not Detected'}
                     </span>
                   </div>
 
@@ -729,7 +958,7 @@ export default function PaymentsPage() {
                   </div>
 
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Date & Time</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Date &amp; Time</span>
                     <span className="font-semibold text-slate-700">
                       {ocrResult.timestampStr || 'Today'}
                     </span>
@@ -741,7 +970,7 @@ export default function PaymentsPage() {
                   </div>
                 </div>
 
-                {/* Editable Fields: Amount & Paid To Name */}
+                {/* Editable Fields: Amount, Paid To Name, and Khata Category */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
@@ -755,7 +984,7 @@ export default function PaymentsPage() {
                       step="any"
                       value={ocrAmount}
                       onChange={(e) => setOcrAmount(e.target.value)}
-                      placeholder="e.g. 45000"
+                      placeholder="e.g. 50000"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-black text-rose-600 focus:outline-none focus:border-blue-500 shadow-sm"
                     />
                   </div>
@@ -770,14 +999,34 @@ export default function PaymentsPage() {
                       required
                       value={ocrPaidToName}
                       onChange={(e) => setOcrPaidToName(e.target.value)}
-                      placeholder="e.g. RAJKUMAR"
+                      placeholder="e.g. MOHD JAKIR"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 uppercase shadow-sm"
                     />
                   </div>
                 </div>
 
+                {/* Category Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Khata Category (Worker Advance vs Vendor/Supplier) *
+                  </label>
+                  <select
+                    value={ocrCategory}
+                    onChange={(e) => setOcrCategory(e.target.value as PaymentCategory)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500 shadow-sm"
+                  >
+                    <option value="vendor">Vendor / Material Supplier (Not a worker)</option>
+                    <option value="advance">Worker Advance / Peshgi (Enrolled Worker)</option>
+                    <option value="material">Material Purchase (Cement, Sand, Slabs)</option>
+                    <option value="equipment">Machinery / JCB / Equipment Rental</option>
+                    <option value="other">Site Petty Cash / Other Kharcha</option>
+                  </select>
+                </div>
+
                 <p className="text-[10px] text-slate-400">
-                  AI auto-extracted ₹{ocrAmount || '0'} paid to &quot;{ocrPaidToName || 'Recipient'}&quot;. You can edit either field before confirming.
+                  {ocrCategory === 'advance'
+                    ? 'Records advance against enrolled worker and reconciles with their Hajri.'
+                    : 'Records payment under Vendor / Material ledger without polluting the workers list.'}
                 </p>
 
                 {ocrSaveSuccess && (
@@ -806,172 +1055,243 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* 7. Manual Payment Modal */}
+      {/* 8. Manual Payment Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-                <IndianRupee className="w-4 h-4 text-blue-600" />
-                <span>Log Payment / Advance Entry</span>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-blue-600" />
+                <span>Record New Payment / Kharcha</span>
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {modalSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-                {modalSuccess}
+            {modalSuccess ? (
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>{modalSuccess}</span>
               </div>
-            )}
-            {modalError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
-                {modalError}
-              </div>
-            )}
+            ) : (
+              <form onSubmit={handleSavePayment} className="space-y-4 text-xs">
+                {modalError && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+                    {modalError}
+                  </div>
+                )}
 
-            <form onSubmit={handleSavePayment} className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Paid To (Person / Worker / Vendor Name) *</label>
-                <input
-                  type="text"
-                  required
-                  value={formPaidTo}
-                  onChange={(e) => setFormPaidTo(e.target.value)}
-                  placeholder="e.g. Mubarak, Abhay, Supplier"
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
-                  list="worker-suggestions"
-                />
-                <datalist id="worker-suggestions">
-                  {workers.map((w) => (
-                    <option key={w.id} value={w.name} />
-                  ))}
-                </datalist>
-              </div>
+                {/* Recipient Type Toggle: Worker vs Vendor */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">Payment To *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecipientType('worker');
+                        setFormCategory('advance');
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold text-xs border flex items-center justify-center gap-2 transition-all ${
+                        recipientType === 'worker'
+                          ? 'bg-blue-50 text-blue-700 border-blue-500 ring-2 ring-blue-500/20'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      <span>Registered Worker</span>
+                    </button>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Amount (₹) *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRecipientType('vendor');
+                        setFormCategory('vendor');
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold text-xs border flex items-center justify-center gap-2 transition-all ${
+                        recipientType === 'vendor'
+                          ? 'bg-amber-50 text-amber-700 border-amber-500 ring-2 ring-amber-500/20'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Building2 className="w-4 h-4" />
+                      <span>Vendor / Supplier</span>
+                    </button>
+                  </div>
+                </div>
+
+                {recipientType === 'worker' ? (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Select Worker *</label>
+                    <select
+                      value={selectedWorkerId}
+                      onChange={(e) => {
+                        setSelectedWorkerId(e.target.value);
+                        const w = workers.find((x) => x.id === e.target.value);
+                        setFormPaidTo(w?.name || '');
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold focus:outline-none focus:border-blue-500"
+                    >
+                      {workers.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name} ({w.workerCode || 'ID'}) - ₹{w.dailyRate || dailyRate}/day
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Vendor / Payee Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formPaidTo}
+                      onChange={(e) => setFormPaidTo(e.target.value)}
+                      placeholder="e.g. SRI LINGALA SLAB INDUSTRIES"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold focus:outline-none focus:border-blue-500 uppercase"
+                    />
+                  </div>
+                )}
+
+                {/* Amount & Date */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Amount (₹) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      step="any"
+                      value={formAmount}
+                      onChange={(e) => setFormAmount(e.target.value)}
+                      placeholder="e.g. 5000"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-black text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Payment Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Category & Payment Method */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Category *</label>
+                    <select
+                      value={formCategory}
+                      onChange={(e) => setFormCategory(e.target.value as PaymentCategory)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                    >
+                      {recipientType === 'worker' ? (
+                        <>
+                          <option value="advance">Advance / Kharcha</option>
+                          <option value="wage">Wage Settlement</option>
+                          <option value="bonus">Bonus</option>
+                          <option value="deduction">Deduction</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="vendor">Vendor / Supplier</option>
+                          <option value="material">Material Purchase</option>
+                          <option value="equipment">Machinery Rental</option>
+                          <option value="other">Site Expense / Other</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Method *</label>
+                    <select
+                      value={formMethod}
+                      onChange={(e) => setFormMethod(e.target.value as PaymentMethod)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="gpay">Google Pay</option>
+                      <option value="phonepe">PhonePe</option>
+                      <option value="paytm">Paytm</option>
+                      <option value="upi">Direct UPI</option>
+                      <option value="bank_transfer">Bank Transfer / NEFT</option>
+                      <option value="cash">Cash</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* UPI ID / Ref */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">UPI ID / Ref (Optional)</label>
                   <input
-                    type="number"
-                    step="any"
-                    value={formAmount}
-                    onChange={(e) => setFormAmount(e.target.value)}
-                    placeholder="e.g. 500"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold focus:outline-none focus:bg-white"
-                    required
+                    type="text"
+                    value={formUpiId}
+                    onChange={(e) => setFormUpiId(e.target.value)}
+                    placeholder="e.g. mobile@upi"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-mono text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Payment Date</label>
+                {/* Notes */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">Remarks / Purpose</label>
                   <input
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                    type="text"
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    placeholder="e.g. Slab material payment / weekly cash advance"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Category</label>
-                  <select
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value as PaymentCategory)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
                   >
-                    <option value="advance">Advance / Kharcha</option>
-                    <option value="wage">Wage Settlement</option>
-                    <option value="bonus">Bonus / Incentive</option>
-                    <option value="deduction">Deduction</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Payment Method</label>
-                  <select
-                    value={formMethod}
-                    onChange={(e) => setFormMethod(e.target.value as PaymentMethod)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20"
                   >
-                    <option value="gpay">Google Pay (UPI)</option>
-                    <option value="phonepe">PhonePe</option>
-                    <option value="paytm">Paytm</option>
-                    <option value="cash">Cash in Hand</option>
-                    <option value="bank_transfer">Bank Transfer (NEFT/IMPS)</option>
-                  </select>
+                    {submitting ? 'Recording...' : 'Record Payment'}
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Site / Project (Optional)</label>
-                <select
-                  value={formSiteId}
-                  onChange={(e) => setFormSiteId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold focus:outline-none focus:bg-white"
-                >
-                  <option value="">None / General</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Notes / Description (Optional)</label>
-                <input
-                  type="text"
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  placeholder="e.g. Diye the kharche ke liye"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-medium focus:outline-none focus:bg-white"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-600/20 transition-all"
-                >
-                  {submitting ? 'Saving...' : 'Save Payment'}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}
 
-      {/* 8. Receipt Image Preview Modal */}
+      {/* 9. Receipt Fullscreen Preview Modal */}
       {previewImage && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800">Payment Screenshot Bill</span>
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="relative max-w-lg w-full bg-white rounded-2xl overflow-hidden shadow-2xl space-y-3 p-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-blue-600" />
+                <span>Attached Payment Screenshot / Bill</span>
+              </span>
               <button
                 onClick={() => setPreviewImage(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="max-h-[75vh] overflow-auto flex items-center justify-center rounded-xl bg-slate-100 p-2">
-              <img src={previewImage} alt="Payment Receipt" className="max-h-[70vh] object-contain rounded-lg" />
+            <div className="max-h-[70vh] overflow-auto rounded-xl bg-black/5 flex items-center justify-center">
+              <img src={previewImage} alt="Receipt preview" className="max-h-[70vh] object-contain" />
             </div>
           </div>
         </div>

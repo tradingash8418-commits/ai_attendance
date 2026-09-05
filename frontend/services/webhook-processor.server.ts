@@ -199,12 +199,12 @@ export class WebhookProcessorServer {
         `Method=${paymentData.paymentMethod}, UPI=${paymentData.upiId}`
       );
 
-      // Match or auto-resolve worker in Firestore
+      // Check if recipient matches an EXISTING registered worker in Firestore
       const allWorkers = await WorkersService.getWorkers();
-      let matchedWorker = allWorkers.find((w) => {
+      const matchedWorker = allWorkers.find((w) => {
         const nameLower = w.name.toLowerCase();
         const targetName = (paymentData.receiverName || '').toLowerCase();
-        if (targetName && (nameLower.includes(targetName) || targetName.includes(nameLower))) {
+        if (targetName && (nameLower === targetName || nameLower.includes(targetName) || targetName.includes(nameLower))) {
           return true;
         }
         if (paymentData.upiId && w.phone) {
@@ -216,29 +216,15 @@ export class WebhookProcessorServer {
         return false;
       });
 
-      if (!matchedWorker && paymentData.receiverName) {
-        const newCode = `WRK-00${allWorkers.length + 1}`;
-        const newId = await WorkersService.createWorker({
-          name: paymentData.receiverName,
-          workerCode: newCode,
-          role: 'General Worker',
-        });
-        matchedWorker = {
-          id: newId,
-          name: paymentData.receiverName,
-          workerCode: newCode,
-          active: true,
-          createdAt: null as any,
-          updatedAt: null as any,
-        };
-      }
-
+      // If matched to an enrolled worker, it is an Advance. Otherwise it is a Vendor / Material Expense.
+      const isWorkerPayment = Boolean(matchedWorker);
+      const paymentCategory = isWorkerPayment ? 'advance' : 'vendor';
       const finalAmount = paymentData.amount || 0;
-      const finalPaidTo = paymentData.receiverName || (matchedWorker ? getWorkerDisplayName(matchedWorker) : 'Worker');
-      const resolvedWorkerId = matchedWorker?.id || 'unassigned_worker';
-      const resolvedWorkerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : finalPaidTo;
+      const finalPaidTo = paymentData.receiverName || (matchedWorker ? getWorkerDisplayName(matchedWorker) : 'Vendor / Payee');
+      const resolvedWorkerId = matchedWorker?.id || '';
+      const resolvedWorkerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : '';
 
-      // Record entry in Khata Ledger
+      // Record entry in Khata Ledger (DO NOT auto-create workers for vendors!)
       await PaymentLedgerService.recordPayment({
         paidTo: finalPaidTo,
         workerId: resolvedWorkerId,
@@ -246,7 +232,7 @@ export class WebhookProcessorServer {
         workerCode: matchedWorker?.workerCode,
         workerPhone: matchedWorker?.phone,
         amount: finalAmount,
-        category: 'advance',
+        category: paymentCategory,
         paymentMethod: paymentData.paymentMethod || 'gpay',
         upiId: paymentData.upiId || '',
         paymentDate: today,
@@ -268,17 +254,18 @@ export class WebhookProcessorServer {
         }
       }
 
+      const typeLabel = isWorkerPayment ? 'Worker Advance / Kharcha' : 'Vendor / Material Expense';
+
       if (finalAmount > 0) {
         await WhatsAppService.sendMessage(
           normalizedSender,
           `✅ *Payment Recorded in Ledger!*\n\n` +
           `👤 *Paid To:* ${finalPaidTo}\n` +
           `💵 *Amount:* ₹${finalAmount.toFixed(2)}\n` +
-          `📒 *Khata Account:* ${finalPaidTo}\n` +
+          `📒 *Khata Category:* ${typeLabel}\n` +
           `💳 *Method / App:* ${paymentData.paymentMethod.toUpperCase()}\n` +
           `📱 *UPI / Ref:* ${paymentData.upiId || 'Direct UPI'}\n` +
-          `📅 *Date:* ${dateDisplay}\n` +
-          `🏷️ *Type:* Advance / Kharcha\n\n` +
+          `📅 *Date:* ${dateDisplay}\n\n` +
           `Ledger & Khata balance have been successfully updated! 📊`
         );
       } else {

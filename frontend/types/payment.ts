@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type PaymentCategory = 'advance' | 'wage' | 'kharcha' | 'bonus' | 'deduction';
+export type PaymentCategory = 'advance' | 'wage' | 'kharcha' | 'bonus' | 'deduction' | 'vendor' | 'material' | 'equipment' | 'other';
 export type PaymentMethod = 'gpay' | 'phonepe' | 'paytm' | 'upi' | 'cash' | 'bank_transfer';
 
 export interface PaymentLedgerEntry {
