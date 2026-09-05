@@ -564,9 +564,26 @@ export default function PaymentsPage() {
   );
   const totalVendorExpense = vendorPayments.reduce((sum, p) => sum + p.amount, 0);
 
+  const GENERIC_CAT_WORDS = new Set([
+    'transport', 'material', 'thekedar', 'contractor', 'subcontractor', 'vendor',
+    'expense', 'service', 'general', 'hardware', 'cement', 'tempo', 'truck', 'dumper', 'driver'
+  ]);
+
   const vendorMap = new Map<string, VendorSummary>();
   vendorPayments.forEach((p) => {
-    const vName = (p.paidTo || 'Vendor / Expense').trim();
+    let vName = (p.paidTo || '').trim();
+    const lower = vName.toLowerCase();
+
+    if (!vName || GENERIC_CAT_WORDS.has(lower) || lower === 'vendor / payee' || lower === 'vendor / expense') {
+      if (p.notes && p.notes.includes('A/C:')) {
+        const acMatch = p.notes.match(/A\/C:\s*([^|()]+)/i);
+        if (acMatch && acMatch[1].trim() && !GENERIC_CAT_WORDS.has(acMatch[1].trim().toLowerCase())) {
+          vName = acMatch[1].trim();
+        }
+      }
+    }
+    vName = vName || 'Vendor / Expense';
+
     if (!vendorMap.has(vName)) {
       vendorMap.set(vName, {
         vendorName: vName,

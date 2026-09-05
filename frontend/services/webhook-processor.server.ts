@@ -523,7 +523,13 @@ export class WebhookProcessorServer {
         resolvedWorkerId = matchedWorker ? matchedWorker.id : '';
         finalPaidTo = ocrBeneficiary || resolvedWorkerName;
       } else {
-        finalPaidTo = workerOrPayeeRemark || ocrBeneficiary || 'Vendor / Payee';
+        // STRICT VENDOR PAYEE NAME LOGIC:
+        // Priority 1: If specific custom vendor remark was provided AND is not a category word (e.g. 'UltraTech', 'Raju Dumper', 'Sri Cements')
+        // Priority 2: Payment screenshot AI OCR Beneficiary Name (e.g. 'RAJKUMAR')
+        // Category keywords like 'Transport', 'Material', 'Contractor' are NEVER set as the vendor name.
+        const isRemarkCategory = workerOrPayeeRemark && VENDOR_CATEGORY_KEYWORDS.includes(workerOrPayeeRemark.toLowerCase());
+        const validRemark = (!isRemarkCategory && workerOrPayeeRemark) ? workerOrPayeeRemark : null;
+        finalPaidTo = validRemark || ocrBeneficiary || 'Vendor / Payee';
         resolvedWorkerId = '';
         resolvedWorkerName = '';
       }
@@ -613,6 +619,78 @@ export class WebhookProcessorServer {
     }
   }
 
+export const VENDOR_CATEGORY_KEYWORDS = [
+  'v',
+  'vendor',
+  'm',
+  'material',
+  'supplier',
+  'thekedar',
+  'contractor',
+  'subcontractor',
+  'fabricator',
+  'plumber',
+  'carpenter',
+  'mason',
+  'mistri',
+  'pop',
+  'civil',
+  't',
+  'transport',
+  'tempo',
+  'truck',
+  'dumper',
+  'driver',
+  'gaadi',
+  'bhada',
+  'diesel',
+  'petrol',
+  'freight',
+  'tractor',
+  'trolley',
+  'auto',
+  'cement',
+  'steel',
+  'sand',
+  'ret',
+  'bajri',
+  'sariya',
+  'rodi',
+  'hardware',
+  'paint',
+  'electric',
+  'dukaan',
+  'shop',
+  'store',
+  'brick',
+  'tiles',
+  'sanitary',
+  'wood',
+  'glass',
+  'expense',
+  'service',
+  'rent',
+  'repair',
+  'maintenance',
+  'chai',
+  'khana',
+  'food',
+];
+
+export const WORKER_CATEGORY_KEYWORDS = [
+  'w',
+  'worker',
+  'a',
+  'advance',
+  'l',
+  'labour',
+  'k',
+  'karigar',
+  'kharcha',
+  'wage',
+  'majdoor',
+];
+
 /**
  * Smart Caption Parser: Extracts user category ('v' / 'w') and custom worker/payee remark (e.g. 'abc, w', 'abc, v', 'abc w')
  */
@@ -627,60 +705,70 @@ export function parsePaymentCaption(rawText: string): {
   const text = rawText.trim();
   const lower = text.toLowerCase();
 
-  const vendorKeywords = ['v', 'vendor', 'm', 'material', 'supplier', 'thekedar', 'dukaan', 'shop', 'expense'];
-  const workerKeywords = ['w', 'worker', 'a', 'advance', 'l', 'labour', 'k', 'karigar', 'kharcha', 'wage', 'majdoor'];
-
-  // 1. Standalone single keyword
-  if (vendorKeywords.includes(lower)) {
+  // 1. Standalone single keyword / category word (e.g. "Transport", "Contractor", "Material", "v", "w")
+  if (VENDOR_CATEGORY_KEYWORDS.includes(lower)) {
     return { explicitCategory: 'vendor', workerOrPayeeRemark: null };
   }
-  if (workerKeywords.includes(lower)) {
+  if (WORKER_CATEGORY_KEYWORDS.includes(lower)) {
     return { explicitCategory: 'advance', workerOrPayeeRemark: null };
   }
 
-  // 2. Delimiter separated: e.g. "abc, w", "abc - v", "amit: w", "abc / worker"
+  // 2. Delimiter separated: e.g. "UltraTech, m", "Manoj, thekedar", "Raju Dumper, transport", "pintu, w"
   const delimiterMatch = text.match(/^(.+?)\s*[,:\-\/|]\s*([a-zA-Z]+)$/);
   if (delimiterMatch) {
     const remarkPart = delimiterMatch[1].trim();
     const tagPart = delimiterMatch[2].toLowerCase().trim();
 
-    if (vendorKeywords.includes(tagPart)) {
-      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    if (VENDOR_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = VENDOR_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
-    if (workerKeywords.includes(tagPart)) {
-      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    if (WORKER_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = WORKER_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'advance', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
   }
 
-  // 3. Trailing space separated: e.g. "abc w", "abc v", "amit advance"
+  // 3. Trailing space separated: e.g. "UltraTech m", "Manoj thekedar", "pintu w"
   const trailingMatch = text.match(/^(.+?)\s+([a-zA-Z]+)$/);
   if (trailingMatch) {
     const remarkPart = trailingMatch[1].trim();
     const tagPart = trailingMatch[2].toLowerCase().trim();
 
-    if (vendorKeywords.includes(tagPart)) {
-      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    if (VENDOR_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = VENDOR_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
-    if (workerKeywords.includes(tagPart)) {
-      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    if (WORKER_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = WORKER_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'advance', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
   }
 
-  // 4. Leading tag separated: e.g. "w abc", "v abc", "vendor sri cements"
+  // 4. Leading tag separated: e.g. "w pintu", "m UltraTech", "thekedar Manoj", "transport Raju Dumper"
   const leadingMatch = text.match(/^([a-zA-Z]+)\s+[,:\-\/|]?\s*(.+)$/);
   if (leadingMatch) {
     const tagPart = leadingMatch[1].toLowerCase().trim();
     const remarkPart = leadingMatch[2].trim();
 
-    if (vendorKeywords.includes(tagPart)) {
-      return { explicitCategory: 'vendor', workerOrPayeeRemark: remarkPart };
+    if (VENDOR_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = VENDOR_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'vendor', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
-    if (workerKeywords.includes(tagPart)) {
-      return { explicitCategory: 'advance', workerOrPayeeRemark: remarkPart };
+    if (WORKER_CATEGORY_KEYWORDS.includes(tagPart)) {
+      const isRemarkCategoryWord = WORKER_CATEGORY_KEYWORDS.includes(remarkPart.toLowerCase());
+      return { explicitCategory: 'advance', workerOrPayeeRemark: isRemarkCategoryWord ? null : remarkPart };
     }
   }
 
   // 5. Custom name without explicit tag
+  if (VENDOR_CATEGORY_KEYWORDS.includes(lower)) {
+    return { explicitCategory: 'vendor', workerOrPayeeRemark: null };
+  }
+  if (WORKER_CATEGORY_KEYWORDS.includes(lower)) {
+    return { explicitCategory: 'advance', workerOrPayeeRemark: null };
+  }
+
   return { explicitCategory: null, workerOrPayeeRemark: text };
 }
 

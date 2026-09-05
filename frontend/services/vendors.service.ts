@@ -23,6 +23,38 @@ export interface VendorSummary {
   }>;
 }
 
+const GENERIC_CATEGORY_KEYWORDS = new Set([
+  'transport', 'material', 'thekedar', 'contractor', 'subcontractor', 'vendor',
+  'expense', 'service', 'general', 'hardware', 'cement', 'tempo', 'truck', 'dumper', 'driver'
+]);
+
+function extractRealVendorName(p: PaymentLedgerEntry): string {
+  let name = (p.paidTo || '').trim();
+  const lower = name.toLowerCase();
+
+  if (!name || GENERIC_CATEGORY_KEYWORDS.has(lower) || lower === 'vendor / payee' || lower === 'vendor / expense') {
+    if (p.notes && p.notes.includes('A/C:')) {
+      const acMatch = p.notes.match(/A\/C:\s*([^|()]+)/i);
+      if (acMatch && acMatch[1].trim()) {
+        const found = acMatch[1].trim();
+        if (!GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
+          return found;
+        }
+      }
+    }
+    if (p.notes && p.notes.includes('Remark:')) {
+      const remMatch = p.notes.match(/Remark:\s*([^|()]+)/i);
+      if (remMatch && remMatch[1].trim()) {
+        const found = remMatch[1].trim();
+        if (!GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
+          return found;
+        }
+      }
+    }
+  }
+  return name || 'Vendor / Material Supplier';
+}
+
 export class VendorsService {
   /**
    * Automatically aggregates all unique vendors and suppliers from the Khata Payment Ledger.
@@ -54,7 +86,7 @@ export class VendorsService {
     const grouped: Record<string, PaymentLedgerEntry[]> = {};
 
     for (const p of vendorPayments) {
-      const rawName = (p.paidTo || p.notes || 'Vendor / Material Supplier').trim();
+      const rawName = extractRealVendorName(p);
       const normalizedKey = rawName.toUpperCase();
 
       if (!grouped[normalizedKey]) {
@@ -76,7 +108,7 @@ export class VendorsService {
       totalBillsAll += billsCount;
 
       const latest = payments[0];
-      const displayName = latest.paidTo || key;
+      const displayName = extractRealVendorName(latest) || key;
 
       // Collect all contextual text across all payments for this vendor:
       // (displayName, payment notes, WhatsApp captions, raw OCR receipt text)
