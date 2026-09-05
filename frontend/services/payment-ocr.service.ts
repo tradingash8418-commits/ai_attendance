@@ -199,8 +199,8 @@ export class PaymentOcrService {
 
     let digitsAmount: number | null = null;
 
-    // Pattern A: Comma-formatted numbers (e.g. 37,400, 745,000.00, 45,000.00, ?45,000.00, 7,400, 15,000.00)
-    const commaMatch = textWithoutDates.match(/[?₹RsINR\s]*([0-9]{1,6}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?)/i);
+    // Pattern A: Comma-formatted numbers (e.g. 5,00,000.00, 37,400, 745,000.00, 45,000.00, 15,000.00)
+    const commaMatch = textWithoutDates.match(/[?₹RsINR\s]*([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?)/i);
     if (commaMatch && commaMatch[1]) {
       const cleanedVal = this.cleanOcrRupeeArtifact(commaMatch[1]);
       if (cleanedVal !== null && cleanedVal > 0 && cleanedVal < 10000000) {
@@ -208,10 +208,10 @@ export class PaymentOcrService {
       }
     }
 
-    // Pattern B: Keyword-tagged amounts (e.g. "Amount: INR 15,000", "Payment of ₹1,200", "Paid ₹460")
+    // Pattern B: Keyword-tagged amounts (e.g. "AMOUNT: ₹ 5,00,000.00", "Amount: INR 15,000", "Payment of ₹1,200", "Paid ₹460")
     if (digitsAmount === null) {
       const markedMatch = textWithoutDates.match(
-        /(?:amount|paid|total|sent|payment of)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i
+        /(?:amount|paid|total|sent|payment of)[\s:\n]*[?₹RsINR\s]*([0-9]+(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)/i
       );
       if (markedMatch && markedMatch[1]) {
         const cleanedVal = this.cleanOcrRupeeArtifact(markedMatch[1]);
@@ -290,12 +290,20 @@ export class PaymentOcrService {
           }
 
           candidate = candidate.replace(/^banking name:?\s*/i, '').trim();
+
+          // Skip 2-letter avatar badges like LP, DP, AP to get the actual beneficiary name
+          if ((candidate.length <= 3 || /^[A-Z]{1,3}$/.test(candidate)) && lines[i + 2]) {
+            candidate = (lines[i + 2] || '').trim();
+          }
+
           if (
             candidate &&
+            candidate.length > 3 &&
             !candidate.includes('@') &&
             !/^[0-9+]+$/.test(candidate) &&
             !candidate.toLowerCase().includes('upi') &&
-            !candidate.toLowerCase().includes('rupees')
+            !candidate.toLowerCase().includes('rupees') &&
+            !candidate.toLowerCase().includes('amount')
           ) {
             receiverName = candidate;
             break;
@@ -304,9 +312,9 @@ export class PaymentOcrService {
       }
     }
 
-    // Pattern 3: Fallback search for Banking Name / Account Title
+    // Pattern 3: Fallback search for Banking Name / Beneficiary Name / SENT TO
     if (!receiverName) {
-      const bankMatch = text.match(/banking\s+name:?\s*([^\n\r]+)/i);
+      const bankMatch = text.match(/(?:banking\s+name|beneficiary\s+name|account\s+name):?\s*([^\n\r]+)/i);
       if (bankMatch && bankMatch[1]) {
         receiverName = bankMatch[1].trim();
       }
@@ -363,7 +371,8 @@ export class PaymentOcrService {
     imageBuffer?: Buffer,
     mimeType: string = 'image/jpeg'
   ): Promise<ExtractedPaymentData> {
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+    const rawKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+    const geminiKey = rawKey.trim().replace(/^["']|["']$/g, '');
 
     // Detect actual MIME type (Supports Image or PDF)
     let cleanMimeType = mimeType || 'image/jpeg';
@@ -375,20 +384,48 @@ export class PaymentOcrService {
       }
     }
 
-    // Strategy 1: Multimodal AI Vision (Gemini 1.5 Flash) for 100% Zero-Error Understanding of Images & PDFs
+    // Strategy 1: Multimodal AI Vision (Gemini 2.0 / 1.5 Flash) for 100% Zero-Error Understanding of Images & PDFs
     if (geminiKey && imageBuffer) {
+      let candidateModels = [
+        'gemini-2.0-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+      ];
+
+      // Auto-discover enabled models for this key if available
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
-        const base64Clean = imageBuffer.toString('base64');
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `You are an expert financial AI receipt auditor for Indian businesses and construction contractors.
+        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`);
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          if (listData.models && Array.isArray(listData.models)) {
+            const supported = listData.models
+              .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+              .map((m: any) => m.name.replace(/^models\//, ''));
+            if (supported.length > 0) {
+              console.log('[PaymentOcrService] Auto-discovered Gemini models for this key:', supported);
+              candidateModels = supported;
+            }
+          }
+        }
+      } catch (listErr) {
+        console.warn('[PaymentOcrService] ListModels query failed, using defaults:', listErr);
+      }
+
+      const base64Clean = imageBuffer.toString('base64');
+
+      for (const modelName of candidateModels) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: `You are an expert financial AI receipt auditor for Indian businesses and construction contractors.
 Analyze this payment transaction screenshot OR bank transfer PDF receipt (Google Pay, PhonePe, Paytm, BHIM UPI, Net Banking, Axis/HDFC/SBI/Kotak/ICICI Payment Complete PDF).
 
 Key extraction instructions:
@@ -408,42 +445,60 @@ Extract the transaction details accurately in strict JSON format:
   "timestamp": string or null (date and time of transaction)
 }
 Do NOT include currency symbols or commas in the amount number. Return ONLY the valid JSON object.`
-                  },
-                  {
-                    inline_data: {
-                      mime_type: cleanMimeType,
-                      data: base64Clean
+                    },
+                    {
+                      inline_data: {
+                        mime_type: cleanMimeType,
+                        data: base64Clean
+                      }
                     }
-                  }
-                ]
+                  ]
+                }
+              ],
+              generationConfig: {
+                response_mime_type: 'application/json'
               }
-            ],
-            generationConfig: {
-              response_mime_type: 'application/json'
-            }
-          })
-        });
+            })
+          });
 
-        if (res.ok) {
-          const geminiData = await res.json();
-          const jsonText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (jsonText) {
-            const parsed = JSON.parse(jsonText);
-            console.log('[PaymentOcrService] Gemini AI Vision extracted from receipt:', parsed);
-            return {
-              isPaymentScreenshot: Boolean(parsed.is_payment),
-              amount: parsed.amount ? parseFloat(parsed.amount) : null,
-              receiverName: parsed.receiver_name || null,
-              upiId: parsed.upi_id || null,
-              timestampStr: parsed.timestamp || null,
-              paymentMethod: (parsed.payment_method || 'bank_transfer') as PaymentMethod,
-              confidence: 0.99,
-              rawText: jsonText
-            };
+          if (res.ok) {
+            const geminiData = await res.json();
+            const jsonText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (jsonText) {
+              const parsed = JSON.parse(jsonText);
+              console.log(`[PaymentOcrService] Gemini AI Vision (${modelName}) extracted:`, parsed);
+
+              let rawAmt = parsed.amount;
+              let finalAmt: number | null = null;
+              if (typeof rawAmt === 'number') {
+                finalAmt = rawAmt;
+              } else if (rawAmt) {
+                const cleanStr = String(rawAmt).replace(/,/g, '').replace(/[^0-9.]/g, '');
+                const p = parseFloat(cleanStr);
+                if (!isNaN(p) && p > 0) finalAmt = p;
+              }
+
+              return {
+                isPaymentScreenshot: Boolean(parsed.is_payment),
+                amount: finalAmt,
+                receiverName: parsed.receiver_name || null,
+                upiId: parsed.upi_id || null,
+                timestampStr: parsed.timestamp || null,
+                paymentMethod: (parsed.payment_method || 'bank_transfer') as PaymentMethod,
+                confidence: 0.99,
+                rawText: jsonText
+              };
+            }
+          } else if (res.status === 404) {
+            console.warn(`[PaymentOcrService] Gemini model ${modelName} returned 404, trying next candidate model...`);
+            continue;
+          } else {
+            const errBody = await res.text();
+            console.error(`[PaymentOcrService] Gemini (${modelName}) API error response (Status ${res.status}):`, errBody);
           }
+        } catch (geminiErr) {
+          console.warn(`[PaymentOcrService] Gemini Vision (${modelName}) error:`, geminiErr);
         }
-      } catch (geminiErr) {
-        console.warn('[PaymentOcrService] Gemini Vision API error, falling back to OCR:', geminiErr);
       }
     }
 
