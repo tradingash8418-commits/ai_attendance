@@ -60,13 +60,22 @@ export class SupervisorsService {
     const normalized = normalizeWhatsAppNumber(rawNumber);
     if (!normalized) return null;
 
+    const target10 = normalized.replace(/\D/g, '').slice(-10);
+
     const all = await this.getSupervisors(orgId);
-    const match = all.find(
-      (s) =>
-        s.active !== false &&
-        (normalizeWhatsAppNumber(s.whatsappNumber || '') === normalized ||
-          normalizeWhatsAppNumber(s.phone || '') === normalized)
-    );
+    const match = all.find((s) => {
+      if (s.active === false) return false;
+      const sWa = normalizeWhatsAppNumber(s.whatsappNumber || '');
+      const sPhone = normalizeWhatsAppNumber(s.phone || '');
+      const sWa10 = sWa.replace(/\D/g, '').slice(-10);
+      const sPhone10 = sPhone.replace(/\D/g, '').slice(-10);
+
+      return (
+        sWa === normalized ||
+        sPhone === normalized ||
+        (target10.length === 10 && (sWa10 === target10 || sPhone10 === target10))
+      );
+    });
     if (match) return match;
 
     // Fallback: Global lookup in root `users` collection by WhatsApp/Phone number
@@ -75,9 +84,16 @@ export class SupervisorsService {
       const usersSnap = await getDocs(query(usersColRef));
       const matchingUserDoc = usersSnap.docs.find((d) => {
         const u = d.data();
-        const uWa = normalizeWhatsAppNumber(u.whatsappNumber || '');
+        const uWa = normalizeWhatsAppNumber(u.whatsappNumber || u.phone || '');
         const uPhone = normalizeWhatsAppNumber(u.phone || '');
-        return uWa === normalized || uPhone === normalized;
+        const uWa10 = uWa.replace(/\D/g, '').slice(-10);
+        const uPhone10 = uPhone.replace(/\D/g, '').slice(-10);
+
+        return (
+          uWa === normalized ||
+          uPhone === normalized ||
+          (target10.length === 10 && (uWa10 === target10 || uPhone10 === target10))
+        );
       });
 
       if (matchingUserDoc) {

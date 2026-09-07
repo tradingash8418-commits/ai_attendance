@@ -160,6 +160,33 @@ export class WebhookProcessorServer {
       }
 
       // =====================================================================
+      // SECURITY & AUTHORIZATION GUARD FOR PAYMENTS / LEDGER EXPENDITURES
+      // Registered Contractor / Supervisor Verification:
+      // Worker 1-Tap QR Attendance scan is open for all workers/phones.
+      // Payment receipts (OCR), payment captions/splits, and direct text cash/expense
+      // entries MUST strictly come from a registered Contractor / Supervisor phone number.
+      // =====================================================================
+      if (!supervisor) {
+        console.warn(`[WebhookProcessor] Unauthorized payment attempt from non-registered sender: ${normalizedSender}`);
+
+        await WhatsAppService.sendMessage(
+          normalizedSender,
+          `🚫 *Unauthorized User / Access Denied*\n\n` +
+          `Aapka mobile number (*${normalizedSender}*) system mein registered contractor ya supervisor account se linked nahi hai.\n\n` +
+          `⚠️ *Payment receipts, direct cash entries, and Khata updates require a registered account.* Kripya signed-up contractor mobile number se message bhejein.\n\n` +
+          `*(Note: QR Attendance scan sabhi users ke liye open hai)*`
+        );
+
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', undefined, resolvedOrgId);
+
+        return {
+          status: 'unauthorized',
+          reason: `Sender ${normalizedSender} is not a registered contractor/supervisor`,
+          messageId: rawMessageId,
+        };
+      }
+
+      // =====================================================================
       // PATH 1B: FOLLOW-UP CAPTION / REMARK FOR RECENT PDF / IMAGE RECEIPT
       // e.g. User sent PDF receipt first, and immediately typed 'abc, w' or multi-worker split like 'pintu: 2000 durgesh: 3000'
       // =====================================================================
