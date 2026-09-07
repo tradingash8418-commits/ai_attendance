@@ -12,6 +12,7 @@ import { PaymentLedgerService } from './payment-ledger.service';
 import { SupervisorsService } from './supervisors.service';
 import { OrgContextService } from './org-context.service';
 import { getTodayDateString, normalizeWhatsAppNumber, getWorkerDisplayName } from '@/lib/formatters';
+import type { PaymentCategory, PaymentMethod } from '@/types/payment';
 
 export class WebhookProcessorServer {
   /**
@@ -341,6 +342,99 @@ export class WebhookProcessorServer {
               status: 'completed',
               reason: `Updated recent payment ${recentPayment.id} with remark: ${textBody}`,
               messageId: rawMessageId,
+            };
+          }
+        }
+
+        // Subcase 1B-3: Direct Text Cash / Expense Payment Registration (No Screenshot)
+        // e.g. "pintu prajapati: 500 cash", "rohit yadav: 300 cash w", "suresh hardware: 6000 cash m"
+        const directPayment = parseDirectTextPayment(textBody);
+        if (directPayment) {
+          console.log(`[WebhookProcessor] Direct text payment entry detected:`, directPayment);
+
+          const currentTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+          if (directPayment.isWorkerTarget) {
+            const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
+            const matchedWorker = findBestWorkerMatch(allWorkers, directPayment.payeeOrWorkerName);
+
+            const workerName = matchedWorker ? getWorkerDisplayName(matchedWorker) : directPayment.payeeOrWorkerName;
+            const workerId = matchedWorker ? matchedWorker.id : '';
+            const workerCode = matchedWorker?.workerCode || '';
+
+            const paymentRecordId = await PaymentLedgerService.recordPayment({
+              paidTo: workerName,
+              workerId: workerId,
+              workerName: workerName,
+              workerCode: workerCode || undefined,
+              workerPhone: matchedWorker?.phone || undefined,
+              amount: directPayment.amount,
+              category: directPayment.ledgerCategory,
+              paymentMethod: directPayment.paymentMethod,
+              paymentDate: today,
+              paymentTime: currentTime,
+              notes: `Direct Text Cash Entry | ${textBody}`,
+              recordedBy: `WhatsApp Text (${normalizedSender})`,
+            }, resolvedOrgId);
+
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
+
+            const confirmationMsg =
+              `💵 *Direct Cash Advance Recorded!* 👷‍♂️\n\n` +
+              `👤 *Worker Name:* ${workerName}\n` +
+              `💵 *Amount Paid:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
+              `💳 *Payment Method:* ${directPayment.paymentMethod.toUpperCase()}\n` +
+              `📒 *Khata Category:* Worker Advance / Kharcha\n` +
+              `📅 *Date:* ${today}\n\n` +
+              `Worker balance updated in Khata! 📊`;
+
+            await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
+
+            return {
+              status: 'completed',
+              reason: `Direct cash advance of ₹${directPayment.amount} recorded for worker ${workerName}`,
+              messageId: rawMessageId,
+              paymentId: paymentRecordId,
+            };
+          } else {
+            // Vendor / Material / Transport / Contractor Ledger
+            const categoryLabels: Record<string, string> = {
+              vendor_payment: 'Vendor Ledger Payment',
+              material: 'Material & Hardware Expense',
+              transport: 'Transport & Vehicle Expense',
+              thekedar: 'Subcontractor / Thekedar Payment',
+            };
+            const label = categoryLabels[directPayment.tagType] || 'Vendor Expense';
+
+            const paymentRecordId = await PaymentLedgerService.recordPayment({
+              paidTo: directPayment.payeeOrWorkerName,
+              amount: directPayment.amount,
+              category: directPayment.ledgerCategory,
+              paymentMethod: directPayment.paymentMethod,
+              paymentDate: today,
+              paymentTime: currentTime,
+              notes: `Direct Text Expense Entry (${label}) | ${textBody}`,
+              recordedBy: `WhatsApp Text (${normalizedSender})`,
+            }, resolvedOrgId);
+
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
+
+            const confirmationMsg =
+              `💵 *Direct Text Expense Recorded!* 📑\n\n` +
+              `👤 *Payee / Vendor:* ${directPayment.payeeOrWorkerName}\n` +
+              `💵 *Amount Paid:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
+              `💳 *Payment Method:* ${directPayment.paymentMethod.toUpperCase()}\n` +
+              `📒 *Ledger Category:* ${label}\n` +
+              `📅 *Date:* ${today}\n\n` +
+              `Expense has been registered in your accounting ledger! 📊`;
+
+            await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
+
+            return {
+              status: 'completed',
+              reason: `Direct expense of ₹${directPayment.amount} (${label}) recorded for ${directPayment.payeeOrWorkerName}`,
+              messageId: rawMessageId,
+              paymentId: paymentRecordId,
             };
           }
         }
@@ -906,4 +1000,118 @@ export function parseBatchWorkerSplitCaption(rawText: string): WorkerSplitItem[]
 
   return results;
 }
+
+export interface DirectTextPaymentResult {
+  payeeOrWorkerName: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  isWorkerTarget: boolean;
+  ledgerCategory: PaymentCategory;
+  tagType: 'advance' | 'material' | 'transport' | 'thekedar' | 'vendor_payment';
+}
+
+/**
+ * Parses direct text cash/expense messages like:
+ * - pintu prajapati: 500 cash -> Vendor Ledger (Default)
+ * - rohit yadav: 300 cash w -> Worker Khata (Advance)
+ * - ganesh pathak: 7000 cash v -> Vendor Ledger
+ * - suresh hardware: 6000 cash m -> Material & Hardware Expense
+ * - deepak: 500 cash t -> Transport Expense
+ * - sanju singh yadav: 4000 cash c -> Contractor Expense
+ */
+export function parseDirectTextPayment(rawText: string): DirectTextPaymentResult | null {
+  if (!rawText || !rawText.trim()) return null;
+  const text = rawText.trim();
+
+  // Ignore check-in codes
+  if (text.toUpperCase().includes('CHECKIN_')) return null;
+
+  // Primary pattern matching: Name [:=- or space] [₹/Rs] Amount [Trailing Method/Tag]
+  const mainRegex = /^(?:['"‘“])?([a-zA-Z0-9\s._&]+?)(?:['"’”])?\s*[:=-]?\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)\s*(.*)$/i;
+
+  const match = text.match(mainRegex);
+  if (!match || !match[1] || !match[2]) return null;
+
+  const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
+  const rawAmt = match[2].replace(/,/g, '').trim();
+  const amount = parseFloat(rawAmt);
+  const trailingStr = (match[3] || '').trim().toLowerCase();
+
+  const reservedWords = ['checkin', 'help', 'status', 'start', 'stop', 'hi', 'hello'];
+  if (!rawName || isNaN(amount) || amount <= 0 || reservedWords.includes(rawName.toLowerCase())) {
+    return null;
+  }
+
+  const tokens = trailingStr.split(/[\s,._\-\/]+/).filter(Boolean);
+
+  let paymentMethod: PaymentMethod = 'cash';
+  const methodKeywords: Record<string, PaymentMethod> = {
+    cash: 'cash',
+    gpay: 'gpay',
+    googlepay: 'gpay',
+    phonepe: 'phonepe',
+    paytm: 'paytm',
+    upi: 'upi',
+    online: 'bank_transfer',
+    bank: 'bank_transfer',
+    transfer: 'bank_transfer',
+    cheque: 'bank_transfer',
+  };
+
+  for (const token of tokens) {
+    if (methodKeywords[token]) {
+      paymentMethod = methodKeywords[token];
+      break;
+    }
+  }
+
+  let tagType: 'advance' | 'material' | 'transport' | 'thekedar' | 'vendor_payment' = 'vendor_payment';
+  let ledgerCategory: PaymentCategory = 'vendor';
+  let isWorkerTarget = false;
+
+  const workerTags = ['w', 'worker', 'karigar', 'advance', 'kharcha'];
+  const materialTags = ['m', 'material', 'hardware', 'supplier', 'goods'];
+  const transportTags = ['t', 'transport', 'vehicle', 'truck', 'dumper', 'freight', 'bhada'];
+  const contractorTags = ['c', 'contractor', 'thekedar', 'subcontractor'];
+  const vendorTags = ['v', 'vendor', 'payee', 'seller'];
+
+  for (const token of tokens) {
+    if (workerTags.includes(token)) {
+      tagType = 'advance';
+      ledgerCategory = 'advance';
+      isWorkerTarget = true;
+      break;
+    } else if (materialTags.includes(token)) {
+      tagType = 'material';
+      ledgerCategory = 'material';
+      isWorkerTarget = false;
+      break;
+    } else if (transportTags.includes(token)) {
+      tagType = 'transport';
+      ledgerCategory = 'vendor';
+      isWorkerTarget = false;
+      break;
+    } else if (contractorTags.includes(token)) {
+      tagType = 'thekedar';
+      ledgerCategory = 'vendor';
+      isWorkerTarget = false;
+      break;
+    } else if (vendorTags.includes(token)) {
+      tagType = 'vendor_payment';
+      ledgerCategory = 'vendor';
+      isWorkerTarget = false;
+      break;
+    }
+  }
+
+  return {
+    payeeOrWorkerName: rawName,
+    amount,
+    paymentMethod,
+    isWorkerTarget,
+    ledgerCategory,
+    tagType,
+  };
+}
+
 
