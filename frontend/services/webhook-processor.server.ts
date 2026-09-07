@@ -127,7 +127,7 @@ export class WebhookProcessorServer {
           // 4. Mark pending checkin as used
           await PendingCheckinService.markPendingCheckinUsed(session.id, trueOrgId);
           await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed', trueOrgId);
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId, trueOrgId);
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId, resolvedOrgId);
 
           // 5. Send instant, complete attendance report back to the worker under trueOrgId
           await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({

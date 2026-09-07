@@ -14,6 +14,8 @@ import type { Supervisor } from '@/types/supervisor';
 
 const COLLECTION_NAME = 'whatsappMessages';
 
+const DEFAULT_ORG_ID = 'org_primary';
+
 export class WhatsAppService {
   /**
    * Duplicate Protection Check:
@@ -21,12 +23,25 @@ export class WhatsAppService {
    */
   public static async isWhatsAppMessageAlreadyProcessed(messageId: string, orgId?: string): Promise<boolean> {
     if (!messageId) return false;
-    const docs = await OrgContextService.getDocsWithFallback(
-      COLLECTION_NAME,
-      [where('messageId', '==', messageId)],
-      orgId
-    );
-    return docs.length > 0;
+    try {
+      const docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [where('messageId', '==', messageId)],
+        orgId
+      );
+      if (docs.length > 0) return true;
+      if (orgId && orgId !== DEFAULT_ORG_ID) {
+        const fallbackDocs = await OrgContextService.getDocsWithFallback(
+          COLLECTION_NAME,
+          [where('messageId', '==', messageId)],
+          DEFAULT_ORG_ID
+        );
+        return fallbackDocs.length > 0;
+      }
+    } catch (e) {
+      console.warn(`[WhatsAppService] Error checking duplicate message ${messageId}:`, e);
+    }
+    return false;
   }
 
   /**
@@ -78,7 +93,7 @@ export class WhatsAppService {
   }
 
   /**
-   * Update message processing status.
+   * Update message processing status safely without throwing 5 NOT_FOUND errors.
    */
   public static async updateMessageStatus(
     id: string,
@@ -86,12 +101,26 @@ export class WhatsAppService {
     attendanceSessionId?: string,
     orgId?: string
   ): Promise<void> {
-    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
-    await updateDoc(res.ref, {
-      processed: processingStatus === 'processed',
-      processingStatus,
-      ...(attendanceSessionId ? { attendanceSessionId } : {}),
-    });
+    if (!id) return;
+    try {
+      let res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+      if (!res.data && orgId && orgId !== DEFAULT_ORG_ID) {
+        const fallbackRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, DEFAULT_ORG_ID);
+        if (fallbackRes.data) {
+          res = fallbackRes;
+        }
+      }
+
+      if (res.data && res.ref) {
+        await updateDoc(res.ref, {
+          processed: processingStatus === 'processed',
+          processingStatus,
+          ...(attendanceSessionId ? { attendanceSessionId } : {}),
+        });
+      }
+    } catch (e) {
+      console.warn(`[WhatsAppService] Non-critical warning updating message status for ${id}:`, e);
+    }
   }
 
   /**
