@@ -1,0 +1,122 @@
+[
+  {
+    "_id": "8mbd7BQfOlSiRaDy2XU1",
+    "workerCode": "WRK-0013",
+    "paymentDate": "2026-09-06",
+    "workerPhone": "+917385553328",
+    "amount": 1000,
+    "transactionRef": "",
+    "rawOcrText": "",
+    "paidTo": "Pradeep kanujia (3328)",
+    "siteId": "",
+    "upiId": "",
+    "paymentTime": "08:14 PM",
+    "receiptPhotoUrl": "",
+    "recordedBy": "Admin (Worker 360° Profile)",
+    "category": "advance",
+    "siteName": "",
+    "paymentMethod": "gpay",
+    "status": "confirmed",
+    "workerId": "8JQzn0BRKbiRruyIN3Yt",
+    "workerName": "Pradeep kanujia (3328)",
+    "updatedAt": {
+      "seconds": 1788705890,
+      "nanoseconds": 591000000
+    },
+    "createdAt": {
+      "seconds": 1788705890,
+      "nanoseconds": 591000000
+    },
+    "notes": "Cash"
+  },
+  {
+    "_id": "R7WSs12Kn7dvbDdv5SNX",
+    "upiId": "",
+    "rawOcrText": "{\n  \"is_payment\": true,\n  \"amount\": 20000,\n  \"receiver_name\": \"Lakshman Dusadh\",\n  \"payment_method\": \"gpay\",\n  \"upi_id\": null,\n  \"timestamp\": \"6 September 2026, 8:16pm\"\n}",
+    "amount": 10000,
+    "notes": "Split Advance (Receipt Total: ₹20000) | A/C: Lakshman Dusadh | Caption: Laxman 10000\nOmkar 10000",
+    "paymentTime": "6 September 2026, 8:16pm",
+    "workerCode": "",
+    "paidTo": "Lakshman Dusadh",
+    "workerName": "Omkar",
+    "siteId": "",
+    "receiptPhotoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/attendance/2026-09-06/payment_receipts/group_1788715150279.jpg",
+    "status": "confirmed",
+    "createdAt": {
+      "seconds": 1788715154,
+      "nanoseconds": 589000000
+    },
+    "paymentDate": "2026-09-06",
+    "paymentMethod": "gpay",
+    "recordedBy": "WhatsApp AI OCR (+917977267944)",
+    "siteName": "",
+    "transactionRef": "",
+    "workerPhone": "",
+    "workerId": "",
+    "updatedAt": {
+      "seconds": 1788715154,
+      "nanoseconds": 589000000
+    },
+    "category": "advance"
+  },
+  {
+    "_id": "RsQbazJS55G525gEieJT",
+    "workerCode": "WRK-0025",
+    "createdAt": {
+      "seconds": 1788707656,
+      "nanoseconds": 478000000
+    },
+    "paymentTime": "08:44 PM",
+    "siteId": "",
+    "paymentMethod": "gpay",
+    "transactionRef": "",
+    "status": "confirmed",
+    "rawOcrText": "",
+    "updatedAt": {
+      "seconds": 1788707656,
+      "nanoseconds": 478000000
+    },
+    "receiptPhotoUrl": "",
+    "recordedBy": "Admin (Worker 360° Profile)",
+    "workerId": "eBOvjYDgGCEm2qRNmuzK",
+    "siteName": "",
+    "category": "advance",
+    "paidTo": "Sandeep rajbhar carpenter (8907)",
+    "upiId": "",
+    "paymentDate": "2026-09-06",
+    "workerName": "Sandeep rajbhar carpenter (8907)",
+    "notes": "Cash",
+    "workerPhone": "+918149248907",
+    "amount": 500
+  },
+  {
+    "_id": "wwT63jC9wEaaguogr4V2",
+    "status": "confirmed",
+    "receiptPhotoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/attendance/2026-09-06/payment_receipts/group_1788715150279.jpg",
+    "siteId": "",
+    "paymentMethod": "gpay",
+    "recordedBy": "WhatsApp AI OCR (+917977267944)",
+    "paymentTime": "6 September 2026, 8:16pm",
+    "createdAt": {
+      "seconds": 1788715154,
+      "nanoseconds": 251000000
+    },
+    "category": "advance",
+    "updatedAt": {
+      "seconds": 1788715154,
+      "nanoseconds": 251000000
+    },
+    "workerName": "Laxman",
+    "siteName": "",
+    "workerId": "",
+    "amount": 10000,
+    "notes": "Split Advance (Receipt Total: ₹20000) | A/C: Lakshman Dusadh | Caption: Laxman 10000\nOmkar 10000",
+    "transactionRef": "",
+    "workerCode": "",
+    "paidTo": "Lakshman Dusadh",
+    "workerPhone": "",
+    "rawOcrText": "{\n  \"is_payment\": true,\n  \"amount\": 20000,\n  \"receiver_name\": \"Lakshman Dusadh\",\n  \"payment_method\": \"gpay\",\n  \"upi_id\": null,\n  \"timestamp\": \"6 September 2026, 8:16pm\"\n}",
+    "paymentDate": "2026-09-06",
+    "upiId": ""
+  }
+]

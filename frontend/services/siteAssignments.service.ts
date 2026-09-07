@@ -1,28 +1,26 @@
 import {
-  collection,
-  doc,
-  getDocs,
   addDoc,
   updateDoc,
-  query,
   where,
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { getTodayDateString } from '@/lib/formatters';
+import { OrgContextService } from './org-context.service';
 import type { SiteAssignment } from '@/types/site';
 
 const COLLECTION_NAME = 'siteAssignments';
 
 export class SiteAssignmentsService {
-  public static async getSiteAssignments(): Promise<SiteAssignment[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
+  public static async getSiteAssignments(orgId?: string): Promise<SiteAssignment[]> {
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [orderBy('createdAt', 'desc')],
+      orgId
+    );
+    return docs.map((d) => ({
+      id: d.id,
+      ...d,
     })) as SiteAssignment[];
   }
 
@@ -32,18 +30,17 @@ export class SiteAssignmentsService {
    */
   public static async getWorkerSiteAssignment(
     workerId: string,
-    targetDate: string = getTodayDateString()
+    targetDate: string = getTodayDateString(),
+    orgId?: string
   ): Promise<SiteAssignment | null> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(
-      colRef,
-      where('workerId', '==', workerId),
-      where('active', '==', true)
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('workerId', '==', workerId), where('active', '==', true)],
+      orgId
     );
-    const snapshot = await getDocs(q);
 
-    for (const docSnap of snapshot.docs) {
-      const assignment = { id: docSnap.id, ...docSnap.data() } as SiteAssignment;
+    for (const d of docs) {
+      const assignment = { id: d.id, ...d } as SiteAssignment;
       const start = assignment.startDate;
       const end = assignment.endDate;
 
@@ -59,18 +56,17 @@ export class SiteAssignmentsService {
    */
   public static async getAssignmentsBySite(
     siteId: string,
-    targetDate: string = getTodayDateString()
+    targetDate: string = getTodayDateString(),
+    orgId?: string
   ): Promise<SiteAssignment[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(
-      colRef,
-      where('siteId', '==', siteId),
-      where('active', '==', true)
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('siteId', '==', siteId), where('active', '==', true)],
+      orgId
     );
-    const snapshot = await getDocs(q);
 
-    return snapshot.docs
-      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as SiteAssignment))
+    return docs
+      .map((d) => ({ id: d.id, ...d } as SiteAssignment))
       .filter((assignment) => {
         const start = assignment.startDate;
         const end = assignment.endDate;
@@ -85,29 +81,25 @@ export class SiteAssignmentsService {
   public static async assignWorkerToSite(
     workerId: string,
     siteId: string,
-    startDate: string = getTodayDateString()
+    startDate: string = getTodayDateString(),
+    orgId?: string
   ): Promise<string> {
-    // 1. Deactivate existing active assignments for this worker
-    const colRef = collection(db, COLLECTION_NAME);
-    const existingQ = query(
-      colRef,
-      where('workerId', '==', workerId),
-      where('active', '==', true)
-    );
-    const existingSnap = await getDocs(existingQ);
+    const existingQ = [where('workerId', '==', workerId), where('active', '==', true)];
+    const existingDocs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, existingQ, orgId);
 
     const now = serverTimestamp();
-    for (const docSnap of existingSnap.docs) {
-      const existingRef = doc(db, COLLECTION_NAME, docSnap.id);
-      await updateDoc(existingRef, {
+    for (const d of existingDocs) {
+      const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, d.id, orgId);
+      await updateDoc(res.ref, {
         active: false,
         endDate: startDate,
         updatedAt: now,
       });
     }
 
-    // 2. Create new site assignment record
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const newDocRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       workerId,
       siteId,
       startDate,

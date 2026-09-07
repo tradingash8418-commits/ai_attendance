@@ -1,0 +1,164 @@
+[
+  {
+    "_id": "2e9sdhoaa4n124QXiKmp",
+    "updatedAt": {
+      "seconds": 1788377858,
+      "nanoseconds": 871000000
+    },
+    "supervisorId": "sta4ADNZ6k9sgheX0Len",
+    "address": "Bandra West, Mumbai",
+    "createdAt": {
+      "seconds": 1788377858,
+      "nanoseconds": 871000000
+    },
+    "name": "Site B (Bandra Residential)",
+    "active": true
+  },
+  {
+    "_id": "5wI74ntKlF0DUFqInn98",
+    "supervisorId": "sta4ADNZ6k9sgheX0Len",
+    "checkInToken": "st_kmqdjw_mtmxia2o",
+    "radiusMeters": 150,
+    "longitude": 73.000167,
+    "address": "Bandra West, Mumbai",
+    "updatedAt": {
+      "seconds": 1788524834,
+      "nanoseconds": 902000000
+    },
+    "active": true,
+    "name": "Site B (Bandra Residential)",
+    "createdAt": {
+      "seconds": 1788414902,
+      "nanoseconds": 71000000
+    },
+    "latitude": 19.13899
+  },
+  {
+    "_id": "7hyADcOmliAFdhz4vfEt",
+    "longitude": 73.000347,
+    "latitude": 19.13944,
+    "address": "Andheri West, Mumbai",
+    "active": true,
+    "createdAt": {
+      "seconds": 1788377858,
+      "nanoseconds": 849000000
+    },
+    "radiusMeters": 150,
+    "supervisorId": "afTuYOjb0GLPd1ZTP0Tt",
+    "updatedAt": {
+      "seconds": 1788620968,
+      "nanoseconds": 157000000
+    },
+    "name": "Site A (Andheri Commercial)"
+  },
+  {
+    "_id": "FphLwPRmI7xzbMoCP0S5",
+    "radiusMeters": 150,
+    "updatedAt": {
+      "seconds": 1788677198,
+      "nanoseconds": 288000000
+    },
+    "checkInToken": "st_y8kl7n_mtpg7yyx",
+    "address": "",
+    "active": true,
+    "createdAt": {
+      "seconds": 1788677198,
+      "nanoseconds": 288000000
+    },
+    "supervisorId": "",
+    "name": "Honasa gurugram",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "_id": "YlmKfeRHtLJhuk3XDvIP",
+    "createdAt": {
+      "seconds": 1788418316,
+      "nanoseconds": 87000000
+    },
+    "updatedAt": {
+      "seconds": 1788524936,
+      "nanoseconds": 408000000
+    },
+    "name": "Site B (Bandra Residential)",
+    "latitude": 19.138934,
+    "active": true,
+    "address": "Bandra West, Mumbai",
+    "checkInToken": "st_e0hqvt_mtmqc7sp",
+    "longitude": 73.000154,
+    "radiusMeters": 150,
+    "supervisorId": "8iQUmXdr9AWYjW19qixk"
+  },
+  {
+    "_id": "qLbAZzYsEhswv8aLRgMz",
+    "active": true,
+    "name": "Site A (Andheri Commercial)",
+    "createdAt": {
+      "seconds": 1788414902,
+      "nanoseconds": 14000000
+    },
+    "updatedAt": {
+      "seconds": 1788753214,
+      "nanoseconds": 929000000
+    },
+    "supervisorId": "afTuYOjb0GLPd1ZTP0Tt",
+    "address": "Andheri West, Mumbai"
+  },
+  {
+    "_id": "s5DsFYvmitsXu1NPVs6J",
+    "updatedAt": {
+      "seconds": 1788673567,
+      "nanoseconds": 830000000
+    },
+    "address": "Twin tower",
+    "supervisorId": "",
+    "radiusMeters": 500,
+    "checkInToken": "st_4fk9vv_mtpdxh2u",
+    "name": "Isprva",
+    "createdAt": {
+      "seconds": 1788673349,
+      "nanoseconds": 271000000
+    },
+    "latitude": 19.01893,
+    "active": true,
+    "longitude": 72.828051
+  },
+  {
+    "_id": "udDpJgbe5ufxPz257tKc",
+    "address": "Andheri West, Mumbai",
+    "latitude": 19.138897,
+    "longitude": 73.000162,
+    "checkInToken": "st_557g9u_mtmqb8g0",
+    "updatedAt": {
+      "seconds": 1788524982,
+      "nanoseconds": 176000000
+    },
+    "radiusMeters": 200,
+    "active": true,
+    "createdAt": {
+      "seconds": 1788418316,
+      "nanoseconds": 35000000
+    },
+    "supervisorId": "afTuYOjb0GLPd1ZTP0Tt",
+    "name": "Site AA (Andheri Commercial)"
+  },
+  {
+    "_id": "zcDvv0aqWapa4P3uTmaK",
+    "latitude": 19.073269,
+    "address": "khar, crest link",
+    "longitude": 72.833974,
+    "updatedAt": {
+      "seconds": 1788621110,
+      "nanoseconds": 583000000
+    },
+    "supervisorId": "",
+    "checkInToken": "st_4qfelp_mtoirf59",
+    "radiusMeters": 500,
+    "createdAt": {
+      "seconds": 1788620998,
+      "nanoseconds": 565000000
+    },
+    "name": "Dental world",
+    "active": true
+  }
+]

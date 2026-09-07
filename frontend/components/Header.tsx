@@ -23,7 +23,7 @@ import { AuthService } from '@/services/auth.service';
 export const Header: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [showProfileDropdown, setShowProfileDropdown] = useState<boolean>(false);
 
   // Completely isolate worker check-in and login screens from any navigation/header
@@ -103,10 +103,12 @@ export const Header: React.FC = () => {
 
           {/* Right: Mode Pill & User Profile */}
           <div className="flex items-center gap-3">
-            {/* Live System Status Pill */}
+            {/* Live System Status & Organization Badge */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
-              <span className="text-[11px] tracking-wider uppercase text-emerald-400">LIVE MODE</span>
+              <span className="text-[11px] tracking-wider uppercase text-emerald-400">
+                {userProfile?.organizationName || 'LIVE MODE'}
+              </span>
             </div>
 
             {/* Notifications Bell */}
@@ -128,12 +130,15 @@ export const Header: React.FC = () => {
               </button>
 
               {showProfileDropdown && (
-                <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl space-y-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl space-y-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-3 py-2 border-b border-slate-800/80">
                     <p className="font-extrabold text-white truncate">
-                      {user?.displayName || 'Contractor Admin'}
+                      {userProfile?.displayName || user?.displayName || 'Contractor Admin'}
                     </p>
                     <p className="text-[11px] text-slate-400 truncate">{user?.email || 'admin@contractor.ai'}</p>
+                    <div className="mt-1.5 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 inline-block text-[10px] font-bold text-blue-400 truncate max-w-full">
+                      🏢 {userProfile?.organizationName || 'Organization'}
+                    </div>
                   </div>
 
                   <button

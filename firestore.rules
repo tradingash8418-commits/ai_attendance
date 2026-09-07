@@ -2,6 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Multi-tenant organization nested sub-collections
+    match /organizations/{orgId}/{document=**} {
+      allow read, write: if true;
+    }
+
+    // Root collections (backward compatibility dual-read fallback)
     match /{document=**} {
       allow read, write: if true;
     }

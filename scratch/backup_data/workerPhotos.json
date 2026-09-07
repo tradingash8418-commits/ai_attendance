@@ -1,0 +1,92 @@
+[
+  {
+    "_id": "OZo8zkEYjf9XMKoPhx2s",
+    "createdAt": {
+      "seconds": 1788508181,
+      "nanoseconds": 617000000
+    },
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/hhS6apzBBIldvPloZYPq/photo_1788508180651_zjfuy.jpg",
+    "workerId": "hhS6apzBBIldvPloZYPq",
+    "active": true,
+    "storagePath": "local/hhS6apzBBIldvPloZYPq/photo_1788508180651_zjfuy.jpg",
+    "updatedAt": {
+      "seconds": 1788508181,
+      "nanoseconds": 617000000
+    }
+  },
+  {
+    "_id": "PXKJze6wiDvx4tUy4hAM",
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/hhS6apzBBIldvPloZYPq/photo_1788508228202_p5sjq.jpg",
+    "updatedAt": {
+      "seconds": 1788508229,
+      "nanoseconds": 25000000
+    },
+    "active": true,
+    "workerId": "hhS6apzBBIldvPloZYPq",
+    "storagePath": "local/hhS6apzBBIldvPloZYPq/photo_1788508228202_p5sjq.jpg",
+    "createdAt": {
+      "seconds": 1788508229,
+      "nanoseconds": 25000000
+    }
+  },
+  {
+    "_id": "eNGA0nozKpr4YQpVJpci",
+    "createdAt": {
+      "seconds": 1788542213,
+      "nanoseconds": 975000000
+    },
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/N7ILAt5EJHxwKsZ1gGml/photo_1788542212597_9jgv3.jpg",
+    "active": true,
+    "workerId": "N7ILAt5EJHxwKsZ1gGml",
+    "storagePath": "local/N7ILAt5EJHxwKsZ1gGml/photo_1788542212597_9jgv3.jpg",
+    "updatedAt": {
+      "seconds": 1788542213,
+      "nanoseconds": 975000000
+    }
+  },
+  {
+    "_id": "qPoul0VZrjxsZ3l3uyyE",
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/hhS6apzBBIldvPloZYPq/photo_1788508247661_c2s6f.jpg",
+    "createdAt": {
+      "seconds": 1788508248,
+      "nanoseconds": 951000000
+    },
+    "workerId": "hhS6apzBBIldvPloZYPq",
+    "active": true,
+    "updatedAt": {
+      "seconds": 1788508248,
+      "nanoseconds": 951000000
+    },
+    "storagePath": "local/hhS6apzBBIldvPloZYPq/photo_1788508247661_c2s6f.jpg"
+  },
+  {
+    "_id": "sQcmXRH2phDxjf3Ww3ML",
+    "active": true,
+    "createdAt": {
+      "seconds": 1788542195,
+      "nanoseconds": 384000000
+    },
+    "workerId": "N7ILAt5EJHxwKsZ1gGml",
+    "updatedAt": {
+      "seconds": 1788542195,
+      "nanoseconds": 384000000
+    },
+    "storagePath": "local/N7ILAt5EJHxwKsZ1gGml/photo_1788542194000_6eade.jpg",
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/N7ILAt5EJHxwKsZ1gGml/photo_1788542194000_6eade.jpg"
+  },
+  {
+    "_id": "xKDlFaXyOWwQ18zaQniR",
+    "updatedAt": {
+      "seconds": 1788542204,
+      "nanoseconds": 955000000
+    },
+    "photoUrl": "https://ylrmdteluxqryifdaiiv.supabase.co/storage/v1/object/public/attendance-photos/workers/N7ILAt5EJHxwKsZ1gGml/photo_1788542203930_agoec.jpg",
+    "workerId": "N7ILAt5EJHxwKsZ1gGml",
+    "storagePath": "local/N7ILAt5EJHxwKsZ1gGml/photo_1788542203930_agoec.jpg",
+    "active": true,
+    "createdAt": {
+      "seconds": 1788542204,
+      "nanoseconds": 955000000
+    }
+  }
+]

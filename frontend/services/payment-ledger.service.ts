@@ -1,18 +1,13 @@
 import {
-  collection,
-  doc,
-  getDocs,
   addDoc,
   updateDoc,
-  deleteDoc,
-  query,
-  where,
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { WorkersService } from './workers.service';
 import { AttendanceService } from './attendance.service';
+import { OrgContextService } from './org-context.service';
+import { RecycleBinService } from './recycle-bin.service';
 import type { PaymentLedgerEntry, PaymentCategory, PaymentMethod } from '@/types/payment';
 
 const COLLECTION_NAME = 'paymentLedger';
@@ -35,32 +30,36 @@ export class PaymentLedgerService {
   /**
    * Records a new payment / advance entry into the Khata Ledger.
    */
-  public static async recordPayment(data: {
-    paidTo: string;
-    workerId?: string;
-    workerName?: string;
-    workerCode?: string;
-    workerPhone?: string;
-    siteId?: string;
-    siteName?: string;
-    amount: number;
-    category?: PaymentCategory;
-    paymentMethod?: PaymentMethod;
-    upiId?: string;
-    transactionRef?: string;
-    paymentDate: string; // YYYY-MM-DD
-    paymentTime?: string;
-    receiptPhotoUrl?: string;
-    notes?: string;
-    recordedBy: string;
-    rawOcrText?: string;
-  }): Promise<string> {
-    const colRef = collection(db, COLLECTION_NAME);
+  public static async recordPayment(
+    data: {
+      paidTo: string;
+      workerId?: string;
+      workerName?: string;
+      workerCode?: string;
+      workerPhone?: string;
+      siteId?: string;
+      siteName?: string;
+      amount: number;
+      category?: PaymentCategory;
+      paymentMethod?: PaymentMethod;
+      upiId?: string;
+      transactionRef?: string;
+      paymentDate: string; // YYYY-MM-DD
+      paymentTime?: string;
+      receiptPhotoUrl?: string;
+      notes?: string;
+      recordedBy: string;
+      rawOcrText?: string;
+    },
+    orgId?: string
+  ): Promise<string> {
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const now = serverTimestamp();
 
     const recipientName = (data.paidTo || data.workerName || 'Unknown').trim();
 
     const docRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       paidTo: recipientName,
       workerId: data.workerId || '',
       workerName: data.workerName || recipientName,
@@ -90,28 +89,29 @@ export class PaymentLedgerService {
   /**
    * Retrieves payments matching optional filters.
    */
-  public static async getPayments(filters?: {
-    workerId?: string;
-    siteId?: string;
-    date?: string;
-  }): Promise<PaymentLedgerEntry[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    let q = query(colRef, orderBy('paymentDate', 'desc'));
+  public static async getPayments(
+    filters?: {
+      workerId?: string;
+      siteId?: string;
+      date?: string;
+    },
+    orgId?: string
+  ): Promise<PaymentLedgerEntry[]> {
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [orderBy('paymentDate', 'desc')],
+      orgId
+    );
+
+    let entries = docs.map((d) => ({
+      id: d.id,
+      ...d,
+      paidTo: d.paidTo || d.workerName || 'Recipient',
+    })) as PaymentLedgerEntry[];
 
     if (filters?.workerId) {
-      q = query(colRef, where('workerId', '==', filters.workerId), orderBy('paymentDate', 'desc'));
+      entries = entries.filter((e) => e.workerId === filters.workerId);
     }
-
-    const snapshot = await getDocs(q);
-    let entries = snapshot.docs.map((docSnap) => {
-      const d = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...d,
-        paidTo: d.paidTo || d.workerName || 'Recipient',
-      };
-    }) as PaymentLedgerEntry[];
-
     if (filters?.siteId) {
       entries = entries.filter((e) => e.siteId === filters.siteId);
     }
@@ -128,19 +128,19 @@ export class PaymentLedgerService {
    */
   public static async getAllWorkersKhataSummary(
     defaultDailyRate = 500,
-    dateRange?: { startDate?: string; endDate?: string }
+    dateRange?: { startDate?: string; endDate?: string },
+    orgId?: string
   ): Promise<{
     summaries: WorkerKhataSummary[];
     totalAdvancesPaidAll: number;
     totalHajriAll: number;
   }> {
     const [workers, allAttendanceRecords, allPayments] = await Promise.all([
-      WorkersService.getWorkers(),
-      AttendanceService.getAttendanceRecords(),
-      this.getPayments(),
+      WorkersService.getWorkers(orgId),
+      AttendanceService.getAttendanceRecords(undefined, orgId),
+      this.getPayments(undefined, orgId),
     ]);
 
-    // Apply date range filters if specified
     const attendanceRecords = allAttendanceRecords.filter((r) => {
       if (!dateRange?.startDate && !dateRange?.endDate) return true;
       if (dateRange.startDate && r.date < dateRange.startDate) return false;
@@ -159,16 +159,15 @@ export class PaymentLedgerService {
     let totalHajriAll = 0;
 
     const summaries: WorkerKhataSummary[] = workers.map((worker) => {
-      // 1. Calculate total Hajri days earned
       const workerRecords = attendanceRecords.filter(
         (r) => r.workerId === worker.id || r.workerId === worker.workerCode
       );
       const totalHajriEarned = workerRecords.reduce((sum, r) => {
-        const h = typeof r.hajri === 'number' ? r.hajri : 1.0;
+        const h = typeof r.hajri === 'number' ? r.hajri : 0;
         return sum + h;
       }, 0);
 
-      // 2. Calculate total advances and payments from ledger
+
       const workerPayments = payments.filter(
         (p) => p.workerId === worker.id || (worker.workerCode && p.workerCode === worker.workerCode)
       );
@@ -203,7 +202,6 @@ export class PaymentLedgerService {
       };
     });
 
-    // 3. Find temporary / un-enrolled worker advances (e.g. 2-3 day workers with category 'advance')
     const registeredWorkerIds = new Set(workers.map((w) => w.id));
     const registeredWorkerCodes = new Set(workers.map((w) => w.workerCode).filter(Boolean));
 
@@ -256,6 +254,35 @@ export class PaymentLedgerService {
   }
 
   /**
+   * Updates any details of a payment (amount, category, payee name, method, notes, date, upiId, etc.).
+   */
+  public static async updatePayment(
+    id: string,
+    data: {
+      amount?: number;
+      category?: PaymentCategory;
+      workerId?: string;
+      workerName?: string;
+      workerCode?: string;
+      paidTo?: string;
+      paymentMethod?: PaymentMethod;
+      paymentDate?: string;
+      paymentTime?: string;
+      notes?: string;
+      upiId?: string;
+      isEditedByContractor?: boolean;
+    },
+    orgId?: string
+  ): Promise<void> {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    const updatePayload: any = {
+      ...data,
+      updatedAt: serverTimestamp(),
+    };
+    await updateDoc(res.ref, updatePayload);
+  }
+
+  /**
    * Migrates/Updates the category of a payment between Vendor and Worker Advance.
    */
   public static async updatePaymentCategory(
@@ -268,28 +295,34 @@ export class PaymentLedgerService {
       paidTo?: string;
       amount?: number;
       notes?: string;
-    }
+    },
+    orgId?: string
   ): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const updatePayload: any = {
-      category: data.category,
-      updatedAt: serverTimestamp(),
-    };
-    if (data.workerId !== undefined) updatePayload.workerId = data.workerId;
-    if (data.workerName !== undefined) updatePayload.workerName = data.workerName;
-    if (data.workerCode !== undefined) updatePayload.workerCode = data.workerCode;
-    if (data.paidTo !== undefined) updatePayload.paidTo = data.paidTo;
-    if (data.amount !== undefined) updatePayload.amount = data.amount;
-    if (data.notes !== undefined) updatePayload.notes = data.notes;
-
-    await updateDoc(docRef, updatePayload);
+    await this.updatePayment(id, data, orgId);
   }
 
   /**
-   * Deletes a payment record.
+   * Soft-deletes a payment record by moving it to the Recycle Bin.
    */
-  public static async deletePayment(id: string): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await deleteDoc(docRef);
+  public static async deletePayment(id: string, orgId?: string): Promise<void> {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    const data = res.data;
+    if (!data) return;
+
+    const amountFormatted = typeof data.amount === 'number' ? `₹${data.amount.toLocaleString('en-IN')}` : '';
+    const recipient = data.paidTo || data.workerName || 'Payment Record';
+    const title = `Payment Entry: ${recipient} - ${amountFormatted} (${(data.category || 'advance').toUpperCase()})`;
+
+    await RecycleBinService.moveToRecycleBin(
+      COLLECTION_NAME,
+      id,
+      data,
+      title,
+      'payment',
+      'Contractor Admin',
+      orgId
+    );
   }
 }
+
+

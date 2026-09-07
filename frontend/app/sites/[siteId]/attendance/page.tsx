@@ -90,7 +90,7 @@ export default function SiteAttendancePage() {
   };
 
   const totalHajriInView = attendanceRecords.reduce((sum, r) => {
-    const h = typeof r.hajri === 'number' ? r.hajri : 1.0;
+    const h = typeof r.hajri === 'number' ? r.hajri : 0;
     return sum + h;
   }, 0);
 
@@ -297,8 +297,8 @@ export default function SiteAttendancePage() {
                           )}`}
                         >
                           {r.hajri !== undefined && r.hajri !== null
-                            ? `${r.hajri} (${r.hajriLabel || 'Normal'})`
-                            : '1.0 (Normal)'}
+                            ? `${r.hajri} (${r.hajriLabel || (r.hajri === 0 ? 'In Progress' : 'Normal')})`
+                            : '0.0 (In Progress)'}
                         </span>
                       </td>
                       <td className="py-3.5 px-6 text-right">

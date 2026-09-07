@@ -1,17 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  collection,
-  doc,
-  getDocs,
   addDoc,
   updateDoc,
-  query,
   where,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { SupervisorsService } from './supervisors.service';
+import { OrgContextService } from './org-context.service';
 import { normalizeWhatsAppNumber } from '@/lib/formatters';
 import type { WhatsAppMessageRecord, WhatsAppMessageType } from '@/types/whatsapp';
 import type { Supervisor } from '@/types/supervisor';
@@ -23,38 +19,44 @@ export class WhatsAppService {
    * Duplicate Protection Check:
    * Returns true if a WhatsApp message with the given unique Meta messageId has already been recorded.
    */
-  public static async isWhatsAppMessageAlreadyProcessed(messageId: string): Promise<boolean> {
+  public static async isWhatsAppMessageAlreadyProcessed(messageId: string, orgId?: string): Promise<boolean> {
     if (!messageId) return false;
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, where('messageId', '==', messageId));
-    const snapshot = await getDocs(q);
-    return !snapshot.empty;
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('messageId', '==', messageId)],
+      orgId
+    );
+    return docs.length > 0;
   }
 
   /**
    * Alias for duplicate protection check.
    */
-  public static async isMessageProcessed(messageId: string): Promise<boolean> {
-    return this.isWhatsAppMessageAlreadyProcessed(messageId);
+  public static async isMessageProcessed(messageId: string, orgId?: string): Promise<boolean> {
+    return this.isWhatsAppMessageAlreadyProcessed(messageId, orgId);
   }
 
   /**
    * Records an incoming WhatsApp message payload into Firestore.
    */
-  public static async saveIncomingMessage(data: {
-    messageId?: string;
-    whatsappMessageId?: string;
-    senderNumber: string;
-    messageType: WhatsAppMessageType;
-    mediaId?: string;
-    rawPayload?: any;
-  }): Promise<string> {
+  public static async saveIncomingMessage(
+    data: {
+      messageId?: string;
+      whatsappMessageId?: string;
+      senderNumber: string;
+      messageType: WhatsAppMessageType;
+      mediaId?: string;
+      rawPayload?: any;
+    },
+    orgId?: string
+  ): Promise<string> {
     const msgId = data.messageId || data.whatsappMessageId || `msg_${Date.now()}`;
     const normalizedSender = normalizeWhatsAppNumber(data.senderNumber);
-    const colRef = collection(db, COLLECTION_NAME);
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const now = serverTimestamp();
 
     const docRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       messageId: msgId,
       senderNumber: normalizedSender,
       messageType: data.messageType,
@@ -71,8 +73,8 @@ export class WhatsAppService {
   /**
    * Identifies the Supervisor associated with an incoming WhatsApp sender number.
    */
-  public static async identifySender(rawNumber: string): Promise<Supervisor | null> {
-    return SupervisorsService.getSupervisorByWhatsAppNumber(rawNumber);
+  public static async identifySender(rawNumber: string, orgId?: string): Promise<Supervisor | null> {
+    return SupervisorsService.getSupervisorByWhatsAppNumber(rawNumber, orgId);
   }
 
   /**
@@ -81,10 +83,11 @@ export class WhatsAppService {
   public static async updateMessageStatus(
     id: string,
     processingStatus: WhatsAppMessageRecord['processingStatus'],
-    attendanceSessionId?: string
+    attendanceSessionId?: string,
+    orgId?: string
   ): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    await updateDoc(res.ref, {
       processed: processingStatus === 'processed',
       processingStatus,
       ...(attendanceSessionId ? { attendanceSessionId } : {}),

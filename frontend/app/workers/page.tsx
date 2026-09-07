@@ -505,7 +505,7 @@ export default function WorkersPage() {
                   {todayRec ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-extrabold text-[11px]">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Present ({todayRec.hajri || 1.0} Hajri)</span>
+                      <span>Present ({typeof todayRec.hajri === 'number' ? todayRec.hajri : 0} Hajri)</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-slate-400 font-medium text-[11px]">

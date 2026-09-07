@@ -74,8 +74,8 @@ export default function VendorProfileDossier({
     if (periodFilter === 'this_week') {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      const cutoff = oneWeekAgo.toISOString().split('T')[0];
-      return vendor.allPayments.filter((p) => (p.paymentDate || '') >= cutoff);
+      const cutoffStr = oneWeekAgo.toISOString().split('T')[0] || '';
+      return vendor.allPayments.filter((p) => (p.paymentDate || '') >= cutoffStr);
     }
 
     return vendor.allPayments;

@@ -35,20 +35,16 @@ function extractRealVendorName(p: PaymentLedgerEntry): string {
   if (!name || GENERIC_CATEGORY_KEYWORDS.has(lower) || lower === 'vendor / payee' || lower === 'vendor / expense') {
     if (p.notes && p.notes.includes('A/C:')) {
       const acMatch = p.notes.match(/A\/C:\s*([^|()]+)/i);
-      if (acMatch && acMatch[1].trim()) {
-        const found = acMatch[1].trim();
-        if (!GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
-          return found;
-        }
+      const found = acMatch?.[1]?.trim();
+      if (found && !GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
+        return found;
       }
     }
     if (p.notes && p.notes.includes('Remark:')) {
       const remMatch = p.notes.match(/Remark:\s*([^|()]+)/i);
-      if (remMatch && remMatch[1].trim()) {
-        const found = remMatch[1].trim();
-        if (!GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
-          return found;
-        }
+      const found = remMatch?.[1]?.trim();
+      if (found && !GENERIC_CATEGORY_KEYWORDS.has(found.toLowerCase())) {
+        return found;
       }
     }
   }
@@ -87,14 +83,17 @@ export class VendorsService {
    * Automatically aggregates all unique vendors and suppliers from the Khata Payment Ledger.
    * Groups strictly by (Vendor Name + Category) to avoid merging distinct entities sharing the same person's name (e.g. Rajkumar Contractor vs Rajkumar Transport).
    */
-  public static async getVendorsSummary(dateRange?: { startDate?: string; endDate?: string }): Promise<{
+  public static async getVendorsSummary(
+    dateRange?: { startDate?: string; endDate?: string },
+    orgId?: string
+  ): Promise<{
     vendors: VendorSummary[];
     totalVendorPaidAll: number;
     totalBillsAll: number;
   }> {
     const [allPayments, allSites] = await Promise.all([
-      PaymentLedgerService.getPayments(),
-      SitesService.getSites(),
+      PaymentLedgerService.getPayments(undefined, orgId),
+      SitesService.getSites(orgId),
     ]);
 
     const siteMap = new Map<string, string>();
@@ -137,9 +136,9 @@ export class VendorsService {
       totalBillsAll += billsCount;
 
       const latest = payments[0];
-      const [keyName, keyCat] = key.split('::');
-      const displayName = extractRealVendorName(latest) || keyName;
-      const category = (keyCat as VendorSummary['category']) || detectPaymentVendorCategory(latest, displayName);
+      const [keyName = 'Vendor', keyCat = 'general'] = key.split('::');
+      const displayName: string = (latest ? extractRealVendorName(latest) : keyName) || keyName || 'Vendor';
+      const category = (keyCat as VendorSummary['category']) || (latest ? detectPaymentVendorCategory(latest, displayName) : 'general');
 
       // Group by site
       const siteGroup: Record<string, { amount: number; count: number }> = {};
@@ -168,11 +167,11 @@ export class VendorsService {
         category,
         totalPaid,
         billsCount,
-        latestPaymentDate: latest.paymentDate || 'Recorded',
-        latestPaymentTime: latest.paymentTime,
-        upiId: latest.upiId,
-        paymentMethod: latest.paymentMethod,
-        notes: latest.notes,
+        latestPaymentDate: latest?.paymentDate || 'Recorded',
+        latestPaymentTime: latest?.paymentTime,
+        upiId: latest?.upiId,
+        paymentMethod: latest?.paymentMethod,
+        notes: latest?.notes,
         recentPayments: payments.slice(0, 5),
         allPayments: payments,
         sitesInvolved,
@@ -192,8 +191,8 @@ export class VendorsService {
   /**
    * Retrieves a single vendor profile by URL id or entity name.
    */
-  public static async getVendorById(idOrName: string): Promise<VendorSummary | null> {
-    const { vendors } = await this.getVendorsSummary();
+  public static async getVendorById(idOrName: string, orgId?: string): Promise<VendorSummary | null> {
+    const { vendors } = await this.getVendorsSummary(undefined, orgId);
     const clean = decodeURIComponent(idOrName).toLowerCase().trim();
 
     return (

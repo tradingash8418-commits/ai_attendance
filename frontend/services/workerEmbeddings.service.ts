@@ -1,15 +1,11 @@
 import {
-  collection,
-  doc,
-  getDocs,
   addDoc,
   updateDoc,
-  query,
   where,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { WorkersService } from './workers.service';
+import { OrgContextService } from './org-context.service';
 import type { WorkerFaceEmbedding } from '@/types/embedding';
 
 const COLLECTION_NAME = 'workerFaceEmbeddings';
@@ -18,14 +14,16 @@ export class WorkerEmbeddingsService {
   /**
    * Fetch stored face embeddings for a specific worker using canonical Firestore document ID.
    */
-  public static async getEmbeddingsForWorker(workerId: string): Promise<WorkerFaceEmbedding[]> {
+  public static async getEmbeddingsForWorker(workerId: string, orgId?: string): Promise<WorkerFaceEmbedding[]> {
     if (!workerId) return [];
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, where('workerId', '==', workerId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('workerId', '==', workerId)],
+      orgId
+    );
+    return docs.map((d) => ({
+      id: d.id,
+      ...d,
     })) as WorkerFaceEmbedding[];
   }
 
@@ -33,14 +31,14 @@ export class WorkerEmbeddingsService {
    * Fetch all active worker embeddings for recognition comparisons.
    */
   public static async getActiveEmbeddingsForWorkers(
-    workerIds?: string[]
+    workerIds?: string[],
+    orgId?: string
   ): Promise<WorkerFaceEmbedding[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const snapshot = await getDocs(colRef);
+    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], orgId);
 
-    let records = snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
+    let records = docs.map((d) => ({
+      id: d.id,
+      ...d,
     })) as WorkerFaceEmbedding[];
 
     if (workerIds && workerIds.length > 0) {
@@ -52,10 +50,9 @@ export class WorkerEmbeddingsService {
 
   /**
    * Deterministically repairs any legacy workerFaceEmbeddings records where workerId was stored as a workerCode (e.g. WRK-001).
-   * Maps workerCode to its canonical Firestore worker document ID without fabricating data.
    */
-  public static async repairWorkerEmbeddingMappings(): Promise<number> {
-    const allWorkers = await WorkersService.getWorkers();
+  public static async repairWorkerEmbeddingMappings(orgId?: string): Promise<number> {
+    const allWorkers = await WorkersService.getWorkers(orgId);
     const codeToDocIdMap: Record<string, string> = {};
     allWorkers.forEach((w) => {
       if (w.workerCode && w.id) {
@@ -63,24 +60,22 @@ export class WorkerEmbeddingsService {
       }
     });
 
-    const colRef = collection(db, COLLECTION_NAME);
-    const snapshot = await getDocs(colRef);
+    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], orgId);
     let repairedCount = 0;
 
-    for (const docSnap of snapshot.docs) {
-      const data = docSnap.data();
-      const currentWorkerId = data.workerId;
+    for (const docData of docs) {
+      const currentWorkerId = docData.workerId;
 
       if (currentWorkerId && codeToDocIdMap[currentWorkerId]) {
         const canonicalId = codeToDocIdMap[currentWorkerId];
         if (canonicalId !== currentWorkerId) {
-          const embDocRef = doc(db, COLLECTION_NAME, docSnap.id);
-          await updateDoc(embDocRef, {
+          const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, docData.id, orgId);
+          await updateDoc(res.ref, {
             workerId: canonicalId,
             updatedAt: serverTimestamp(),
           });
           repairedCount++;
-          console.log(`[WorkerEmbeddingsService] Repaired embedding ${docSnap.id}: ${currentWorkerId} -> ${canonicalId}`);
+          console.log(`[WorkerEmbeddingsService] Repaired embedding ${docData.id}: ${currentWorkerId} -> ${canonicalId}`);
         }
       }
     }
@@ -94,7 +89,8 @@ export class WorkerEmbeddingsService {
   public static async generateAndStoreEmbedding(
     workerId: string,
     workerPhotoId: string,
-    photoUrl: string
+    photoUrl: string,
+    orgId?: string
   ): Promise<WorkerFaceEmbedding> {
     const isProd = process.env.VERCEL || process.env.NODE_ENV === 'production';
     const defaultFaceUrl = isProd ? 'https://ai-attendance-zfu0.onrender.com' : 'http://localhost:8000';
@@ -124,9 +120,10 @@ export class WorkerEmbeddingsService {
       const embeddingVector: number[] = data.embedding;
 
       // Save to Firestore workerFaceEmbeddings collection
-      const colRef = collection(db, COLLECTION_NAME);
+      const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
       const now = serverTimestamp();
       const docRef = await addDoc(colRef, {
+        organizationId: orgId || OrgContextService.getOrgId(),
         workerId,
         workerPhotoId,
         model: data.model || 'ArcFace',
@@ -153,21 +150,26 @@ export class WorkerEmbeddingsService {
       throw err;
     }
   }
+
   /**
    * Directly stores a pre-computed face embedding vector in Firestore.
    */
-  public static async createEmbedding(data: {
-    workerId: string;
-    photoId?: string;
-    workerPhotoId?: string;
-    embedding: number[];
-    model?: string;
-    detector?: string;
-    distanceMetric?: string;
-  }): Promise<string> {
-    const colRef = collection(db, COLLECTION_NAME);
+  public static async createEmbedding(
+    data: {
+      workerId: string;
+      photoId?: string;
+      workerPhotoId?: string;
+      embedding: number[];
+      model?: string;
+      detector?: string;
+      distanceMetric?: string;
+    },
+    orgId?: string
+  ): Promise<string> {
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const now = serverTimestamp();
     const docRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       workerId: data.workerId,
       workerPhotoId: data.photoId || data.workerPhotoId || `ref_photo_${data.workerId}`,
       model: data.model || 'ArcFace/SFace',

@@ -1,0 +1,1290 @@
+[
+  {
+    "_id": "0Gy5z17GA80YNWq4WkLz",
+    "hajri": 1.5,
+    "workerId": "eBOvjYDgGCEm2qRNmuzK",
+    "method": "worker_qr_whatsapp",
+    "hajriLabel": "Dedhi",
+    "checkOutTime": null,
+    "checkInTime": "2026-09-06T15:00:51.000Z",
+    "submittedBy": "Worker QR WhatsApp (+918149248907)",
+    "confidence": 0.95,
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "present",
+    "ruleName": "Dedhi",
+    "attendancePhotoUrl": "",
+    "updatedAt": {
+      "seconds": 1788706857,
+      "nanoseconds": 672000000
+    },
+    "workedMinutes": 0,
+    "createdAt": {
+      "seconds": 1788706857,
+      "nanoseconds": 672000000
+    },
+    "date": "2026-09-06",
+    "workedHours": "In Progress",
+    "attendanceSessionId": "sgI9z3M6Agijh1NTMfmd",
+    "verificationStatus": "verified"
+  },
+  {
+    "_id": "3p5AygvMKy2oyh32QKu3",
+    "hajri": 1,
+    "createdAt": {
+      "seconds": 1788756150,
+      "nanoseconds": 805000000
+    },
+    "confidence": 0.95,
+    "updatedAt": {
+      "seconds": 1788756150,
+      "nanoseconds": 805000000
+    },
+    "workerId": "Th1ljbXwELXrOaG87RfL",
+    "date": "2026-09-07",
+    "attendanceSessionId": "OPwxj4aeKc5MpfcQvrNa",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "workedHours": "In Progress",
+    "ruleName": "Normal",
+    "hajriLabel": "Normal",
+    "workedMinutes": 0,
+    "checkInTime": "2026-09-07T04:42:26.000Z",
+    "method": "worker_qr_whatsapp",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "status": "present",
+    "checkOutTime": null,
+    "submittedBy": "Worker QR WhatsApp (+917387623564)"
+  },
+  {
+    "_id": "5FPwxUtVlPmsiARWgLVr",
+    "ruleName": "Normal",
+    "verificationStatus": "verified",
+    "confidence": 0.95,
+    "status": "present",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "checkOutTime": null,
+    "attendanceSessionId": "fclvhlvexEZPYfLztmz7",
+    "date": "2026-09-06",
+    "hajriLabel": "Normal",
+    "createdAt": {
+      "seconds": 1788675729,
+      "nanoseconds": 398000000
+    },
+    "workedHours": "In Progress",
+    "attendancePhotoUrl": "",
+    "updatedAt": {
+      "seconds": 1788675729,
+      "nanoseconds": 398000000
+    },
+    "method": "worker_qr_whatsapp",
+    "workerId": "VfpbBrw5G8cNBNWiqSPm",
+    "hajri": 1,
+    "checkInTime": "2026-09-06T06:22:04.000Z",
+    "workedMinutes": 0,
+    "submittedBy": "Worker QR WhatsApp (+917310386324)"
+  },
+  {
+    "_id": "6bm4y1L5MS8FPuI3taQm",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "attendancePhotoUrl": "",
+    "ruleName": "Normal",
+    "hajriLabel": "Normal",
+    "checkOutTime": "2026-09-07T12:37:03.000Z",
+    "hajri": 1,
+    "workedHours": "7h 39m",
+    "status": "present",
+    "method": "worker_qr_whatsapp",
+    "workerId": "4zJX1tXu6Uyezj1unAiQ",
+    "verificationStatus": "verified",
+    "workedMinutes": 459,
+    "confidence": 0.95,
+    "submittedBy": "Worker QR WhatsApp (+917304397048)",
+    "updatedAt": {
+      "seconds": 1788784627,
+      "nanoseconds": 768000000
+    },
+    "attendanceSessionId": "0WdhEPJzdSLiSbptlBxE",
+    "createdAt": {
+      "seconds": 1788757084,
+      "nanoseconds": 632000000
+    },
+    "date": "2026-09-07",
+    "checkInTime": "2026-09-07T04:58:00.000Z"
+  },
+  {
+    "_id": "6s2si8QJeqxFKC4ayG4e",
+    "date": "2026-09-05",
+    "hajriLabel": "Dedhi",
+    "workerId": "OlQBBhPAjQmj9Le704Zc",
+    "updatedAt": {
+      "seconds": 1788623504,
+      "nanoseconds": 794000000
+    },
+    "createdAt": {
+      "seconds": 1788623504,
+      "nanoseconds": 794000000
+    },
+    "attendancePhotoUrl": "",
+    "attendanceSessionId": "Eax8Q25Ybsc0d5Ni8gwa",
+    "submittedBy": "Worker QR WhatsApp (+917977267944)",
+    "confidence": 0.95,
+    "verificationStatus": "verified",
+    "checkInTime": "2026-09-05T15:51:39.000Z",
+    "ruleName": "Dedhi",
+    "workedMinutes": 0,
+    "workedHours": "In Progress",
+    "checkOutTime": null,
+    "hajri": 1.5,
+    "method": "worker_qr_whatsapp",
+    "siteId": "udDpJgbe5ufxPz257tKc",
+    "status": "present"
+  },
+  {
+    "_id": "70FmhVBGiJhLNKaUbw9H",
+    "checkInTime": "2026-09-06T06:34:50.000Z",
+    "confidence": 0.95,
+    "ruleName": "Normal",
+    "attendanceSessionId": "npWBAVSlHQnPclF9T7Su",
+    "hajri": 1,
+    "hajriLabel": "Normal",
+    "workerId": "BWmS8ygT2rloJKHiGNwo",
+    "submittedBy": "Worker QR WhatsApp (+918572947898)",
+    "attendancePhotoUrl": "",
+    "method": "worker_qr_whatsapp",
+    "date": "2026-09-06",
+    "status": "present",
+    "workedHours": "In Progress",
+    "checkOutTime": null,
+    "workedMinutes": 0,
+    "createdAt": {
+      "seconds": 1788676496,
+      "nanoseconds": 420000000
+    },
+    "updatedAt": {
+      "seconds": 1788676496,
+      "nanoseconds": 420000000
+    },
+    "verificationStatus": "verified",
+    "siteId": "s5DsFYvmitsXu1NPVs6J"
+  },
+  {
+    "_id": "8su0WOrU0Oe7S6lwHco1",
+    "ruleName": "Normal",
+    "attendancePhotoUrl": "",
+    "checkInTime": "2026-09-07T04:28:57.000Z",
+    "hajriLabel": "Normal",
+    "submittedBy": "Worker QR WhatsApp (+919892941204)",
+    "checkOutTime": "2026-09-07T12:51:24.000Z",
+    "confidence": 0.95,
+    "workedMinutes": 502,
+    "verificationStatus": "verified",
+    "workerId": "70SkSkoGrBtSa8iaOPsU",
+    "hajri": 1,
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "updatedAt": {
+      "seconds": 1788785488,
+      "nanoseconds": 932000000
+    },
+    "status": "present",
+    "createdAt": {
+      "seconds": 1788755341,
+      "nanoseconds": 934000000
+    },
+    "date": "2026-09-07",
+    "attendanceSessionId": "zBe9ALlPNWN3266xpi04",
+    "method": "worker_qr_whatsapp",
+    "workedHours": "8h 22m"
+  },
+  {
+    "_id": "9ftZ4X4pOplKs4pva7CH",
+    "updatedAt": {
+      "seconds": 1788784683,
+      "nanoseconds": 12000000
+    },
+    "confidence": 0.95,
+    "workedHours": "7h 49m",
+    "verificationStatus": "verified",
+    "createdAt": {
+      "seconds": 1788756539,
+      "nanoseconds": 364000000
+    },
+    "hajri": 1,
+    "hajriLabel": "Normal",
+    "attendancePhotoUrl": "",
+    "attendanceSessionId": "eHZWO8jRmghNYvOX7MXP",
+    "ruleName": "Normal",
+    "method": "worker_qr_whatsapp",
+    "date": "2026-09-07",
+    "submittedBy": "Worker QR WhatsApp (+917575099098)",
+    "workedMinutes": 469,
+    "status": "present",
+    "checkInTime": "2026-09-07T04:48:54.000Z",
+    "workerId": "vsjIaACDScXr6cjC1jWb",
+    "checkOutTime": "2026-09-07T12:37:58.000Z",
+    "siteId": "zcDvv0aqWapa4P3uTmaK"
+  },
+  {
+    "_id": "9soSYAtgSNthmfUwydoj",
+    "confidence": 0.95,
+    "date": "2026-09-06",
+    "checkInTime": "2026-09-06T05:37:46.000Z",
+    "workerId": "jF3Ouo3fdVogHYrwp6Q8",
+    "checkOutTime": "2026-09-06T13:02:25.000Z",
+    "hajriLabel": "Normal",
+    "ruleName": "Normal",
+    "submittedBy": "Worker QR WhatsApp (+918828086629)",
+    "createdAt": {
+      "seconds": 1788673072,
+      "nanoseconds": 903000000
+    },
+    "hajri": 1,
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "status": "present",
+    "workedMinutes": 444,
+    "updatedAt": {
+      "seconds": 1788699749,
+      "nanoseconds": 195000000
+    },
+    "verificationStatus": "verified",
+    "attendancePhotoUrl": "",
+    "workedHours": "7h 24m",
+    "method": "worker_qr_whatsapp",
+    "attendanceSessionId": "dOlHvUvrt72NxkEPCKKS"
+  },
+  {
+    "_id": "APwkZFxKNImpbJeLUIO4",
+    "attendancePhotoUrl": "",
+    "workedHours": "In Progress",
+    "ruleName": "Normal",
+    "createdAt": {
+      "seconds": 1788675213,
+      "nanoseconds": 220000000
+    },
+    "workedMinutes": 0,
+    "workerId": "8JQzn0BRKbiRruyIN3Yt",
+    "checkOutTime": null,
+    "verificationStatus": "verified",
+    "updatedAt": {
+      "seconds": 1788675213,
+      "nanoseconds": 220000000
+    },
+    "hajri": 1,
+    "attendanceSessionId": "FrjpumDK3wBtdVY0PtfY",
+    "submittedBy": "Worker QR WhatsApp (+917385553328)",
+    "status": "present",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "confidence": 0.95,
+    "date": "2026-09-06",
+    "checkInTime": "2026-09-06T06:13:28.000Z",
+    "method": "worker_qr_whatsapp",
+    "hajriLabel": "Normal"
+  },
+  {
+    "_id": "DM1IaR9p7KcOeQaaUmUK",
+    "attendancePhotoUrl": "",
+    "ruleName": "Unmatched",
+    "hajriLabel": "Unmatched Checkout Time",
+    "checkOutTime": null,
+    "checkInTime": "2026-09-07T03:51:51.000Z",
+    "submittedBy": "Worker QR WhatsApp (+917019009894)",
+    "workerId": "1MvmOoGFSMdDQGpAx2lb",
+    "verificationStatus": "verified",
+    "confidence": 0.95,
+    "attendanceSessionId": "G2RSdk4I14Y52qobR3iY",
+    "date": "2026-09-07",
+    "method": "worker_qr_whatsapp",
+    "status": "unmatched",
+    "workedMinutes": 0,
+    "hajri": null,
+    "updatedAt": {
+      "seconds": 1788753116,
+      "nanoseconds": 856000000
+    },
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "createdAt": {
+      "seconds": 1788753116,
+      "nanoseconds": 856000000
+    },
+    "workedHours": "In Progress"
+  },
+  {
+    "_id": "GKgaqI75yrhv6bfEMcVQ",
+    "attendanceSessionId": "m77zfjqDnzIicfjTz7P5",
+    "submittedBy": "Worker QR WhatsApp (+919161112883)",
+    "hajri": 1.5,
+    "date": "2026-09-06",
+    "method": "worker_qr_whatsapp",
+    "workerId": "FwfDIY4ld42jSl7hZdOh",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "ruleName": "Dedhi",
+    "checkInTime": "2026-09-06T06:41:54.000Z",
+    "workedMinutes": 471,
+    "status": "present",
+    "hajriLabel": "Dedhi",
+    "createdAt": {
+      "seconds": 1788676920,
+      "nanoseconds": 804000000
+    },
+    "workedHours": "7h 51m",
+    "updatedAt": {
+      "seconds": 1788705236,
+      "nanoseconds": 714000000
+    },
+    "confidence": 0.95,
+    "checkOutTime": "2026-09-06T14:33:52.000Z"
+  },
+  {
+    "_id": "Ki2wyEvy1WGXk9HZcBBX",
+    "date": "2026-09-06",
+    "checkInTime": "2026-09-06T06:11:11.000Z",
+    "workedMinutes": 502,
+    "checkOutTime": "2026-09-06T14:33:16.000Z",
+    "hajri": 1.5,
+    "submittedBy": "Worker QR WhatsApp (+917355923553)",
+    "attendanceSessionId": "k2oSDJwr7n7Y9X93ZxnH",
+    "status": "present",
+    "workerId": "UN10Z3rkfekXwuHS8tO1",
+    "confidence": 0.95,
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "verificationStatus": "verified",
+    "attendancePhotoUrl": "",
+    "hajriLabel": "Dedhi",
+    "workedHours": "8h 22m",
+    "createdAt": {
+      "seconds": 1788675078,
+      "nanoseconds": 159000000
+    },
+    "updatedAt": {
+      "seconds": 1788705201,
+      "nanoseconds": 619000000
+    },
+    "ruleName": "Dedhi",
+    "method": "worker_qr_whatsapp"
+  },
+  {
+    "_id": "M4ieHvld6z2IFP9fktaD",
+    "workedMinutes": 0,
+    "checkInTime": "2026-09-07T04:59:09.000Z",
+    "confidence": 0.95,
+    "hajri": 1,
+    "createdAt": {
+      "seconds": 1788757154,
+      "nanoseconds": 388000000
+    },
+    "hajriLabel": "Normal",
+    "updatedAt": {
+      "seconds": 1788757154,
+      "nanoseconds": 388000000
+    },
+    "date": "2026-09-07",
+    "submittedBy": "Worker QR WhatsApp (+919115343241)",
+    "ruleName": "Normal",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "verificationStatus": "verified",
+    "attendanceSessionId": "mSZMpsrL8bjUoembIEcE",
+    "status": "present",
+    "method": "worker_qr_whatsapp",
+    "workedHours": "In Progress",
+    "checkOutTime": null,
+    "attendancePhotoUrl": "",
+    "workerId": "MdyVjZn7tsoS5NTc2SK5"
+  },
+  {
+    "_id": "MDwZUlttoRL9LarJshao",
+    "verificationStatus": "verified",
+    "checkInTime": "2026-09-07T04:48:36.000Z",
+    "workedMinutes": 0,
+    "checkOutTime": null,
+    "workerId": "MEoAYwoTvYK4fu3xYZnY",
+    "ruleName": "Normal",
+    "attendancePhotoUrl": "",
+    "submittedBy": "Worker QR WhatsApp (+919554766331)",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "createdAt": {
+      "seconds": 1788756520,
+      "nanoseconds": 509000000
+    },
+    "confidence": 0.95,
+    "hajri": 1,
+    "updatedAt": {
+      "seconds": 1788756520,
+      "nanoseconds": 509000000
+    },
+    "status": "present",
+    "method": "worker_qr_whatsapp",
+    "attendanceSessionId": "c4mYMke32qYVBQTPPAoE",
+    "workedHours": "In Progress",
+    "hajriLabel": "Normal",
+    "date": "2026-09-07"
+  },
+  {
+    "_id": "MFywjUhrzokA9V3FlMee",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "hajri": 1.5,
+    "status": "present",
+    "verificationStatus": "verified",
+    "workerId": "1MvmOoGFSMdDQGpAx2lb",
+    "ruleName": "Dedhi",
+    "attendancePhotoUrl": "",
+    "attendanceSessionId": "xEtc9k5M6xbswFuSgWii",
+    "workedHours": "8h 26m",
+    "method": "worker_qr_whatsapp",
+    "date": "2026-09-06",
+    "checkInTime": "2026-09-06T06:27:42.000Z",
+    "createdAt": {
+      "seconds": 1788676068,
+      "nanoseconds": 533000000
+    },
+    "confidence": 0.95,
+    "workedMinutes": 506,
+    "updatedAt": {
+      "seconds": 1788706480,
+      "nanoseconds": 91000000
+    },
+    "checkOutTime": "2026-09-06T14:54:35.000Z",
+    "hajriLabel": "Dedhi",
+    "submittedBy": "Worker QR WhatsApp (+917019009894)"
+  },
+  {
+    "_id": "ONvwTS0lGiXkJqUIFIB7",
+    "hajriLabel": "Normal",
+    "hajri": 1,
+    "date": "2026-09-06",
+    "checkOutTime": "2026-09-06T12:59:26.000Z",
+    "workedMinutes": 440,
+    "ruleName": "Normal",
+    "verificationStatus": "verified",
+    "submittedBy": "Worker QR WhatsApp (+917575099098)",
+    "attendancePhotoUrl": "",
+    "confidence": 0.95,
+    "workerId": "vsjIaACDScXr6cjC1jWb",
+    "checkInTime": "2026-09-06T05:39:08.000Z",
+    "attendanceSessionId": "C0OZV9939FAMG4xBbfvi",
+    "workedHours": "7h 20m",
+    "updatedAt": {
+      "seconds": 1788699571,
+      "nanoseconds": 382000000
+    },
+    "method": "worker_qr_whatsapp",
+    "createdAt": {
+      "seconds": 1788673155,
+      "nanoseconds": 603000000
+    },
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "status": "present"
+  },
+  {
+    "_id": "QWvtcjvhZ3ou8SDBC0KG",
+    "hajri": 1,
+    "createdAt": {
+      "seconds": 1788756042,
+      "nanoseconds": 174000000
+    },
+    "workedHours": "7h 57m",
+    "attendanceSessionId": "2lNEfaxHIliu21NvJ0zv",
+    "updatedAt": {
+      "seconds": 1788784701,
+      "nanoseconds": 255000000
+    },
+    "workedMinutes": 477,
+    "hajriLabel": "Normal",
+    "checkInTime": "2026-09-07T04:40:38.000Z",
+    "checkOutTime": "2026-09-07T12:38:16.000Z",
+    "ruleName": "Normal",
+    "date": "2026-09-07",
+    "method": "worker_qr_whatsapp",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "status": "present",
+    "confidence": 0.95,
+    "workerId": "oMBDaBhcTzGSEqAgzFNJ",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "submittedBy": "Worker QR WhatsApp (+918689937791)"
+  },
+  {
+    "_id": "RDlESQzlUsWlMBwnuHra",
+    "ruleName": "Normal",
+    "submittedBy": "Worker QR WhatsApp (+919321213993)",
+    "createdAt": {
+      "seconds": 1788756611,
+      "nanoseconds": 614000000
+    },
+    "workedMinutes": 471,
+    "updatedAt": {
+      "seconds": 1788784875,
+      "nanoseconds": 766000000
+    },
+    "hajri": 1,
+    "checkOutTime": "2026-09-07T12:41:11.000Z",
+    "date": "2026-09-07",
+    "checkInTime": "2026-09-07T04:50:06.000Z",
+    "workerId": "C7aDgi3lOa9YivT5uicL",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "attendanceSessionId": "uUVn42kHlj8HDzlkYKYh",
+    "confidence": 0.95,
+    "status": "present",
+    "verificationStatus": "verified",
+    "workedHours": "7h 51m",
+    "method": "worker_qr_whatsapp",
+    "attendancePhotoUrl": "",
+    "hajriLabel": "Normal"
+  },
+  {
+    "_id": "TBNfPvnbobNSW346jx3N",
+    "attendanceSessionId": "kPrAtrNSE8aNdMQKNKyl",
+    "hajriLabel": "Normal",
+    "date": "2026-09-06",
+    "workerId": "70SkSkoGrBtSa8iaOPsU",
+    "verificationStatus": "verified",
+    "confidence": 0.95,
+    "attendancePhotoUrl": "",
+    "ruleName": "Normal",
+    "workedHours": "7h 16m",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "hajri": 1,
+    "updatedAt": {
+      "seconds": 1788699137,
+      "nanoseconds": 703000000
+    },
+    "createdAt": {
+      "seconds": 1788672966,
+      "nanoseconds": 953000000
+    },
+    "status": "present",
+    "checkInTime": "2026-09-06T05:36:01.000Z",
+    "submittedBy": "Worker QR WhatsApp (+919892941204)",
+    "method": "worker_qr_whatsapp",
+    "workedMinutes": 436,
+    "checkOutTime": "2026-09-06T12:52:12.000Z"
+  },
+  {
+    "_id": "XWuz0Mi8UELogt7fLOMK",
+    "confidence": 0.95,
+    "method": "worker_qr_whatsapp",
+    "attendanceSessionId": "H97BaRqJ1oT8uxzddc95",
+    "updatedAt": {
+      "seconds": 1788756346,
+      "nanoseconds": 264000000
+    },
+    "createdAt": {
+      "seconds": 1788756346,
+      "nanoseconds": 264000000
+    },
+    "ruleName": "Normal",
+    "workerId": "VfpbBrw5G8cNBNWiqSPm",
+    "hajriLabel": "Normal",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "workedHours": "In Progress",
+    "date": "2026-09-07",
+    "status": "present",
+    "verificationStatus": "verified",
+    "checkInTime": "2026-09-07T04:45:42.000Z",
+    "hajri": 1,
+    "checkOutTime": null,
+    "attendancePhotoUrl": "",
+    "workedMinutes": 0,
+    "submittedBy": "Worker QR WhatsApp (+917310386324)"
+  },
+  {
+    "_id": "YI8iOOovCpk3s7oyiA6B",
+    "attendancePhotoUrl": "",
+    "workerId": "WyQjlXZ6A44IvhoUuqN5",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "present",
+    "workedHours": "In Progress",
+    "checkOutTime": null,
+    "method": "worker_qr_whatsapp",
+    "ruleName": "Normal",
+    "verificationStatus": "verified",
+    "hajri": 1,
+    "updatedAt": {
+      "seconds": 1788755943,
+      "nanoseconds": 541000000
+    },
+    "submittedBy": "Worker QR WhatsApp (+919892721205)",
+    "confidence": 0.95,
+    "workedMinutes": 0,
+    "createdAt": {
+      "seconds": 1788755943,
+      "nanoseconds": 541000000
+    },
+    "attendanceSessionId": "Rz82V4MZ3p7Nc95bnfHQ",
+    "date": "2026-09-07",
+    "hajriLabel": "Normal",
+    "checkInTime": "2026-09-07T04:38:58.000Z"
+  },
+  {
+    "_id": "Yw7glrW3CjsX7h3N1vRw",
+    "createdAt": {
+      "seconds": 1788756028,
+      "nanoseconds": 912000000
+    },
+    "workedHours": "In Progress",
+    "ruleName": "Normal",
+    "confidence": 0.95,
+    "updatedAt": {
+      "seconds": 1788756028,
+      "nanoseconds": 912000000
+    },
+    "checkOutTime": null,
+    "date": "2026-09-07",
+    "workerId": "8JQzn0BRKbiRruyIN3Yt",
+    "hajriLabel": "Normal",
+    "workedMinutes": 0,
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "verificationStatus": "verified",
+    "attendanceSessionId": "mmTnjcIoYwofDQTC1mST",
+    "submittedBy": "Worker QR WhatsApp (+917385553328)",
+    "hajri": 1,
+    "status": "present",
+    "checkInTime": "2026-09-07T04:40:25.000Z",
+    "method": "worker_qr_whatsapp",
+    "attendancePhotoUrl": ""
+  },
+  {
+    "_id": "b5eDuQIi3a78HpTccxAX",
+    "checkInTime": "2026-09-07T05:37:20.000Z",
+    "createdAt": {
+      "seconds": 1788759444,
+      "nanoseconds": 525000000
+    },
+    "checkOutTime": null,
+    "hajriLabel": "Normal",
+    "verificationStatus": "verified",
+    "updatedAt": {
+      "seconds": 1788759444,
+      "nanoseconds": 525000000
+    },
+    "attendancePhotoUrl": "",
+    "submittedBy": "Worker QR WhatsApp (+971553856145)",
+    "confidence": 0.95,
+    "attendanceSessionId": "jyXnboyAg9ts9R26loqM",
+    "workedMinutes": 0,
+    "ruleName": "Normal",
+    "method": "worker_qr_whatsapp",
+    "workedHours": "In Progress",
+    "status": "present",
+    "date": "2026-09-07",
+    "workerId": "jt8ZzVJpBzXXla19yneg",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "hajri": 1
+  },
+  {
+    "_id": "bsaHTPRXioXgBYJaZSkr",
+    "confidence": 0.95,
+    "checkInTime": "2026-09-06T06:32:49.000Z",
+    "hajriLabel": "Normal",
+    "submittedBy": "Worker QR WhatsApp (+971553856145)",
+    "workedMinutes": 0,
+    "updatedAt": {
+      "seconds": 1788676374,
+      "nanoseconds": 975000000
+    },
+    "attendancePhotoUrl": "",
+    "workerId": "jt8ZzVJpBzXXla19yneg",
+    "date": "2026-09-06",
+    "checkOutTime": null,
+    "attendanceSessionId": "WMhzf8SNl1lkPU3evfE7",
+    "method": "worker_qr_whatsapp",
+    "createdAt": {
+      "seconds": 1788676374,
+      "nanoseconds": 975000000
+    },
+    "status": "present",
+    "hajri": 1,
+    "ruleName": "Normal",
+    "verificationStatus": "verified",
+    "workedHours": "In Progress",
+    "siteId": "s5DsFYvmitsXu1NPVs6J"
+  },
+  {
+    "_id": "cqxtWwNjeCS3NyJrIIVQ",
+    "hajri": 1.5,
+    "workedMinutes": 470,
+    "updatedAt": {
+      "seconds": 1788705267,
+      "nanoseconds": 517000000
+    },
+    "attendancePhotoUrl": "",
+    "workerId": "FqJR8l6r0CsZLyPaXVkL",
+    "date": "2026-09-06",
+    "createdAt": {
+      "seconds": 1788677015,
+      "nanoseconds": 161000000
+    },
+    "checkOutTime": "2026-09-06T14:34:22.000Z",
+    "ruleName": "Dedhi",
+    "verificationStatus": "verified",
+    "workedHours": "7h 50m",
+    "method": "worker_qr_whatsapp",
+    "confidence": 0.95,
+    "checkInTime": "2026-09-06T06:43:29.000Z",
+    "submittedBy": "Worker QR WhatsApp (+916302104250)",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "present",
+    "hajriLabel": "Dedhi",
+    "attendanceSessionId": "TxqYYAUbBBbWwyAnwsoS"
+  },
+  {
+    "_id": "cycT2yhk9qWIWPvsXCk5",
+    "updatedAt": {
+      "seconds": 1788704271,
+      "nanoseconds": 394000000
+    },
+    "confidence": 0.95,
+    "workedHours": "8h 20m",
+    "verificationStatus": "verified",
+    "createdAt": {
+      "seconds": 1788674219,
+      "nanoseconds": 303000000
+    },
+    "hajri": 1.5,
+    "hajriLabel": "Dedhi",
+    "attendancePhotoUrl": "",
+    "attendanceSessionId": "AWRxzU9GTNEdzw8lrm4K",
+    "ruleName": "Dedhi",
+    "submittedBy": "Worker QR WhatsApp (+919892721205)",
+    "date": "2026-09-06",
+    "method": "worker_qr_whatsapp",
+    "workedMinutes": 500,
+    "status": "present",
+    "checkInTime": "2026-09-06T05:56:53.000Z",
+    "workerId": "WyQjlXZ6A44IvhoUuqN5",
+    "checkOutTime": "2026-09-06T14:17:42.000Z",
+    "siteId": "s5DsFYvmitsXu1NPVs6J"
+  },
+  {
+    "_id": "dRiQbufz0T7ruxENy5B3",
+    "updatedAt": {
+      "seconds": 1788754304,
+      "nanoseconds": 152000000
+    },
+    "verificationStatus": "verified",
+    "checkInTime": "2026-09-07T04:11:38.000Z",
+    "createdAt": {
+      "seconds": 1788754304,
+      "nanoseconds": 152000000
+    },
+    "submittedBy": "Worker QR WhatsApp (+918149248907)",
+    "checkOutTime": null,
+    "hajri": null,
+    "workedMinutes": 0,
+    "attendancePhotoUrl": "",
+    "date": "2026-09-07",
+    "attendanceSessionId": "RKQw4NXYDdYU9NTPG18e",
+    "hajriLabel": "Unmatched Checkout Time",
+    "method": "worker_qr_whatsapp",
+    "workerId": "eBOvjYDgGCEm2qRNmuzK",
+    "confidence": 0.95,
+    "status": "unmatched",
+    "ruleName": "Unmatched",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "workedHours": "In Progress"
+  },
+  {
+    "_id": "eTODh0cT6cacTfQaa2w3",
+    "createdAt": {
+      "seconds": 1788676267,
+      "nanoseconds": 779000000
+    },
+    "submittedBy": "Worker QR WhatsApp (+917235033213)",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "ruleName": "Dedhi",
+    "attendanceSessionId": "t31ZFgNDp1iyge2LGW65",
+    "status": "present",
+    "updatedAt": {
+      "seconds": 1788705693,
+      "nanoseconds": 919000000
+    },
+    "method": "worker_qr_whatsapp",
+    "workerId": "8vbU9DutKxS62NXXguKd",
+    "checkInTime": "2026-09-06T06:31:02.000Z",
+    "workedMinutes": 490,
+    "date": "2026-09-06",
+    "hajri": 1.5,
+    "confidence": 0.95,
+    "workedHours": "8h 10m",
+    "checkOutTime": "2026-09-06T14:41:29.000Z",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "hajriLabel": "Dedhi"
+  },
+  {
+    "_id": "f7a4rTMweX5UvbGD5OC1",
+    "checkInTime": "2026-09-05T14:51:41.000Z",
+    "status": "present",
+    "verificationStatus": "verified",
+    "ruleName": "Dedhi",
+    "siteId": "udDpJgbe5ufxPz257tKc",
+    "attendanceSessionId": "BOZ7VICyEa7ZV29RGWCa",
+    "confidence": 0.95,
+    "createdAt": {
+      "seconds": 1788619906,
+      "nanoseconds": 285000000
+    },
+    "workerId": "NvmGNw2vwSv0nqkVDSaK",
+    "attendancePhotoUrl": "",
+    "method": "worker_qr_whatsapp",
+    "submittedBy": "Worker QR WhatsApp (+918418020692)",
+    "updatedAt": {
+      "seconds": 1788622673,
+      "nanoseconds": 709000000
+    },
+    "hajriLabel": "Dedhi",
+    "date": "2026-09-05",
+    "workedHours": "0h 46m",
+    "checkOutTime": "2026-09-05T15:37:50.000Z",
+    "workedMinutes": 46,
+    "hajri": 1.5
+  },
+  {
+    "_id": "fNAWbdLTTmP8yWJyrbsA",
+    "submittedBy": "Worker QR WhatsApp (+918369583970)",
+    "attendancePhotoUrl": "",
+    "method": "worker_qr_whatsapp",
+    "hajri": 1.5,
+    "status": "present",
+    "verificationStatus": "verified",
+    "workedMinutes": 488,
+    "checkInTime": "2026-09-06T06:24:30.000Z",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "createdAt": {
+      "seconds": 1788675876,
+      "nanoseconds": 433000000
+    },
+    "confidence": 0.95,
+    "checkOutTime": "2026-09-06T14:33:22.000Z",
+    "date": "2026-09-06",
+    "workedHours": "8h 08m",
+    "updatedAt": {
+      "seconds": 1788705206,
+      "nanoseconds": 455000000
+    },
+    "attendanceSessionId": "odTHlGWbU0cAYCYrIoLS",
+    "ruleName": "Dedhi",
+    "workerId": "zk6TxAaFToUh75aJJkie",
+    "hajriLabel": "Dedhi"
+  },
+  {
+    "_id": "g0sdvHdBoPiMuGTChZHx",
+    "date": "2026-09-06",
+    "attendanceSessionId": "hDjsZO073kp3UGurabUx",
+    "submittedBy": "Worker QR WhatsApp (+917387623564)",
+    "checkInTime": "2026-09-06T05:30:38.000Z",
+    "checkOutTime": "2026-09-06T14:43:11.000Z",
+    "createdAt": {
+      "seconds": 1788672645,
+      "nanoseconds": 313000000
+    },
+    "confidence": 0.95,
+    "workedHours": "9h 12m",
+    "verificationStatus": "verified",
+    "method": "worker_qr_whatsapp",
+    "updatedAt": {
+      "seconds": 1788705795,
+      "nanoseconds": 221000000
+    },
+    "ruleName": "Dedhi",
+    "workerId": "Th1ljbXwELXrOaG87RfL",
+    "attendancePhotoUrl": "",
+    "status": "present",
+    "workedMinutes": 552,
+    "hajriLabel": "Dedhi",
+    "hajri": 1.5,
+    "siteId": "zcDvv0aqWapa4P3uTmaK"
+  },
+  {
+    "_id": "gPKUd5VyIPGZ29Rc7TwY",
+    "attendanceSessionId": "wDW87XaFiGzCGphxdWcd",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "status": "present",
+    "confidence": 0.95,
+    "createdAt": {
+      "seconds": 1788756199,
+      "nanoseconds": 687000000
+    },
+    "workedHours": "7h 54m",
+    "method": "worker_qr_whatsapp",
+    "updatedAt": {
+      "seconds": 1788784653,
+      "nanoseconds": 28000000
+    },
+    "hajriLabel": "Normal",
+    "checkInTime": "2026-09-07T04:43:15.000Z",
+    "hajri": 1,
+    "verificationStatus": "verified",
+    "ruleName": "Normal",
+    "checkOutTime": "2026-09-07T12:37:29.000Z",
+    "date": "2026-09-07",
+    "workerId": "jF3Ouo3fdVogHYrwp6Q8",
+    "workedMinutes": 474,
+    "submittedBy": "Worker QR WhatsApp (+918828086629)",
+    "attendancePhotoUrl": ""
+  },
+  {
+    "_id": "hWZ4c47w36WoPwuvHhvE",
+    "submittedBy": "Worker QR WhatsApp (+919115343241)",
+    "attendanceSessionId": "7wuYadPhR4icqVFPrFiM",
+    "workerId": "MdyVjZn7tsoS5NTc2SK5",
+    "verificationStatus": "verified",
+    "workedMinutes": 505,
+    "method": "worker_qr_whatsapp",
+    "updatedAt": {
+      "seconds": 1788705695,
+      "nanoseconds": 688000000
+    },
+    "hajriLabel": "Dedhi",
+    "createdAt": {
+      "seconds": 1788675357,
+      "nanoseconds": 248000000
+    },
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "present",
+    "confidence": 0.95,
+    "checkInTime": "2026-09-06T06:15:52.000Z",
+    "ruleName": "Dedhi",
+    "attendancePhotoUrl": "",
+    "hajri": 1.5,
+    "workedHours": "8h 25m",
+    "date": "2026-09-06",
+    "checkOutTime": "2026-09-06T14:41:31.000Z"
+  },
+  {
+    "_id": "lXzxOgQR8yhiFdo6PNxp",
+    "submittedBy": "Worker QR WhatsApp (+919161112883)",
+    "status": "present",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "workerId": "FwfDIY4ld42jSl7hZdOh",
+    "workedMinutes": 0,
+    "ruleName": "Normal",
+    "attendanceSessionId": "AXNrF5vudGLEsJfEpTKk",
+    "method": "worker_qr_whatsapp",
+    "hajri": 1,
+    "checkInTime": "2026-09-07T04:57:39.000Z",
+    "hajriLabel": "Normal",
+    "checkOutTime": null,
+    "attendancePhotoUrl": "",
+    "workedHours": "In Progress",
+    "date": "2026-09-07",
+    "updatedAt": {
+      "seconds": 1788757063,
+      "nanoseconds": 43000000
+    },
+    "confidence": 0.95,
+    "verificationStatus": "verified",
+    "createdAt": {
+      "seconds": 1788757063,
+      "nanoseconds": 43000000
+    }
+  },
+  {
+    "_id": "mZ52C9xgrlQ5lqaFZYqq",
+    "confidence": 0.95,
+    "date": "2026-09-07",
+    "attendanceSessionId": "V1Nri6sb7RIXcQINKMWr",
+    "hajriLabel": "Normal",
+    "workedHours": "In Progress",
+    "workedMinutes": 0,
+    "hajri": 1,
+    "method": "worker_qr_whatsapp",
+    "checkInTime": "2026-09-07T04:58:08.000Z",
+    "workerId": "zk6TxAaFToUh75aJJkie",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "updatedAt": {
+      "seconds": 1788757092,
+      "nanoseconds": 815000000
+    },
+    "ruleName": "Normal",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "present",
+    "submittedBy": "Worker QR WhatsApp (+918369583970)",
+    "checkOutTime": null,
+    "createdAt": {
+      "seconds": 1788757092,
+      "nanoseconds": 815000000
+    }
+  },
+  {
+    "_id": "oNDWRZX6W1ZFjRQdKcAf",
+    "hajriLabel": "Normal",
+    "status": "present",
+    "attendancePhotoUrl": "",
+    "submittedBy": "Worker QR WhatsApp (+917304397048)",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "confidence": 0.95,
+    "checkInTime": "2026-09-06T05:39:49.000Z",
+    "hajri": 1,
+    "verificationStatus": "verified",
+    "method": "worker_qr_whatsapp",
+    "updatedAt": {
+      "seconds": 1788673194,
+      "nanoseconds": 626000000
+    },
+    "date": "2026-09-06",
+    "attendanceSessionId": "zQFSbIYDtWOiXo0EwPoL",
+    "workedHours": "In Progress",
+    "createdAt": {
+      "seconds": 1788673194,
+      "nanoseconds": 626000000
+    },
+    "workerId": "4zJX1tXu6Uyezj1unAiQ",
+    "ruleName": "Normal",
+    "checkOutTime": null,
+    "workedMinutes": 0
+  },
+  {
+    "_id": "q3jesPBALED2jA27Jdbf",
+    "submittedBy": "Worker QR WhatsApp (+916302104250)",
+    "createdAt": {
+      "seconds": 1788752292,
+      "nanoseconds": 989000000
+    },
+    "checkInTime": "2026-09-07T03:38:08.000Z",
+    "checkOutTime": null,
+    "updatedAt": {
+      "seconds": 1788752292,
+      "nanoseconds": 989000000
+    },
+    "attendancePhotoUrl": "",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "workerId": "FqJR8l6r0CsZLyPaXVkL",
+    "workedHours": "In Progress",
+    "hajri": null,
+    "hajriLabel": "Unmatched Checkout Time",
+    "status": "unmatched",
+    "method": "worker_qr_whatsapp",
+    "date": "2026-09-07",
+    "attendanceSessionId": "gnAJxr6i5NcqnEBh8vut",
+    "ruleName": "Unmatched",
+    "workedMinutes": 0,
+    "confidence": 0.95,
+    "verificationStatus": "verified"
+  },
+  {
+    "_id": "qTtl8IlV98gg2ngAbwOG",
+    "hajriLabel": "Normal",
+    "method": "worker_qr_whatsapp",
+    "submittedBy": "Worker QR WhatsApp (+919353275409)",
+    "updatedAt": {
+      "seconds": 1788676882,
+      "nanoseconds": 423000000
+    },
+    "confidence": 0.95,
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "checkInTime": "2026-09-06T06:37:41.000Z",
+    "status": "present",
+    "checkOutTime": "2026-09-06T06:41:18.000Z",
+    "createdAt": {
+      "seconds": 1788676667,
+      "nanoseconds": 436000000
+    },
+    "date": "2026-09-06",
+    "workedHours": "0h 03m",
+    "hajri": 1,
+    "workerId": "9shdWFuHNMOcd3jLnf2C",
+    "attendancePhotoUrl": "",
+    "verificationStatus": "verified",
+    "workedMinutes": 3,
+    "ruleName": "Normal",
+    "attendanceSessionId": "Bmn2AwWjZgdUnsbRiFpA"
+  },
+  {
+    "_id": "qmJJOPg3cKi7i8YQqW4d",
+    "hajri": 1,
+    "confidence": 0.95,
+    "date": "2026-09-07",
+    "workedHours": "In Progress",
+    "attendancePhotoUrl": "",
+    "hajriLabel": "Normal",
+    "verificationStatus": "verified",
+    "checkOutTime": null,
+    "attendanceSessionId": "NMz8bWAyXTnMS22xmtFq",
+    "method": "worker_qr_whatsapp",
+    "ruleName": "Normal",
+    "submittedBy": "Worker QR WhatsApp (+917235033213)",
+    "workerId": "8vbU9DutKxS62NXXguKd",
+    "createdAt": {
+      "seconds": 1788757252,
+      "nanoseconds": 174000000
+    },
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "checkInTime": "2026-09-07T05:00:48.000Z",
+    "workedMinutes": 0,
+    "status": "present",
+    "updatedAt": {
+      "seconds": 1788757252,
+      "nanoseconds": 174000000
+    }
+  },
+  {
+    "_id": "ssQHy2KQlgtJ2RY22f4p",
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "checkInTime": "2026-09-07T05:40:11.000Z",
+    "hajri": 1,
+    "status": "present",
+    "confidence": 0.95,
+    "method": "worker_qr_whatsapp",
+    "submittedBy": "Worker QR WhatsApp (+918572947898)",
+    "checkOutTime": null,
+    "attendanceSessionId": "XUAAuHGdSdOVp3OFw9DF",
+    "date": "2026-09-07",
+    "hajriLabel": "Normal",
+    "updatedAt": {
+      "seconds": 1788759616,
+      "nanoseconds": 286000000
+    },
+    "verificationStatus": "verified",
+    "workerId": "BWmS8ygT2rloJKHiGNwo",
+    "workedMinutes": 0,
+    "createdAt": {
+      "seconds": 1788759616,
+      "nanoseconds": 286000000
+    },
+    "workedHours": "In Progress",
+    "ruleName": "Normal",
+    "attendancePhotoUrl": ""
+  },
+  {
+    "_id": "uasHTPg5AiXFIgHh1biz",
+    "workedHours": "In Progress",
+    "attendanceSessionId": "PiQNPDoGyDC9vGQwrmJb",
+    "createdAt": {
+      "seconds": 1788676695,
+      "nanoseconds": 682000000
+    },
+    "submittedBy": "Worker QR WhatsApp (+919670625094)",
+    "hajri": 1,
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "attendancePhotoUrl": "",
+    "date": "2026-09-06",
+    "workedMinutes": 0,
+    "workerId": "F8inNNutx4cQVysTUF5j",
+    "status": "present",
+    "checkOutTime": null,
+    "updatedAt": {
+      "seconds": 1788676695,
+      "nanoseconds": 682000000
+    },
+    "hajriLabel": "Normal",
+    "method": "worker_qr_whatsapp",
+    "checkInTime": "2026-09-06T06:38:10.000Z",
+    "ruleName": "Normal",
+    "verificationStatus": "verified",
+    "confidence": 0.95
+  },
+  {
+    "_id": "whGWLH0cnPgED9EsOw1x",
+    "confidence": 0.95,
+    "hajri": null,
+    "checkOutTime": null,
+    "createdAt": {
+      "seconds": 1788755023,
+      "nanoseconds": 104000000
+    },
+    "siteId": "s5DsFYvmitsXu1NPVs6J",
+    "status": "unmatched",
+    "updatedAt": {
+      "seconds": 1788755023,
+      "nanoseconds": 104000000
+    },
+    "submittedBy": "Worker QR WhatsApp (+917355923553)",
+    "hajriLabel": "Unmatched Checkout Time",
+    "method": "worker_qr_whatsapp",
+    "checkInTime": "2026-09-07T04:23:38.000Z",
+    "workedHours": "In Progress",
+    "ruleName": "Unmatched",
+    "date": "2026-09-07",
+    "workedMinutes": 0,
+    "verificationStatus": "verified",
+    "attendancePhotoUrl": "",
+    "workerId": "UN10Z3rkfekXwuHS8tO1",
+    "attendanceSessionId": "HkkWwUJFSPmtFEC1tNMc"
+  },
+  {
+    "_id": "xlbDm2dTj51YT6ALdXVL",
+    "ruleName": "Dedhi",
+    "hajriLabel": "Dedhi",
+    "status": "present",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "checkInTime": "2026-09-06T05:32:32.000Z",
+    "date": "2026-09-06",
+    "confidence": 0.95,
+    "workedMinutes": 551,
+    "submittedBy": "Worker QR WhatsApp (+919554766331)",
+    "method": "worker_qr_whatsapp",
+    "workerId": "MEoAYwoTvYK4fu3xYZnY",
+    "hajri": 1.5,
+    "verificationStatus": "verified",
+    "checkOutTime": "2026-09-06T14:44:31.000Z",
+    "createdAt": {
+      "seconds": 1788672758,
+      "nanoseconds": 982000000
+    },
+    "updatedAt": {
+      "seconds": 1788705875,
+      "nanoseconds": 640000000
+    },
+    "attendanceSessionId": "Kc6BO5NCxaW0oa3byT1U",
+    "attendancePhotoUrl": "",
+    "workedHours": "9h 11m"
+  },
+  {
+    "_id": "yqPD20783bxENzFXst6U",
+    "hajriLabel": "Normal",
+    "verificationStatus": "verified",
+    "workedMinutes": 445,
+    "checkOutTime": "2026-09-06T13:03:29.000Z",
+    "confidence": 0.95,
+    "createdAt": {
+      "seconds": 1788673102,
+      "nanoseconds": 460000000
+    },
+    "attendancePhotoUrl": "",
+    "updatedAt": {
+      "seconds": 1788699814,
+      "nanoseconds": 248000000
+    },
+    "attendanceSessionId": "gSZ5upay3R3QcR0aAwKu",
+    "workedHours": "7h 25m",
+    "method": "worker_qr_whatsapp",
+    "ruleName": "Normal",
+    "hajri": 1,
+    "checkInTime": "2026-09-06T05:38:17.000Z",
+    "siteId": "zcDvv0aqWapa4P3uTmaK",
+    "submittedBy": "Worker QR WhatsApp (+918689937791)",
+    "workerId": "oMBDaBhcTzGSEqAgzFNJ",
+    "date": "2026-09-06",
+    "status": "present"
+  },
+  {
+    "_id": "zQ7hp4Nsl04e14o8gEjQ",
+    "createdAt": {
+      "seconds": 1788623698,
+      "nanoseconds": 6000000
+    },
+    "workedHours": "In Progress",
+    "ruleName": "Dedhi",
+    "confidence": 0.95,
+    "updatedAt": {
+      "seconds": 1788623698,
+      "nanoseconds": 6000000
+    },
+    "checkOutTime": null,
+    "date": "2026-09-05",
+    "workerId": "Zz634hj1OwEmVUiGMENE",
+    "hajriLabel": "Dedhi",
+    "workedMinutes": 0,
+    "siteId": "udDpJgbe5ufxPz257tKc",
+    "verificationStatus": "verified",
+    "attendanceSessionId": "5VFEZ2oS1FP4PA9zceQk",
+    "submittedBy": "Worker QR WhatsApp (+917393873919)",
+    "hajri": 1.5,
+    "status": "present",
+    "checkInTime": "2026-09-05T15:54:52.000Z",
+    "method": "worker_qr_whatsapp",
+    "attendancePhotoUrl": ""
+  }
+]

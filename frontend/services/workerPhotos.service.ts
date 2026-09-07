@@ -1,60 +1,49 @@
 import {
-  collection,
   addDoc,
-  getDocs,
-  query,
   where,
-  orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { storage } from '@/lib/firebase';
+import { OrgContextService } from './org-context.service';
 import type { WorkerPhoto } from '@/types/worker';
 
 const COLLECTION_NAME = 'workerPhotos';
 
 export class WorkerPhotosService {
-  public static async getWorkerPhotos(workerId: string): Promise<WorkerPhoto[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    try {
-      const q = query(
-        colRef,
-        where('workerId', '==', workerId),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as WorkerPhoto[];
-    } catch (err) {
-      // Fallback if composite index (workerId + createdAt) is not created yet in Firebase Console
-      const qFallback = query(colRef, where('workerId', '==', workerId));
-      const snapshot = await getDocs(qFallback);
-      const docs = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as WorkerPhoto[];
-      return docs.sort((a, b) => {
-        const timeA = (a.createdAt as any)?.seconds || 0;
-        const timeB = (b.createdAt as any)?.seconds || 0;
-        return timeB - timeA;
-      });
-    }
+  public static async getWorkerPhotos(workerId: string, orgId?: string): Promise<WorkerPhoto[]> {
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('workerId', '==', workerId)],
+      orgId
+    );
+    const photos = docs.map((d) => ({
+      id: d.id,
+      ...d,
+    })) as WorkerPhoto[];
+
+    return photos.sort((a, b) => {
+      const timeA = (a.createdAt as any)?.seconds || 0;
+      const timeB = (b.createdAt as any)?.seconds || 0;
+      return timeB - timeA;
+    });
   }
 
   public static async uploadWorkerPhoto(
     workerId: string,
-    file: File
+    file: File,
+    orgId?: string
   ): Promise<WorkerPhoto> {
+    const activeOrgId = orgId || OrgContextService.getOrgId();
     const photoId = `photo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     let photoUrl = '';
-    let storagePath = `workers/${workerId}/photos/${photoId}`;
+    let storagePath = `organizations/${activeOrgId}/workers/${workerId}/photos/${photoId}`;
 
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('workerId', workerId);
+      formData.append('organizationId', activeOrgId);
 
       const res = await fetch('/api/storage/upload-worker-photo', {
         method: 'POST',
@@ -84,10 +73,10 @@ export class WorkerPhotosService {
       }
     }
 
-    // Save photo metadata in Firestore workerPhotos collection
-    const colRef = collection(db, COLLECTION_NAME);
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, activeOrgId);
     const now = serverTimestamp();
     const docRef = await addDoc(colRef, {
+      organizationId: activeOrgId,
       workerId,
       storagePath,
       photoUrl,

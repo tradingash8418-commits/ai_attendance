@@ -1,96 +1,110 @@
 import {
-  collection,
-  doc,
-  getDocs,
-  getDoc,
   addDoc,
   updateDoc,
-  query,
-  where,
   orderBy,
   serverTimestamp,
+  collection,
+  getDocs,
+  query,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { normalizeWhatsAppNumber } from '@/lib/formatters';
+import { OrgContextService } from './org-context.service';
 import type { Supervisor } from '@/types/supervisor';
 
 const COLLECTION_NAME = 'supervisors';
 
 export class SupervisorsService {
-  public static async getSupervisors(): Promise<Supervisor[]> {
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      ...docSnap.data(),
+  public static async getSupervisors(orgId?: string): Promise<Supervisor[]> {
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [orderBy('createdAt', 'desc')],
+      orgId
+    );
+    return docs.map((d) => ({
+      id: d.id,
+      ...d,
     })) as Supervisor[];
   }
 
-  public static async getSupervisorById(id: string): Promise<Supervisor | null> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as Supervisor;
+  public static async getSupervisorById(id: string, orgId?: string): Promise<Supervisor | null> {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    if (!res.data) return null;
+    return { id, ...res.data } as Supervisor;
   }
 
   public static async getSupervisorByWhatsAppNumber(
-    rawNumber: string
+    rawNumber: string,
+    orgId?: string
   ): Promise<Supervisor | null> {
     const normalized = normalizeWhatsAppNumber(rawNumber);
     if (!normalized) return null;
 
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(
-      colRef,
-      where('whatsappNumber', '==', normalized),
-      where('active', '==', true)
+    const all = await this.getSupervisors(orgId);
+    const match = all.find(
+      (s) =>
+        s.active !== false &&
+        (normalizeWhatsAppNumber(s.whatsappNumber || '') === normalized ||
+          normalizeWhatsAppNumber(s.phone || '') === normalized)
     );
-    const snapshot = await getDocs(q);
+    if (match) return match;
 
-    if (snapshot.empty) return null;
-    const docSnap = snapshot.docs[0];
-    if (!docSnap) return null;
-    return { id: docSnap.id, ...docSnap.data() } as Supervisor;
+    // Fallback: Global lookup in root `users` collection by WhatsApp/Phone number
+    try {
+      const usersColRef = collection(db, 'users');
+      const usersSnap = await getDocs(query(usersColRef));
+      const matchingUserDoc = usersSnap.docs.find((d) => {
+        const u = d.data();
+        const uWa = normalizeWhatsAppNumber(u.whatsappNumber || '');
+        const uPhone = normalizeWhatsAppNumber(u.phone || '');
+        return uWa === normalized || uPhone === normalized;
+      });
+
+      if (matchingUserDoc) {
+        const uData = matchingUserDoc.data();
+        return {
+          id: matchingUserDoc.id,
+          name: uData.displayName || 'Contractor Admin',
+          whatsappNumber: uData.whatsappNumber || normalized,
+          phone: uData.phone || normalized,
+          organizationId: uData.organizationId || OrgContextService.getOrgId(),
+          active: true,
+          createdAt: uData.createdAt || new Date().toISOString(),
+          updatedAt: uData.updatedAt || new Date().toISOString(),
+        } as Supervisor;
+      }
+    } catch (err) {
+      console.warn('[SupervisorsService] Global users lookup error:', err);
+    }
+
+    return null;
   }
 
   /**
    * Alias and fallback for supervisor lookup by phone or WhatsApp number.
    */
   public static async getSupervisorByPhone(
-    rawNumber: string
+    rawNumber: string,
+    orgId?: string
   ): Promise<Supervisor | null> {
-    const byWa = await this.getSupervisorByWhatsAppNumber(rawNumber);
-    if (byWa) return byWa;
-
-    const normalized = normalizeWhatsAppNumber(rawNumber);
-    if (!normalized) return null;
-
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(
-      colRef,
-      where('phone', '==', normalized),
-      where('active', '==', true)
-    );
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) return null;
-    const docSnap = snapshot.docs[0];
-    if (!docSnap) return null;
-    return { id: docSnap.id, ...docSnap.data() } as Supervisor;
+    return await this.getSupervisorByWhatsAppNumber(rawNumber, orgId);
   }
 
-  public static async createSupervisor(data: {
-    name: string;
-    phone?: string;
-    whatsappNumber: string;
-    email?: string;
-  }): Promise<string> {
-    const colRef = collection(db, COLLECTION_NAME);
+  public static async createSupervisor(
+    data: {
+      name: string;
+      phone?: string;
+      whatsappNumber: string;
+      email?: string;
+    },
+    orgId?: string
+  ): Promise<string> {
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const now = serverTimestamp();
     const normalizedNumber = normalizeWhatsAppNumber(data.whatsappNumber);
 
     const docRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       name: data.name.trim(),
       phone: data.phone?.trim() || normalizedNumber,
       whatsappNumber: normalizedNumber,
@@ -104,9 +118,10 @@ export class SupervisorsService {
 
   public static async updateSupervisor(
     id: string,
-    data: Partial<Omit<Supervisor, 'id' | 'createdAt' | 'updatedAt'>>
+    data: Partial<Omit<Supervisor, 'id' | 'createdAt' | 'updatedAt'>>,
+    orgId?: string
   ): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
     const updateData: Record<string, any> = {
       ...data,
       updatedAt: serverTimestamp(),
@@ -116,15 +131,16 @@ export class SupervisorsService {
       updateData.whatsappNumber = normalizeWhatsAppNumber(data.whatsappNumber);
     }
 
-    await updateDoc(docRef, updateData);
+    await updateDoc(res.ref, updateData);
   }
 
   public static async toggleSupervisorActive(
     id: string,
-    active: boolean
+    active: boolean,
+    orgId?: string
   ): Promise<void> {
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    await updateDoc(res.ref, {
       active,
       updatedAt: serverTimestamp(),
     });

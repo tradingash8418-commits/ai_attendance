@@ -146,8 +146,8 @@ export default function WorkerProfileDossierModal({
     if (periodFilter === 'this_week') {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      const cutoff = oneWeekAgo.toISOString().split('T')[0];
-      return attendanceRecords.filter((r) => r.date >= cutoff);
+      const cutoffStr = oneWeekAgo.toISOString().split('T')[0] || '';
+      return attendanceRecords.filter((r) => r.date >= cutoffStr);
     }
 
     return attendanceRecords;
@@ -174,8 +174,8 @@ export default function WorkerProfileDossierModal({
     if (periodFilter === 'this_week') {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      const cutoff = oneWeekAgo.toISOString().split('T')[0];
-      return payments.filter((p) => (p.paymentDate || '') >= cutoff);
+      const cutoffStr = oneWeekAgo.toISOString().split('T')[0] || '';
+      return payments.filter((p) => (p.paymentDate || '') >= cutoffStr);
     }
 
     return payments;
@@ -185,19 +185,19 @@ export default function WorkerProfileDossierModal({
   const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : 500;
 
   const totalHajri = useMemo(() => {
-    return filteredAttendance.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 1.0), 0);
+    return filteredAttendance.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
   }, [filteredAttendance]);
 
   const fullDaysCount = useMemo(() => {
-    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 1.0) === 1.0).length;
+    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 0) === 1.0).length;
   }, [filteredAttendance]);
 
   const halfDaysCount = useMemo(() => {
-    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 1.0) === 0.5).length;
+    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 0) === 0.5).length;
   }, [filteredAttendance]);
 
   const overtimeCount = useMemo(() => {
-    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 1.0) > 1.0).length;
+    return filteredAttendance.filter((r) => (typeof r.hajri === 'number' ? r.hajri : 0) > 1.0).length;
   }, [filteredAttendance]);
 
   const grossEarnings = Math.round(totalHajri * dailyRate);
@@ -222,7 +222,7 @@ export default function WorkerProfileDossierModal({
     const siteHajriMap: Record<string, number> = {};
     filteredAttendance.forEach((r) => {
       const sId = r.siteId || 'unassigned';
-      const hajriVal = typeof r.hajri === 'number' ? r.hajri : 1.0;
+      const hajriVal = typeof r.hajri === 'number' ? r.hajri : 0;
       siteHajriMap[sId] = (siteHajriMap[sId] || 0) + hajriVal;
     });
 
@@ -345,7 +345,7 @@ export default function WorkerProfileDossierModal({
                   {todayRecord ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-extrabold animate-pulse">
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Present Today at {siteMap.get(todayRecord.siteId) || 'Site'} ({todayRecord.hajri || 1.0} Hajri)</span>
+                      <span>Present Today at {siteMap.get(todayRecord.siteId) || 'Site'} ({typeof todayRecord.hajri === 'number' ? todayRecord.hajri : 0} Hajri)</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/40 text-[11px] font-bold">
@@ -776,7 +776,7 @@ export default function WorkerProfileDossierModal({
                           <div className="flex items-center gap-2">
                             <span className="font-extrabold text-slate-900 text-sm">{r.date}</span>
                             <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-black border border-blue-200">
-                              {r.hajri || 1.0} Hajri
+                              {typeof r.hajri === 'number' ? r.hajri : 0} Hajri
                             </span>
                           </div>
                           <p className="text-slate-500 text-xs font-medium mt-0.5">
@@ -843,7 +843,7 @@ export default function WorkerProfileDossierModal({
           <div className="text-slate-500 text-[11px] font-medium text-center sm:text-left">
             <span>Worker ID: <code className="font-mono text-slate-700">{worker.id}</code></span>
             <span className="mx-2">•</span>
-            <span>Created: {new Date(worker.createdAt || Date.now()).toLocaleDateString('en-IN')}</span>
+            <span>Created: {worker.createdAt && typeof (worker.createdAt as any).toDate === 'function' ? (worker.createdAt as any).toDate().toLocaleDateString('en-IN') : new Date(worker.createdAt ? String(worker.createdAt) : Date.now()).toLocaleDateString('en-IN')}</span>
           </div>
 
           <div className="flex items-center gap-2">

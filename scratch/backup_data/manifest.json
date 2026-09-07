@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-09-07T13:33:11.943Z",
+  "collections": {
+    "attendanceRecords": 46,
+    "attendanceSessions": 71,
+    "paymentLedger": 4,
+    "pendingCheckins": 121,
+    "siteAssignments": 149,
+    "sites": 9,
+    "supervisors": 3,
+    "whatsappMessages": 358,
+    "workerFaceEmbeddings": 22,
+    "workerPhotos": 6,
+    "workers": 28
+  }
+}

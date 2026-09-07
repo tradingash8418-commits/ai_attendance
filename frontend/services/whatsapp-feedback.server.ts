@@ -1,6 +1,7 @@
 import { WhatsAppService } from './whatsapp.service';
 import { WorkersService } from './workers.service';
 import { AttendanceService } from './attendance.service';
+import { PaymentLedgerService } from './payment-ledger.service';
 import { getWorkerDisplayName } from '@/lib/formatters';
 import type { Worker } from '@/types/worker';
 
@@ -9,6 +10,7 @@ export interface AttendanceFeedbackOptions {
   siteName: string;
   date: string;
   siteId?: string;
+  orgId?: string;
   recognizedWorkerIds?: string[];
   matchedWorkerIds?: string[];
   unknownFaceCount: number;
@@ -31,7 +33,7 @@ export class WhatsAppFeedbackServer {
   public static async sendAttendanceFeedbackReport(
     options: AttendanceFeedbackOptions
   ): Promise<{ success: boolean; error?: string }> {
-    const { supervisorWhatsAppNumber, siteName, date, siteId, recognizedWorkerIds, matchedWorkerIds, unknownFaceCount } = options;
+    const { supervisorWhatsAppNumber, siteName, date, siteId, orgId, recognizedWorkerIds, matchedWorkerIds, unknownFaceCount } = options;
 
     if (!supervisorWhatsAppNumber) {
       console.warn('[WhatsAppFeedbackServer] Missing supervisor WhatsApp sender number.');
@@ -42,7 +44,7 @@ export class WhatsAppFeedbackServer {
 
     try {
       // 1. Fetch worker records matching recognized IDs, codes, or worker names resiliently
-      const allWorkers = await WorkersService.getWorkers();
+      const allWorkers = await WorkersService.getWorkers(orgId);
       const recognizedWorkers: Worker[] = allWorkers.filter((w) =>
         idsToMatch.some((matchedId) => {
           const mappedCode = TEST_WORKER_CODE_MAP[matchedId] || matchedId;
@@ -65,7 +67,7 @@ export class WhatsAppFeedbackServer {
       const attendanceRecords = await AttendanceService.getAttendanceRecords({
         siteId,
         date,
-      });
+      }, orgId);
 
       // 3. Build clean text message report
       const messageLines: string[] = [];
@@ -79,7 +81,9 @@ export class WhatsAppFeedbackServer {
         messageLines.push('Present: None');
       } else {
         messageLines.push('Present:');
-        recognizedWorkers.forEach((worker, index) => {
+
+        let index = 1;
+        for (const worker of recognizedWorkers) {
           const nameDisplay = getWorkerDisplayName(worker);
           const attRecord = attendanceRecords.find(
             (r) =>
@@ -108,21 +112,45 @@ export class WhatsAppFeedbackServer {
             : null;
 
           const workedStr = hasCheckedOut ? (attRecord?.workedHours || '0h 00m') : null;
-          const hajriVal = attRecord?.hajri !== undefined && attRecord?.hajri !== null ? attRecord.hajri : 1.0;
-          const hajriLabel = attRecord?.hajriLabel || 'Normal';
+          const hajriVal = attRecord?.hajri !== undefined && attRecord?.hajri !== null
+            ? attRecord.hajri
+            : (hasCheckedOut ? 1.0 : 0);
+          const hajriLabel = attRecord?.hajriLabel || (hasCheckedOut ? 'Normal' : 'In Progress');
 
-          messageLines.push(`${index + 1}. ${nameDisplay}`);
+          messageLines.push(`${index}. ${nameDisplay}`);
           messageLines.push(`   Check-in: ${checkInFormatted}`);
+
           if (hasCheckedOut && checkOutFormatted) {
+            const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : 500;
+            const todaySalary = Math.round(hajriVal * dailyRate);
+
+            // Fetch lifetime attendance for this worker under contractor's orgId
+            const workerAllAtt = await AttendanceService.getAttendanceRecords({ workerId: worker.id }, orgId);
+            const totalHajri = workerAllAtt.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
+            const totalEarnedSalary = Math.round(totalHajri * dailyRate);
+
+            // Fetch lifetime payments / advances for this worker under contractor's orgId
+            const workerPayments = await PaymentLedgerService.getPayments({ workerId: worker.id }, orgId);
+            const totalPaidOrAdvance = workerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            const remainingBalance = totalEarnedSalary - totalPaidOrAdvance;
+
             messageLines.push(`   Check-out: ${checkOutFormatted}`);
             messageLines.push(`   Worked: ${workedStr}`);
-            messageLines.push(`   Hajri: ${hajriVal} (${hajriLabel})`);
+            messageLines.push(`   Hajri Today: ${hajriVal} (${hajriLabel})`);
+            messageLines.push(`   Rate: ₹${dailyRate}/Hajri`);
+            messageLines.push(`   Today's Earnings: ₹${todaySalary.toLocaleString('en-IN')}`);
+            messageLines.push(`   ---------------------------------`);
+            messageLines.push(`   📊 Worker Khata Summary:`);
+            messageLines.push(`   • Total Hajri: ${totalHajri.toFixed(1)}`);
+            messageLines.push(`   • Total Salary Earned: ₹${totalEarnedSalary.toLocaleString('en-IN')}`);
+            messageLines.push(`   • Already Paid / Advance: ₹${totalPaidOrAdvance.toLocaleString('en-IN')}`);
+            messageLines.push(`   • Net Payable Balance: ₹${remainingBalance.toLocaleString('en-IN')}`);
           } else {
             messageLines.push(`   Status: Present (Shift Active)`);
-            messageLines.push(`   Hajri: ${hajriVal} (${hajriLabel})`);
+            messageLines.push(`   Hajri: 0.0 (In Progress)`);
           }
           messageLines.push('');
-        });
+        }
       }
 
       messageLines.push(`Total Present: ${recognizedWorkers.length}`);

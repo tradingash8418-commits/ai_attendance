@@ -9,6 +9,8 @@ import { WhatsAppFeedbackServer } from './whatsapp-feedback.server';
 import { PendingCheckinService } from './pending-checkin.service';
 import { PaymentOcrService } from './payment-ocr.service';
 import { PaymentLedgerService } from './payment-ledger.service';
+import { SupervisorsService } from './supervisors.service';
+import { OrgContextService } from './org-context.service';
 import { getTodayDateString, normalizeWhatsAppNumber, getWorkerDisplayName } from '@/lib/formatters';
 
 export class WebhookProcessorServer {
@@ -47,16 +49,20 @@ export class WebhookProcessorServer {
       const messageTimestampMs = rawTimestampSeconds > 0 ? rawTimestampSeconds * 1000 : Date.now();
       const today = getTodayDateString();
 
+      // Resolve multi-tenant Organization context by supervisor's WhatsApp number (fallback to org_primary)
+      const supervisor = await SupervisorsService.getSupervisorByWhatsAppNumber(normalizedSender);
+      const resolvedOrgId = (supervisor as any)?.organizationId || (supervisor as any)?.orgId || OrgContextService.getOrgId();
+
       console.log(
         `[WebhookProcessor] Incoming message ID: ${rawMessageId}, Sender: ${normalizedSender}, ` +
-        `Type: ${messageType}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`
+        `Type: ${messageType}, OrgId: ${resolvedOrgId}, Timestamp: ${new Date(messageTimestampMs).toISOString()}`
       );
 
       // 1. WhatsApp Network Retry Deduplication:
       // Meta WhatsApp Cloud API retries webhook delivery up to 6 times if processing takes >3 seconds.
       // Checking rawMessageId ensures that ONE WhatsApp message is processed and recorded EXACTLY ONCE,
       // while allowing different/new payment messages to be processed freely without blocking.
-      const isAlreadyProcessed = await WhatsAppService.isMessageProcessed(rawMessageId);
+      const isAlreadyProcessed = await WhatsAppService.isMessageProcessed(rawMessageId, resolvedOrgId);
       if (isAlreadyProcessed) {
         console.log(`[WebhookProcessor] Meta webhook retry acknowledged for message ID: ${rawMessageId}`);
         return { status: 'completed', reason: 'Meta retry duplicate acknowledged', messageId: rawMessageId };
@@ -69,7 +75,7 @@ export class WebhookProcessorServer {
         messageType,
         mediaId,
         rawPayload: payload,
-      });
+      }, resolvedOrgId);
 
       // =====================================================================
       // PATH 1: 1-TAP ZERO-SELFIE WORKER QR ATTENDANCE (e.g. CHECKIN_CK_...)
@@ -83,15 +89,16 @@ export class WebhookProcessorServer {
         const session = await PendingCheckinService.linkPhoneToPendingCheckin(
           rawToken,
           normalizedSender,
-          rawMessageId
+          rawMessageId,
+          resolvedOrgId
         );
 
         if (session) {
-          const site = await SitesService.getSiteById(session.siteId);
+          const site = await SitesService.getSiteById(session.siteId, resolvedOrgId);
           const siteName = site ? site.name : 'Construction Site';
 
           // 1. Resolve or auto-register worker by phone number
-          const targetWorker = await WorkersService.getOrCreateWorkerByPhone(normalizedSender);
+          const targetWorker = await WorkersService.getOrCreateWorkerByPhone(normalizedSender, resolvedOrgId);
 
           // 2. Create Attendance Session
           const sessionId = await AttendanceSessionsService.createAttendanceSession({
@@ -100,7 +107,7 @@ export class WebhookProcessorServer {
             supervisorId: 'worker_qr_whatsapp',
             whatsappSenderNumber: normalizedSender,
             whatsappMessageId: rawMessageId,
-          });
+          }, resolvedOrgId);
 
           // 3. Record attendance immediately (Zero selfie required!)
           await AttendanceService.recordWorkerAttendance({
@@ -112,12 +119,12 @@ export class WebhookProcessorServer {
             attendancePhotoUrl: '',
             submittedBy: `Worker QR WhatsApp (${normalizedSender})`,
             method: 'worker_qr_whatsapp',
-          });
+          }, resolvedOrgId);
 
           // 4. Mark pending checkin as used
-          await PendingCheckinService.markPendingCheckinUsed(session.id);
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed');
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId);
+          await PendingCheckinService.markPendingCheckinUsed(session.id, resolvedOrgId);
+          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed', resolvedOrgId);
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId, resolvedOrgId);
 
           // 5. Send instant, complete attendance report back to the worker
           await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({
@@ -125,6 +132,7 @@ export class WebhookProcessorServer {
             siteId: session.siteId,
             siteName: siteName,
             date: today,
+            orgId: resolvedOrgId,
             recognizedWorkerIds: [targetWorker.id],
             unknownFaceCount: 0,
           });
@@ -142,7 +150,7 @@ export class WebhookProcessorServer {
             `Your site QR check-in session has expired or is invalid. Please scan the QR code at the site gate again.`
           );
 
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', undefined, resolvedOrgId);
           return { status: 'failed', reason: 'Invalid or expired checkin token', messageId: rawMessageId };
         }
       }
@@ -156,13 +164,13 @@ export class WebhookProcessorServer {
 
         // Subcase 1B-1: Multi-Worker Batch Advance Split on Recent Receipt
         if (splitItems.length > 0) {
-          const todayPayments = await PaymentLedgerService.getPayments({ date: today });
+          const todayPayments = await PaymentLedgerService.getPayments({ date: today }, resolvedOrgId);
           const recentPayment = todayPayments.find((p) => {
             return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
           });
 
           if (recentPayment) {
-            const allWorkers = await WorkersService.getWorkers();
+            const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
             const ocrBeneficiary =
               recentPayment.paidTo && !recentPayment.paidTo.startsWith('Worker')
                 ? recentPayment.paidTo
@@ -171,7 +179,7 @@ export class WebhookProcessorServer {
             const origAmount = recentPayment.amount;
 
             // 1. Update the original payment record with the 1st worker's advance
-            const firstItem = splitItems[0];
+            const firstItem = splitItems[0]!;
             const firstMatch = findBestWorkerMatch(allWorkers, firstItem.workerName);
             const firstWorkerName = firstMatch ? getWorkerDisplayName(firstMatch) : firstItem.workerName;
             const firstWorkerId = firstMatch ? firstMatch.id : '';
@@ -185,11 +193,11 @@ export class WebhookProcessorServer {
               paidTo: firstPaidTo,
               amount: firstItem.amount,
               notes: `Split Advance (Receipt Total: ₹${origAmount}) | ${textBody}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`,
-            });
+            }, resolvedOrgId);
 
             // 2. Insert new payment records for remaining workers (2nd, 3rd, etc.)
             for (let i = 1; i < splitItems.length; i++) {
-              const item = splitItems[i];
+              const item = splitItems[i]!;
               const match = findBestWorkerMatch(allWorkers, item.workerName);
               const wName = match ? getWorkerDisplayName(match) : item.workerName;
               const wId = match ? match.id : '';
@@ -211,10 +219,10 @@ export class WebhookProcessorServer {
                 notes: `Split Advance (Receipt Total: ₹${origAmount}) | ${textBody}${ocrBeneficiary ? ` | A/C: ${ocrBeneficiary}` : ''}`,
                 recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
                 rawOcrText: recentPayment.rawOcrText || '',
-              });
+              }, resolvedOrgId);
             }
 
-            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
             let confirmationMsg =
               `🔄 *Recent Payment Split & Recorded in Worker Khata!* 👥\n\n`;
@@ -254,14 +262,14 @@ export class WebhookProcessorServer {
         // Subcase 1B-2: Single Caption / Remark on Recent Receipt
         const captionInfo = parsePaymentCaption(textBody);
         if (captionInfo.explicitCategory || captionInfo.workerOrPayeeRemark) {
-          const todayPayments = await PaymentLedgerService.getPayments({ date: today });
+          const todayPayments = await PaymentLedgerService.getPayments({ date: today }, resolvedOrgId);
           // Find latest payment from WhatsApp today
           const recentPayment = todayPayments.find((p) => {
             return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
           });
 
           if (recentPayment) {
-            const allWorkers = await WorkersService.getWorkers();
+            const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
             const matchedWorker = captionInfo.workerOrPayeeRemark
               ? findBestWorkerMatch(allWorkers, captionInfo.workerOrPayeeRemark)
               : undefined;
@@ -302,9 +310,10 @@ export class WebhookProcessorServer {
               workerName: resolvedWorkerName,
               workerCode: (isWorkerPayment && matchedWorker) ? matchedWorker?.workerCode : '',
               paidTo: finalPaidTo,
-            });
+              notes: structuredNotes,
+            }, resolvedOrgId);
 
-            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+            await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
             const typeLabel = isWorkerPayment ? 'Worker Advance / Kharcha' : 'Vendor / Material Expense';
             const displayName = isWorkerPayment ? resolvedWorkerName : finalPaidTo;
@@ -337,7 +346,7 @@ export class WebhookProcessorServer {
       // Ignore any message that is not an image or a document (PDF)
       if (messageType !== 'image' && messageType !== 'document') {
         console.log(`[WebhookProcessor] Non-image/document message type received: ${messageType}`);
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored');
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'ignored', undefined, resolvedOrgId);
         return { status: 'ignored', reason: 'Non-image/document message type', messageId: rawMessageId };
       }
 
@@ -359,7 +368,7 @@ export class WebhookProcessorServer {
           contentType = downloaded.contentType || contentType;
         } catch (mediaErr: any) {
           console.error('[WebhookProcessor] Failed to download payment receipt media:', mediaErr);
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', undefined, resolvedOrgId);
           await WhatsAppService.sendMessage(
             normalizedSender,
             `⚠️ Could not download your payment receipt from WhatsApp. Please try sending it again.`
@@ -369,7 +378,7 @@ export class WebhookProcessorServer {
       }
 
       if (!imageBuffer) {
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed');
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'failed', undefined, resolvedOrgId);
         return { status: 'failed', reason: 'No image/document buffer', messageId: rawMessageId };
       }
 
@@ -394,7 +403,7 @@ export class WebhookProcessorServer {
         `Method=${paymentData.paymentMethod}, UPI=${paymentData.upiId}`
       );
 
-      const allWorkers = await WorkersService.getWorkers();
+      const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
       const finalAmount = paymentData.amount || 0;
       const ocrBeneficiary = paymentData.receiverName || '';
 
@@ -429,10 +438,10 @@ export class WebhookProcessorServer {
             notes: splitNotes,
             recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
             rawOcrText: paymentData.rawText,
-          });
+          }, resolvedOrgId);
         }
 
-        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+        await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
         // Send itemized WhatsApp confirmation for multi-worker split
         let dateDisplay = today;
@@ -495,7 +504,7 @@ export class WebhookProcessorServer {
       }
       // Priority B: Match by AI OCR Beneficiary Name / UPI
       if (!matchedWorker && paymentData.receiverName) {
-        matchedWorker = findBestWorkerMatch(allWorkers, paymentData.receiverName, paymentData.upiId);
+        matchedWorker = findBestWorkerMatch(allWorkers, paymentData.receiverName, paymentData.upiId || undefined);
       }
 
       // CATEGORY DETERMINATION RULES:
@@ -562,9 +571,9 @@ export class WebhookProcessorServer {
         notes: structuredNotes,
         recordedBy: `WhatsApp AI OCR (${normalizedSender})`,
         rawOcrText: paymentData.rawText,
-      });
+      }, resolvedOrgId);
 
-      await WhatsAppService.updateMessageStatus(savedMsgId, 'processed');
+      await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
       // Send clear WhatsApp confirmation back to contractor / sender
       let dateDisplay = today;
@@ -715,7 +724,7 @@ export function parsePaymentCaption(rawText: string): {
 
   // 2. Delimiter separated: e.g. "UltraTech, m", "Manoj, thekedar", "Raju Dumper, transport", "pintu, w"
   const delimiterMatch = text.match(/^(.+?)\s*[,:\-\/|]\s*([a-zA-Z]+)$/);
-  if (delimiterMatch) {
+  if (delimiterMatch && delimiterMatch[1] && delimiterMatch[2]) {
     const remarkPart = delimiterMatch[1].trim();
     const tagPart = delimiterMatch[2].toLowerCase().trim();
 
@@ -731,7 +740,7 @@ export function parsePaymentCaption(rawText: string): {
 
   // 3. Trailing space separated: e.g. "UltraTech m", "Manoj thekedar", "pintu w"
   const trailingMatch = text.match(/^(.+?)\s+([a-zA-Z]+)$/);
-  if (trailingMatch) {
+  if (trailingMatch && trailingMatch[1] && trailingMatch[2]) {
     const remarkPart = trailingMatch[1].trim();
     const tagPart = trailingMatch[2].toLowerCase().trim();
 
@@ -747,7 +756,7 @@ export function parsePaymentCaption(rawText: string): {
 
   // 4. Leading tag separated: e.g. "w pintu", "m UltraTech", "thekedar Manoj", "transport Raju Dumper"
   const leadingMatch = text.match(/^([a-zA-Z]+)\s+[,:\-\/|]?\s*(.+)$/);
-  if (leadingMatch) {
+  if (leadingMatch && leadingMatch[1] && leadingMatch[2]) {
     const tagPart = leadingMatch[1].toLowerCase().trim();
     const remarkPart = leadingMatch[2].trim();
 
@@ -856,16 +865,18 @@ export function parseBatchWorkerSplitCaption(rawText: string): WorkerSplitItem[]
   let match: RegExpExecArray | null;
 
   while ((match = splitRegex.exec(text)) !== null) {
-    const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
-    const rawAmt = match[2].replace(/,/g, '').trim();
-    const amount = parseFloat(rawAmt);
+    if (match[1] && match[2]) {
+      const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
+      const rawAmt = match[2].replace(/,/g, '').trim();
+      const amount = parseFloat(rawAmt);
 
-    // Ensure valid name (not empty, not pure numbers) and positive amount
-    if (rawName.length > 0 && !isNaN(amount) && amount > 0) {
-      results.push({
-        workerName: rawName,
-        amount: amount,
-      });
+      // Ensure valid name (not empty, not pure numbers) and positive amount
+      if (rawName.length > 0 && !isNaN(amount) && amount > 0) {
+        results.push({
+          workerName: rawName,
+          amount: amount,
+        });
+      }
     }
   }
 
@@ -874,16 +885,18 @@ export function parseBatchWorkerSplitCaption(rawText: string): WorkerSplitItem[]
   if (results.length === 0) {
     const spaceRegex = /(?:['"‘“])?([a-zA-Z\s._]+?)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)(?:\/-)?(?:['"’”])?(?:,|$|\n)/gi;
     while ((match = spaceRegex.exec(text)) !== null) {
-      const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
-      const rawAmt = match[2].replace(/,/g, '').trim();
-      const amount = parseFloat(rawAmt);
+      if (match[1] && match[2]) {
+        const rawName = match[1].trim().replace(/^['"‘“]+|['"’”]+$/g, '').trim();
+        const rawAmt = match[2].replace(/,/g, '').trim();
+        const amount = parseFloat(rawAmt);
 
-      const reservedKeywords = ['checkin', 'vendor', 'advance', 'worker', 'total'];
-      if (rawName.length > 0 && !isNaN(amount) && amount > 0 && !reservedKeywords.includes(rawName.toLowerCase())) {
-        results.push({
-          workerName: rawName,
-          amount: amount,
-        });
+        const reservedKeywords = ['checkin', 'vendor', 'advance', 'worker', 'total'];
+        if (rawName.length > 0 && !isNaN(amount) && amount > 0 && !reservedKeywords.includes(rawName.toLowerCase())) {
+          results.push({
+            workerName: rawName,
+            amount: amount,
+          });
+        }
       }
     }
   }

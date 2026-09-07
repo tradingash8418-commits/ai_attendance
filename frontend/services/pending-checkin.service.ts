@@ -1,14 +1,10 @@
 import {
-  collection,
-  doc,
   addDoc,
-  getDocs,
   updateDoc,
-  query,
   where,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { OrgContextService } from './org-context.service';
 import type { PendingCheckin } from '@/types/pendingCheckin';
 
 const COLLECTION_NAME = 'pendingCheckins';
@@ -18,23 +14,26 @@ export class PendingCheckinService {
   /**
    * Creates a short-lived, single-use pending checkin session after successful server-side GPS verification.
    */
-  public static async createPendingCheckin(data: {
-    siteId: string;
-    siteToken: string;
-    latitude: number;
-    longitude: number;
-    distanceMeters: number;
-  }): Promise<{ id: string; token: string }> {
-    const colRef = collection(db, COLLECTION_NAME);
+  public static async createPendingCheckin(
+    data: {
+      siteId: string;
+      siteToken: string;
+      latitude: number;
+      longitude: number;
+      distanceMeters: number;
+    },
+    orgId?: string
+  ): Promise<{ id: string; token: string }> {
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + TOKEN_TTL_MINUTES * 60 * 1000);
 
-    // Cryptographically random 6-character hex suffix
     const randomHex = Math.random().toString(36).substring(2, 8).toUpperCase();
     const timestampCode = Date.now().toString(36).substring(4).toUpperCase();
     const token = `CK_${timestampCode}_${randomHex}`;
 
     const docRef = await addDoc(colRef, {
+      organizationId: orgId || OrgContextService.getOrgId(),
       token,
       siteId: data.siteId,
       siteToken: data.siteToken,
@@ -53,19 +52,20 @@ export class PendingCheckinService {
   /**
    * Resolves a pending checkin session by token.
    */
-  public static async getPendingCheckinByToken(token: string): Promise<PendingCheckin | null> {
+  public static async getPendingCheckinByToken(token: string, orgId?: string): Promise<PendingCheckin | null> {
     if (!token) return null;
     const cleanToken = token.trim().toUpperCase();
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, where('token', '==', cleanToken));
-    const snapshot = await getDocs(q);
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('token', '==', cleanToken)],
+      orgId
+    );
 
-    if (snapshot.empty || !snapshot.docs[0]) return null;
-    const docSnap = snapshot.docs[0];
-    const data = docSnap.data();
+    if (docs.length === 0 || !docs[0]) return null;
+    const data = docs[0];
 
     return {
-      id: docSnap.id,
+      id: data.id,
       token: data.token,
       siteId: data.siteId,
       siteToken: data.siteToken,
@@ -83,33 +83,32 @@ export class PendingCheckinService {
   /**
    * Finds the latest active, non-expired pending checkin session for a specific phone number.
    */
-  public static async getActivePendingCheckinByPhone(phone: string): Promise<PendingCheckin | null> {
+  public static async getActivePendingCheckinByPhone(phone: string, orgId?: string): Promise<PendingCheckin | null> {
     if (!phone) return null;
-    const colRef = collection(db, COLLECTION_NAME);
-    const q = query(colRef, where('phone', '==', phone), where('status', '==', 'pending'));
-    const snapshot = await getDocs(q);
+    const docs = await OrgContextService.getDocsWithFallback(
+      COLLECTION_NAME,
+      [where('phone', '==', phone), where('status', '==', 'pending')],
+      orgId
+    );
 
-    if (snapshot.empty) return null;
+    if (docs.length === 0) return null;
 
     const now = Date.now();
-    const validSessions = snapshot.docs
-      .map((docSnap) => {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          token: data.token,
-          siteId: data.siteId,
-          siteToken: data.siteToken,
-          phone: data.phone,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          distanceMeters: data.distanceMeters,
-          status: data.status,
-          createdAt: data.createdAt,
-          expiresAt: data.expiresAt,
-          triggerMessageId: data.triggerMessageId,
-        } as PendingCheckin;
-      })
+    const validSessions = docs
+      .map((data) => ({
+        id: data.id,
+        token: data.token,
+        siteId: data.siteId,
+        siteToken: data.siteToken,
+        phone: data.phone,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        distanceMeters: data.distanceMeters,
+        status: data.status,
+        createdAt: data.createdAt,
+        expiresAt: data.expiresAt,
+        triggerMessageId: data.triggerMessageId,
+      } as PendingCheckin))
       .filter((s) => {
         const expiryTime = new Date(s.expiresAt as string).getTime();
         return expiryTime > now && s.status === 'pending';
@@ -117,7 +116,6 @@ export class PendingCheckinService {
 
     if (validSessions.length === 0) return null;
 
-    // Return the newest valid session
     validSessions.sort((a, b) => {
       const tA = new Date(a.createdAt as string).getTime();
       const tB = new Date(b.createdAt as string).getTime();
@@ -133,9 +131,10 @@ export class PendingCheckinService {
   public static async linkPhoneToPendingCheckin(
     token: string,
     phone: string,
-    triggerMessageId?: string
+    triggerMessageId?: string,
+    orgId?: string
   ): Promise<PendingCheckin | null> {
-    const session = await this.getPendingCheckinByToken(token);
+    const session = await this.getPendingCheckinByToken(token, orgId);
     if (!session) return null;
 
     const expiryTime = new Date(session.expiresAt as string).getTime();
@@ -143,8 +142,8 @@ export class PendingCheckinService {
       return null;
     }
 
-    const docRef = doc(db, COLLECTION_NAME, session.id);
-    await updateDoc(docRef, {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, session.id, orgId);
+    await updateDoc(res.ref, {
       phone,
       triggerMessageId: triggerMessageId || '',
       updatedAt: serverTimestamp(),
@@ -158,10 +157,10 @@ export class PendingCheckinService {
   /**
    * Marks a pending checkin session as used once attendance is successfully recorded.
    */
-  public static async markPendingCheckinUsed(id: string): Promise<void> {
+  public static async markPendingCheckinUsed(id: string, orgId?: string): Promise<void> {
     if (!id) return;
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    await updateDoc(res.ref, {
       status: 'used',
       usedAt: new Date().toISOString(),
       updatedAt: serverTimestamp(),

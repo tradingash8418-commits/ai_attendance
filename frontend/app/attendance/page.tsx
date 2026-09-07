@@ -13,6 +13,8 @@ import {
   Sparkles,
   History,
   CheckCircle2,
+  Pencil,
+  AlertTriangle,
 } from 'lucide-react';
 import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
@@ -44,6 +46,17 @@ export default function AttendancePage() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [submittingRecord, setSubmittingRecord] = useState<boolean>(false);
+
+  // Contractor Edit / Overwrite Record Modal State
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
+  const [editCheckIn, setEditCheckIn] = useState<string>('');
+  const [editCheckOut, setEditCheckOut] = useState<string>('');
+  const [editHajri, setEditHajri] = useState<number>(1.0);
+  const [editHajriLabel, setEditHajriLabel] = useState<string>('Normal');
+  const [editStatus, setEditStatus] = useState<'present' | 'unmatched' | 'absent'>('present');
+  const [editWorkedHours, setEditWorkedHours] = useState<string>('Full Day');
+  const [editReason, setEditReason] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
   const loadAttendanceData = useCallback(async () => {
     setLoading(true);
@@ -82,6 +95,42 @@ export default function AttendancePage() {
     const dd = String(d.getDate()).padStart(2, '0');
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
     setViewMode('selected_date');
+  };
+
+  const handleOpenEditModal = (r: AttendanceRecord) => {
+    setEditingRecord(r);
+    setEditCheckIn(formatTime(r.checkInTime, '10:00 AM'));
+    setEditCheckOut(formatTime(r.checkOutTime, '-'));
+    setEditHajri(typeof r.hajri === 'number' ? r.hajri : 1.0);
+    setEditHajriLabel(r.hajriLabel || 'Normal');
+    setEditStatus((r.status as any) || 'present');
+    setEditWorkedHours(r.workedHours || '8h 00m');
+    setEditReason((r as any).overwriteReason || '');
+  };
+
+  const handleSaveEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord) return;
+    setSavingEdit(true);
+    try {
+      await AttendanceService.updateAttendanceRecord(editingRecord.id, {
+        checkInTime: editCheckIn || null,
+        checkOutTime: editCheckOut === '-' ? null : editCheckOut,
+        hajri: Number(editHajri),
+        hajriLabel: editHajriLabel,
+        status: editStatus,
+        workedHours: editWorkedHours,
+        isOverwrittenByContractor: true,
+        overwriteReason: editReason,
+      });
+
+      setEditingRecord(null);
+      await loadAttendanceData();
+    } catch (err) {
+      console.error('Error overwriting attendance record:', err);
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const handleManualRecordSubmit = async (e: React.FormEvent) => {
@@ -129,6 +178,13 @@ export default function AttendancePage() {
     return 'bg-slate-100 text-slate-600 border-slate-200';
   };
 
+  const getStatusBadgeStyle = (status: string | undefined) => {
+    if (status === 'present') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'unmatched') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (status === 'absent') return 'bg-rose-50 text-rose-700 border-rose-200';
+    return 'bg-slate-50 text-slate-600 border-slate-200';
+  };
+
   // Filtered records based on search & site filter
   const filteredRecords = records.filter((r) => {
     const worker = workers.find((w) => w.id === r.workerId || w.workerCode === r.workerId);
@@ -142,9 +198,10 @@ export default function AttendancePage() {
   });
 
   const totalHajriInView = filteredRecords.reduce((sum, r) => {
-    const h = typeof r.hajri === 'number' ? r.hajri : 1.0;
+    const h = typeof r.hajri === 'number' ? r.hajri : 0;
     return sum + h;
   }, 0);
+
 
   const uniqueWorkersCount = new Set(filteredRecords.map((r) => r.workerId)).size;
 
@@ -161,7 +218,7 @@ export default function AttendancePage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Real-time multi-site workforce check-ins, time-slab Hajri calculation, and historical attendance audit logs.
+            Real-time multi-site workforce check-ins, time-slab Hajri calculation, and manual contractor overwrite edits.
           </p>
         </div>
 
@@ -359,7 +416,8 @@ export default function AttendancePage() {
                     <th className="py-3 px-4">Check-Out</th>
                     <th className="py-3 px-4">Duration</th>
                     <th className="py-3 px-4">Hajri Value</th>
-                    <th className="py-3 px-4 text-right">Status</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-center">Overwrite / Edit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -368,6 +426,7 @@ export default function AttendancePage() {
                       (w) => w.id === r.workerId || w.workerCode === r.workerId
                     );
                     const site = sites.find((s) => s.id === r.siteId);
+                    const isOverwritten = Boolean((r as any).isOverwrittenByContractor);
 
                     return (
                       <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
@@ -377,8 +436,13 @@ export default function AttendancePage() {
                           </td>
                         )}
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900">
-                            {worker ? getWorkerDisplayName(worker) : r.workerId}
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{worker ? getWorkerDisplayName(worker) : r.workerId}</span>
+                            {isOverwritten && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-[9px] font-extrabold text-amber-800 border border-amber-300">
+                                ✏️ Overwritten
+                              </span>
+                            )}
                           </div>
                           {worker?.phone && (
                             <span className="text-[10px] text-slate-500 font-mono">{worker.phone}</span>
@@ -403,14 +467,25 @@ export default function AttendancePage() {
                             )}`}
                           >
                             {r.hajri !== undefined && r.hajri !== null
-                              ? `${r.hajri} (${r.hajriLabel || 'Normal'})`
-                              : '1.0 (Normal)'}
+                              ? `${r.hajri} (${r.hajriLabel || (r.hajri === 0 ? 'In Progress' : 'Normal')})`
+                              : '0.0 (In Progress)'}
+
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <span className="px-2.5 py-1 rounded-full font-bold text-[10px] uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {r.status}
+                        <td className="py-3.5 px-4">
+                          <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${getStatusBadgeStyle(r.status)}`}>
+                            {r.status || 'present'}
                           </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            onClick={() => handleOpenEditModal(r)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                            title="Edit / Overwrite Check-In, Check-Out, Hajri or Status"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Edit / Overwrite</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -504,6 +579,187 @@ export default function AttendancePage() {
           </div>
         </div>
       )}
+
+      {/* Contractor Overwrite / Edit Modal */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-lg w-full bg-white rounded-2xl p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Pencil className="w-4 h-4 text-blue-600" />
+                  <span>Overwrite Hajri & Attendance Record</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Worker:{' '}
+                  <span className="font-bold text-slate-800">
+                    {workers.find((w) => w.id === editingRecord.workerId)?.name || editingRecord.workerId}
+                  </span>{' '}
+                  ({editingRecord.date})
+                </p>
+              </div>
+
+              <button
+                onClick={() => setEditingRecord(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Check-In Time</label>
+                  <input
+                    type="text"
+                    value={editCheckIn}
+                    onChange={(e) => setEditCheckIn(e.target.value)}
+                    placeholder="e.g. 10:12 AM"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Check-Out Time</label>
+                  <input
+                    type="text"
+                    value={editCheckOut}
+                    onChange={(e) => setEditCheckOut(e.target.value)}
+                    placeholder="e.g. 06:30 PM or -"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Hajri Value Selector */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1.5">
+                  Hajri Value (Presets or Custom) *
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {[
+                    { val: 1.0, label: '1.0 (Full Day)' },
+                    { val: 0.5, label: '0.5 (Half Day)' },
+                    { val: 0.25, label: '0.25 (Quarter)' },
+                    { val: 1.5, label: '1.5 (Overtime)' },
+                    { val: 2.0, label: '2.0 (Double)' },
+                    { val: 0.0, label: '0.0 (Absent/Invalid)' },
+                  ].map((item) => (
+                    <button
+                      key={item.val}
+                      type="button"
+                      onClick={() => {
+                        setEditHajri(item.val);
+                        if (item.val === 1.0) setEditHajriLabel('Normal');
+                        else if (item.val === 0.5) setEditHajriLabel('Half Day');
+                        else if (item.val === 1.5) setEditHajriLabel('Overtime');
+                        else if (item.val === 0.0) setEditHajriLabel('Absent');
+                        else setEditHajriLabel('Custom');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg font-bold border transition-all ${
+                        editHajri === item.val
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Exact Hajri Number</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="5"
+                      value={editHajri}
+                      onChange={(e) => setEditHajri(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-extrabold text-slate-900 focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-500 block mb-1">Hajri Label</label>
+                    <input
+                      type="text"
+                      value={editHajriLabel}
+                      onChange={(e) => setEditHajriLabel(e.target.value)}
+                      placeholder="e.g. Normal, Overtime"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Attendance Status *</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  >
+                    <option value="present">PRESENT (Verified / Normal)</option>
+                    <option value="unmatched">UNMATCHED (Missing Checkout)</option>
+                    <option value="absent">ABSENT</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Duration / Worked Hours</label>
+                  <input
+                    type="text"
+                    value={editWorkedHours}
+                    onChange={(e) => setEditWorkedHours(e.target.value)}
+                    placeholder="e.g. 8h 00m or In Progress"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Reason for Overwrite (Optional)</label>
+                <input
+                  type="text"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="e.g. Worker forgot checkout, manually verified by contractor"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-2 text-[11px] text-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Overwriting will update the worker&apos;s daily Hajri and automatically re-calculate their Khata salary ledger!
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold shadow-md shadow-blue-600/20 transition-all"
+                >
+                  {savingEdit ? 'Saving Overwrite...' : 'Save Overwrite'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

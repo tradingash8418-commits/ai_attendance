@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       buffer = Buffer.from(cleanBase64, 'base64');
     }
 
-    const result = await PaymentOcrService.extractPaymentFromImage(imageUrl || '', buffer, cleanMime);
+    const result = await PaymentOcrService.extractPaymentFromImage(imageUrl || '', buffer || undefined, cleanMime);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error: any) {
