@@ -16,6 +16,7 @@ import {
   ChevronDown,
   IndianRupee,
   Store,
+  User,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthService } from '@/services/auth.service';
@@ -141,13 +142,24 @@ export const Header: React.FC = () => {
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-semibold transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
+                  <div className="p-1 space-y-1">
+                    <Link
+                      href="/profile"
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white font-semibold transition-colors"
+                    >
+                      <User className="w-4 h-4 text-blue-400" />
+                      <span>My Registered Profile</span>
+                    </Link>
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-semibold transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
