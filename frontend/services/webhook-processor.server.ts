@@ -191,14 +191,37 @@ export class WebhookProcessorServer {
       // e.g. User sent PDF receipt first, and immediately typed 'abc, w' or multi-worker split like 'pintu: 2000 durgesh: 3000'
       // =====================================================================
       if (messageType === 'text') {
+        const textLower = textBody.toLowerCase();
+        const hasExplicitCash = textLower.includes('cash');
+
+        // Helper: Find a payment receipt uploaded via WhatsApp within the LAST 3 MINUTES ONLY
+        const getRecentReceiptPayment = async () => {
+          if (hasExplicitCash) return undefined; // Explicit 'cash' keyword ALWAYS overrides and skips previous screenshots!
+
+          const THREE_MINUTES_MS = 3 * 60 * 1000;
+          const todayPayments = await PaymentLedgerService.getPayments({ date: today }, resolvedOrgId);
+
+          return todayPayments.find((p) => {
+            const isFromSender = p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
+            if (!isFromSender) return false;
+
+            let recordTimeMs = 0;
+            if (p.createdAt && typeof (p.createdAt as any).toMillis === 'function') {
+              recordTimeMs = (p.createdAt as any).toMillis();
+            } else if (p.createdAt && typeof (p.createdAt as any).seconds === 'number') {
+              recordTimeMs = (p.createdAt as any).seconds * 1000;
+            }
+
+            // Only attach if receipt screenshot was uploaded within 3 minutes of this message
+            return recordTimeMs > 0 ? (messageTimestampMs - recordTimeMs) <= THREE_MINUTES_MS : false;
+          });
+        };
+
         const splitItems = parseBatchWorkerSplitCaption(textBody);
 
-        // Subcase 1B-1: Multi-Worker Batch Advance Split on Recent Receipt
+        // Subcase 1B-1: Multi-Worker Batch Advance Split on Recent Receipt (within 3 mins)
         if (splitItems.length > 0) {
-          const todayPayments = await PaymentLedgerService.getPayments({ date: today }, resolvedOrgId);
-          const recentPayment = todayPayments.find((p) => {
-            return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
-          });
+          const recentPayment = await getRecentReceiptPayment();
 
           if (recentPayment) {
             const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
@@ -290,14 +313,10 @@ export class WebhookProcessorServer {
           }
         }
 
-        // Subcase 1B-2: Single Caption / Remark on Recent Receipt
+        // Subcase 1B-2: Single Caption / Remark on Recent Receipt (within 3 mins)
         const captionInfo = parsePaymentCaption(textBody);
         if (captionInfo.explicitCategory || captionInfo.workerOrPayeeRemark) {
-          const todayPayments = await PaymentLedgerService.getPayments({ date: today }, resolvedOrgId);
-          // Find latest payment from WhatsApp today
-          const recentPayment = todayPayments.find((p) => {
-            return p.recordedBy?.includes(normalizedSender) || p.recordedBy?.includes('WhatsApp');
-          });
+          const recentPayment = await getRecentReceiptPayment();
 
           if (recentPayment) {
             const allWorkers = await WorkersService.getWorkers(resolvedOrgId);
@@ -373,7 +392,7 @@ export class WebhookProcessorServer {
           }
         }
 
-        // Subcase 1B-3: Direct Text Cash / Expense Payment Registration (No Screenshot)
+        // Subcase 1B-3: Direct Text Cash / Expense Payment Registration (No Screenshot or > 3 mins or explicit cash)
         // e.g. "pintu prajapati: 500 cash", "rohit yadav: 300 cash w", "suresh hardware: 6000 cash m"
         const directPayment = parseDirectTextPayment(textBody);
         if (directPayment) {
@@ -397,20 +416,21 @@ export class WebhookProcessorServer {
               workerPhone: matchedWorker?.phone || undefined,
               amount: directPayment.amount,
               category: directPayment.ledgerCategory,
-              paymentMethod: directPayment.paymentMethod,
+              paymentMethod: directPayment.paymentMethod, // 'cash' or specified
               paymentDate: today,
               paymentTime: currentTime,
-              notes: `Direct Text Cash Entry | ${textBody}`,
-              recordedBy: `WhatsApp Text (${normalizedSender})`,
+              receiptPhotoUrl: '',
+              notes: `Direct Cash Entry | ${textBody}`,
+              recordedBy: `WhatsApp Direct Cash (${normalizedSender})`,
             }, resolvedOrgId);
 
             await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
             const confirmationMsg =
-              `💵 *Direct Cash Advance Recorded!* 👷‍♂️\n\n` +
+              `💵 *Direct Cash Advance Registered!* 👷‍♂️\n\n` +
               `👤 *Worker Name:* ${workerName}\n` +
-              `💵 *Amount Paid:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
-              `💳 *Payment Method:* ${directPayment.paymentMethod.toUpperCase()}\n` +
+              `💰 *Advance Amount:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
+              `💳 *Payment Mode:* 💵 CASH (Direct Entry)\n` +
               `📒 *Khata Category:* Worker Advance / Kharcha\n` +
               `📅 *Date:* ${today}\n\n` +
               `Worker balance updated in Khata! 📊`;
@@ -437,23 +457,24 @@ export class WebhookProcessorServer {
               paidTo: directPayment.payeeOrWorkerName,
               amount: directPayment.amount,
               category: directPayment.ledgerCategory,
-              paymentMethod: directPayment.paymentMethod,
+              paymentMethod: directPayment.paymentMethod, // 'cash' or specified
               paymentDate: today,
               paymentTime: currentTime,
-              notes: `Direct Text Expense Entry (${label}) | ${textBody}`,
-              recordedBy: `WhatsApp Text (${normalizedSender})`,
+              receiptPhotoUrl: '',
+              notes: `Direct Cash Expense Entry (${label}) | ${textBody}`,
+              recordedBy: `WhatsApp Direct Cash (${normalizedSender})`,
             }, resolvedOrgId);
 
             await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', undefined, resolvedOrgId);
 
             const confirmationMsg =
-              `💵 *Direct Text Expense Recorded!* 📑\n\n` +
+              `🧾 *Direct Cash Expense Registered!* 📑\n\n` +
               `👤 *Payee / Vendor:* ${directPayment.payeeOrWorkerName}\n` +
-              `💵 *Amount Paid:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
-              `💳 *Payment Method:* ${directPayment.paymentMethod.toUpperCase()}\n` +
+              `💰 *Expense Amount:* ₹${directPayment.amount.toLocaleString('en-IN')}\n` +
+              `💳 *Payment Mode:* 💵 CASH (Direct Entry)\n` +
               `📒 *Ledger Category:* ${label}\n` +
               `📅 *Date:* ${today}\n\n` +
-              `Expense has been registered in your accounting ledger! 📊`;
+              `Expense registered in accounting ledger! 📊`;
 
             await WhatsAppService.sendMessage(normalizedSender, confirmationMsg);
 
