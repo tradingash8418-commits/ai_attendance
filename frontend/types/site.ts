@@ -2,6 +2,7 @@ import type { Timestamp } from 'firebase/firestore';
 
 export interface Site {
   id: string;
+  organizationId?: string;
   name: string;
   address?: string;
   supervisorId?: string;

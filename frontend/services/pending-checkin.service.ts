@@ -3,7 +3,11 @@ import {
   updateDoc,
   where,
   serverTimestamp,
+  collectionGroup,
+  getDocs,
+  query,
 } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { OrgContextService } from './org-context.service';
 import type { PendingCheckin } from '@/types/pendingCheckin';
 
@@ -61,12 +65,29 @@ export class PendingCheckinService {
       orgId
     );
 
-    if (docs.length === 0 || !docs[0]) return null;
-    const data = docs[0];
+    let data: any = null;
+    if (docs.length > 0 && docs[0]) {
+      data = docs[0];
+    } else {
+      // Global collectionGroup fallback search for pending checkin tokens across all organizations
+      try {
+        const groupRef = collectionGroup(db, COLLECTION_NAME);
+        const groupSnap = await getDocs(query(groupRef, where('token', '==', cleanToken)));
+        if (!groupSnap.empty && groupSnap.docs[0]) {
+          const docSnap = groupSnap.docs[0];
+          data = { id: docSnap.id, ...docSnap.data() };
+        }
+      } catch (err) {
+        console.warn('[PendingCheckinService] Global token lookup error:', err);
+      }
+    }
+
+    if (!data) return null;
 
     return {
       id: data.id,
       token: data.token,
+      organizationId: data.organizationId,
       siteId: data.siteId,
       siteToken: data.siteToken,
       phone: data.phone,

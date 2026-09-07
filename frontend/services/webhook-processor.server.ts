@@ -94,22 +94,25 @@ export class WebhookProcessorServer {
         );
 
         if (session) {
-          const site = await SitesService.getSiteById(session.siteId, resolvedOrgId);
+          // Resolve the true contractor organizationId from the pending checkin session
+          const trueOrgId = session.organizationId || resolvedOrgId;
+
+          const site = await SitesService.getSiteById(session.siteId, trueOrgId);
           const siteName = site ? site.name : 'Construction Site';
 
-          // 1. Resolve or auto-register worker by phone number
-          const targetWorker = await WorkersService.getOrCreateWorkerByPhone(normalizedSender, resolvedOrgId);
+          // 1. Resolve or auto-register worker by phone number under trueOrgId
+          const targetWorker = await WorkersService.getOrCreateWorkerByPhone(normalizedSender, trueOrgId);
 
-          // 2. Create Attendance Session
+          // 2. Create Attendance Session under trueOrgId
           const sessionId = await AttendanceSessionsService.createAttendanceSession({
             date: today,
             siteId: session.siteId,
             supervisorId: 'worker_qr_whatsapp',
             whatsappSenderNumber: normalizedSender,
             whatsappMessageId: rawMessageId,
-          }, resolvedOrgId);
+          }, trueOrgId);
 
-          // 3. Record attendance immediately (Zero selfie required!)
+          // 3. Record attendance immediately (Zero selfie required!) under trueOrgId
           await AttendanceService.recordWorkerAttendance({
             attendanceSessionId: sessionId,
             workerId: targetWorker.id,
@@ -119,27 +122,27 @@ export class WebhookProcessorServer {
             attendancePhotoUrl: '',
             submittedBy: `Worker QR WhatsApp (${normalizedSender})`,
             method: 'worker_qr_whatsapp',
-          }, resolvedOrgId);
+          }, trueOrgId);
 
           // 4. Mark pending checkin as used
-          await PendingCheckinService.markPendingCheckinUsed(session.id, resolvedOrgId);
-          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed', resolvedOrgId);
-          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId, resolvedOrgId);
+          await PendingCheckinService.markPendingCheckinUsed(session.id, trueOrgId);
+          await AttendanceSessionsService.updateSessionStatus(sessionId, 'completed', trueOrgId);
+          await WhatsAppService.updateMessageStatus(savedMsgId, 'processed', sessionId, trueOrgId);
 
-          // 5. Send instant, complete attendance report back to the worker
+          // 5. Send instant, complete attendance report back to the worker under trueOrgId
           await WhatsAppFeedbackServer.sendAttendanceFeedbackReport({
             supervisorWhatsAppNumber: normalizedSender,
             siteId: session.siteId,
             siteName: siteName,
             date: today,
-            orgId: resolvedOrgId,
+            orgId: trueOrgId,
             recognizedWorkerIds: [targetWorker.id],
             unknownFaceCount: 0,
           });
 
           return {
             status: 'completed',
-            reason: `1-Tap QR attendance recorded for ${targetWorker.name} at ${siteName}`,
+            reason: `1-Tap QR attendance recorded for ${targetWorker.name} at ${siteName} (${trueOrgId})`,
             messageId: rawMessageId,
             sessionId,
           };

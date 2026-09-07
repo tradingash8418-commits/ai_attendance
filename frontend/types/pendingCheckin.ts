@@ -3,6 +3,7 @@ import type { Timestamp } from 'firebase/firestore';
 export interface PendingCheckin {
   id: string;
   token: string;
+  organizationId?: string;
   siteId: string;
   siteToken: string;
   phone?: string;

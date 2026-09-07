@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       latitude: rawLat,
       longitude: rawLon,
       distanceMeters,
-    });
+    }, (site as any).organizationId || (site as any).orgId);
 
     // 5. Construct official WhatsApp click-to-chat URL
     const rawBotNumber =
