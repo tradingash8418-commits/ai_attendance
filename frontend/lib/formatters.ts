@@ -29,15 +29,20 @@ export const normalizeWhatsAppNumber = (input: string): string => {
  * Example: "Ramesh Kumar (#WRK-002)" or "Ramesh Kumar (+919876543210)"
  */
 export const getWorkerDisplayName = (worker: Worker): string => {
+  let name = worker.name || 'Worker';
+  if (name.startsWith('org_')) {
+    const phone = worker.phone ? normalizeWhatsAppNumber(worker.phone) : '';
+    const last4 = phone ? phone.slice(-4) : worker.id.slice(-4);
+    name = `Worker (${last4})`;
+  }
   if (worker.workerCode) {
-    return `${worker.name} (#${worker.workerCode})`;
+    return `${name} (#${worker.workerCode})`;
   }
   if (worker.phone) {
-    return `${worker.name} (${worker.phone})`;
+    return `${name} (${worker.phone})`;
   }
-  // Fallback to truncated ID suffix for duplicate resolution
   const shortId = worker.id.slice(-4).toUpperCase();
-  return `${worker.name} (#${shortId})`;
+  return `${name} (#${shortId})`;
 };
 
 /**

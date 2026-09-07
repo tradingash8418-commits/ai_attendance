@@ -45,24 +45,44 @@ export class WorkersService {
       }
     }
 
-    return result;
+    const sanitizedResult = result.map((w) => {
+      if (!w.name || w.name.startsWith('org_')) {
+        const phone = w.phone ? normalizeWhatsAppNumber(w.phone) : '';
+        const last4 = phone ? phone.slice(-4) : w.id.slice(-4);
+        const cleanName = `Worker (${last4})`;
+        w.name = cleanName;
+        // Background auto-heal update in Firestore
+        this.updateWorker(w.id, { name: cleanName }, targetOrg).catch(() => {});
+      }
+      return w;
+    });
+
+    return sanitizedResult;
   }
 
   public static async getWorkerById(id: string, orgId?: string): Promise<Worker | null> {
     const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
-    if (res.data) {
-      return { id, ...res.data } as Worker;
-    }
+    let worker: Worker | null = null;
 
-    // Fallback search under DEFAULT_ORG_ID if worker was initially created in primary org
-    if (orgId && orgId !== DEFAULT_ORG_ID) {
+    if (res.data) {
+      worker = { id, ...res.data } as Worker;
+    } else if (orgId && orgId !== DEFAULT_ORG_ID) {
+      // Fallback search under DEFAULT_ORG_ID if worker was initially created in primary org
       const fallbackRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, DEFAULT_ORG_ID);
       if (fallbackRes.data) {
-        return { id, ...fallbackRes.data } as Worker;
+        worker = { id, ...fallbackRes.data } as Worker;
       }
     }
 
-    return null;
+    if (worker && (!worker.name || worker.name.startsWith('org_'))) {
+      const phone = worker.phone ? normalizeWhatsAppNumber(worker.phone) : '';
+      const last4 = phone ? phone.slice(-4) : worker.id.slice(-4);
+      const cleanName = `Worker (${last4})`;
+      worker.name = cleanName;
+      this.updateWorker(worker.id, { name: cleanName }, orgId).catch(() => {});
+    }
+
+    return worker;
   }
 
   /**
@@ -101,9 +121,17 @@ export class WorkersService {
 
     const finalOrgId = targetOrgId || OrgContextService.getOrgId();
     const cleanPhone = normalizeWhatsAppNumber(phone);
+    const shortSuffix = cleanPhone.slice(-4);
+    const defaultWorkerName = `Worker (${shortSuffix})`;
 
     const existing = await this.getWorkerByPhone(cleanPhone, finalOrgId);
     if (existing) {
+      // If existing worker doc has org_... as name, auto-heal to Worker (last4)!
+      if (!existing.name || existing.name.startsWith('org_')) {
+        existing.name = defaultWorkerName;
+        await this.updateWorker(existing.id, { name: defaultWorkerName }, finalOrgId).catch(() => {});
+      }
+
       // If existing worker doc is found, ensure doc exists under target orgId too
       if (finalOrgId && (existing as any).organizationId !== finalOrgId) {
         try {
@@ -124,11 +152,10 @@ export class WorkersService {
       return existing;
     }
 
-    const shortSuffix = cleanPhone.slice(-4);
     const fallbackName =
       fallbackNameCandidate && !fallbackNameCandidate.startsWith('org_')
         ? fallbackNameCandidate
-        : `Worker (${shortSuffix})`;
+        : defaultWorkerName;
 
     const allWorkers = await this.getWorkers(finalOrgId);
     const nextWorkerCode = `WRK-00${allWorkers.length + 1}`;
