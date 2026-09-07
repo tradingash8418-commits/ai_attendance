@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Calendar,
@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Pencil,
   AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
@@ -28,7 +29,7 @@ import type { Worker } from '@/types/worker';
 export default function AttendancePage() {
   const todayStr = getTodayDateString();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const [viewMode, setViewMode] = useState<'selected_date' | 'all_history'>('selected_date');
+  const [viewMode, setViewMode] = useState<'selected_date' | 'absent_workers' | 'all_history'>('selected_date');
 
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -86,6 +87,31 @@ export default function AttendancePage() {
     loadAttendanceData();
   }, [loadAttendanceData]);
 
+  // Absent Workers computation for the selected date
+  const presentWorkerIds = useMemo(() => {
+    const set = new Set<string>();
+    records.forEach((r) => {
+      if (r.workerId) set.add(r.workerId);
+    });
+    return set;
+  }, [records]);
+
+  const absentWorkersList = useMemo(() => {
+    return workers.filter((w) => {
+      if (w.active === false) return false;
+      const isPresent = presentWorkerIds.has(w.id) || (w.workerCode && presentWorkerIds.has(w.workerCode));
+      if (isPresent) return false;
+
+      const q = searchTerm.toLowerCase().trim();
+      if (!q) return true;
+
+      const wName = (w.name || '').toLowerCase();
+      const wCode = (w.workerCode || '').toLowerCase();
+      const wPhone = (w.phone || '').toLowerCase();
+      return wName.includes(q) || wCode.includes(q) || wPhone.includes(q);
+    });
+  }, [workers, presentWorkerIds, searchTerm]);
+
   // Date Navigation Helpers
   const handleShiftDate = (days: number) => {
     const d = new Date(selectedDate);
@@ -94,7 +120,6 @@ export default function AttendancePage() {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
-    setViewMode('selected_date');
   };
 
   const handleOpenEditModal = (r: AttendanceRecord) => {
@@ -206,8 +231,8 @@ export default function AttendancePage() {
     return sum + h;
   }, 0);
 
-
   const uniqueWorkersCount = new Set(filteredRecords.map((r) => r.workerId)).size;
+  const absentCount = Math.max(0, workers.filter((w) => w.active !== false).length - uniqueWorkersCount);
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -252,7 +277,7 @@ export default function AttendancePage() {
       {/* 2. Interactive Date Navigation Bar & History Toggle (Razorpay Signature Style) */}
       <div className="razorpay-card p-4 flex flex-col lg:flex-row items-center justify-between gap-4">
         {/* Left: View Mode Selector */}
-        <div className="flex items-center gap-2 p-1 bg-slate-100/80 rounded-xl w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 p-1 bg-slate-100/80 rounded-xl w-full lg:w-auto">
           <button
             onClick={() => setViewMode('selected_date')}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
@@ -263,6 +288,18 @@ export default function AttendancePage() {
           >
             <Calendar className="w-4 h-4" />
             <span>Single Day Log</span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('absent_workers')}
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              viewMode === 'absent_workers'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'text-rose-700 hover:bg-rose-100 bg-rose-50'
+            }`}
+          >
+            <XCircle className={`w-4 h-4 ${viewMode === 'absent_workers' ? 'text-white' : 'text-rose-600'}`} />
+            <span>Absent Workers ({absentWorkersList.length}) 🚫</span>
           </button>
 
           <button
@@ -278,9 +315,9 @@ export default function AttendancePage() {
           </button>
         </div>
 
-        {/* Right: Date Picker Controls (Active in Single Day Mode) */}
-        {viewMode === 'selected_date' ? (
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+        {/* Right: Date Picker Controls */}
+        {viewMode !== 'all_history' ? (
+          <div className="flex items-center gap-2 w-full lg:w-auto justify-center">
             <button
               onClick={() => handleShiftDate(-1)}
               className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
@@ -322,7 +359,7 @@ export default function AttendancePage() {
       </div>
 
       {/* 3. Summary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="razorpay-card p-5 space-y-1">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
             <span>TOTAL HAJRI UNITS</span>
@@ -338,14 +375,27 @@ export default function AttendancePage() {
 
         <div className="razorpay-card p-5 space-y-1">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            <span>UNIQUE WORKERS PRESENT</span>
+            <span>WORKERS PRESENT</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-3xl font-black text-emerald-600 tracking-tight">
-            {uniqueWorkersCount} <span className="text-sm font-bold text-slate-400">Workers</span>
+            {uniqueWorkersCount} <span className="text-sm font-bold text-slate-400">Present</span>
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
             Total active workforce: {workers.length}
+          </p>
+        </div>
+
+        <div className="razorpay-card p-5 space-y-1 border-rose-200/80 bg-rose-50/20">
+          <div className="flex items-center justify-between text-xs font-semibold text-rose-600 uppercase tracking-wider">
+            <span>ABSENT WORKERS</span>
+            <XCircle className="w-4 h-4 text-rose-600" />
+          </div>
+          <div className="text-3xl font-black text-rose-600 tracking-tight">
+            {absentCount} <span className="text-sm font-bold text-rose-400">Absent</span>
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium">
+            Not checked in on {selectedDate}
           </p>
         </div>
 
@@ -371,135 +421,219 @@ export default function AttendancePage() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by worker name or code..."
+            placeholder={viewMode === 'absent_workers' ? 'Search absent worker by name or code...' : 'Search by worker name or code...'}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 shadow-sm"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-xs font-semibold text-slate-500">Filter Site:</span>
-          <select
-            value={siteFilter}
-            onChange={(e) => setSiteFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
-          >
-            <option value="all">All Sites</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {viewMode !== 'absent_workers' && (
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs font-semibold text-slate-500">Filter Site:</span>
+            <select
+              value={siteFilter}
+              onChange={(e) => setSiteFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
+            >
+              <option value="all">All Sites</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* 5. Attendance Records Table */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="py-12 text-center text-xs text-slate-500">Loading attendance records...</div>
-        ) : filteredRecords.length === 0 ? (
-          <div className="razorpay-card p-12 text-center space-y-3">
-            <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
-            <p className="text-sm font-bold text-slate-800">
-              No attendance records found for {viewMode === 'all_history' ? 'the selected filter' : selectedDate}
-            </p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Use the date picker at the top to switch to another date (e.g. yesterday), click &quot;All Historical Logs&quot;, or click &quot;Manual Entry&quot; to log attendance.
-            </p>
+      {/* 5. Attendance Records / Absent Workers Table */}
+      {viewMode === 'absent_workers' ? (
+        <div className="space-y-3">
+          <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-rose-900 font-semibold shadow-2xs">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>
+                Showing <strong className="font-extrabold text-rose-950">{absentWorkersList.length} Absent Workers</strong> for{' '}
+                <span className="font-mono underline font-bold">{selectedDate}</span> who have not checked in yet.
+              </span>
+            </div>
+            <span className="text-[11px] text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-300 font-bold">
+              Total Active Staff: {workers.length}
+            </span>
           </div>
-        ) : (
-          <div className="razorpay-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-                    {viewMode === 'all_history' && <th className="py-3 px-4">Date</th>}
-                    <th className="py-3 px-4">Worker</th>
-                    <th className="py-3 px-4">Site</th>
-                    <th className="py-3 px-4">Check-In</th>
-                    <th className="py-3 px-4">Check-Out</th>
-                    <th className="py-3 px-4">Duration</th>
-                    <th className="py-3 px-4">Hajri Value</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-center">Overwrite / Edit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRecords.map((r) => {
-                    const worker = workers.find(
-                      (w) => w.id === r.workerId || w.workerCode === r.workerId
-                    );
-                    const site = sites.find((s) => s.id === r.siteId);
-                    const isOverwritten = Boolean((r as any).isOverwrittenByContractor);
 
-                    return (
-                      <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                        {viewMode === 'all_history' && (
-                          <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
-                            {r.date}
-                          </td>
-                        )}
+          {loading ? (
+            <div className="py-12 text-center text-xs text-slate-500">Loading absent workers list...</div>
+          ) : absentWorkersList.length === 0 ? (
+            <div className="razorpay-card p-12 text-center space-y-3">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+              <p className="text-sm font-bold text-slate-800">100% Workforce Attendance Recorded!</p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                All active workers have checked in for {selectedDate}.
+              </p>
+            </div>
+          ) : (
+            <div className="razorpay-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-rose-50/60 border-b border-rose-200 text-rose-800 font-bold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-4">Worker Name & Code</th>
+                      <th className="py-3 px-4">Phone Number</th>
+                      <th className="py-3 px-4">Role & Wage Rate</th>
+                      <th className="py-3 px-4">Attendance Status</th>
+                      <th className="py-3 px-4 text-center">Quick Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {absentWorkersList.map((worker) => (
+                      <tr key={worker.id} className="hover:bg-rose-50/30 transition-colors">
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>{worker ? getWorkerDisplayName(worker) : r.workerId}</span>
-                            {isOverwritten && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-[9px] font-extrabold text-amber-800 border border-amber-300">
-                                ✏️ Overwritten
-                              </span>
-                            )}
-                          </div>
-                          {worker?.phone && (
-                            <span className="text-[10px] text-slate-500 font-mono">{worker.phone}</span>
-                          )}
+                          <div className="font-extrabold text-slate-900">{getWorkerDisplayName(worker)}</div>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {site ? site.name : 'Unknown Site'}
+                        <td className="py-3.5 px-4 font-mono text-slate-600">
+                          {worker.phone || 'No phone linked'}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {formatTime(r.checkInTime, '10:00 AM')}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-600 font-medium">
-                          {formatTime(r.checkOutTime, '-')}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-500 font-semibold">
-                          {r.workedHours || 'In Progress'}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-md font-extrabold text-[11px] border ${getHajriBadgeStyle(
-                              r.hajri
-                            )}`}
-                          >
-                            {r.hajri !== undefined && r.hajri !== null
-                              ? `${r.hajri} (${r.hajriLabel || (r.hajri === 0 ? 'In Progress' : 'Normal')})`
-                              : '0.0 (In Progress)'}
-
+                        <td className="py-3.5 px-4 text-slate-700 font-medium">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold mr-1.5 border border-slate-200">
+                            {worker.role || 'General Worker'}
                           </span>
+                          <span className="font-extrabold text-blue-700">₹{worker.dailyRate || 500}/day</span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${getStatusBadgeStyle(r.status)}`}>
-                            {r.status || 'present'}
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 font-black text-[11px] border border-rose-200">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>ABSENT / NOT CHECKED-IN</span>
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <button
-                            onClick={() => handleOpenEditModal(r)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
-                            title="Edit / Overwrite Check-In, Check-Out, Hajri or Status"
+                            onClick={() => {
+                              setSelectedWorkerId(worker.id);
+                              setManualDate(selectedDate || todayStr);
+                              setShowManualModal(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] shadow-sm transition-all active:scale-95"
                           >
-                            <Pencil className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Edit / Overwrite</span>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Mark Present / Check-in</span>
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {loading ? (
+            <div className="py-12 text-center text-xs text-slate-500">Loading attendance records...</div>
+          ) : filteredRecords.length === 0 ? (
+            <div className="razorpay-card p-12 text-center space-y-3">
+              <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="text-sm font-bold text-slate-800">
+                No attendance records found for {viewMode === 'all_history' ? 'the selected filter' : selectedDate}
+              </p>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Use the date picker at the top to switch to another date (e.g. yesterday), click &quot;All Historical Logs&quot;, or click &quot;Manual Entry&quot; to log attendance.
+              </p>
+            </div>
+          ) : (
+            <div className="razorpay-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                      {viewMode === 'all_history' && <th className="py-3 px-4">Date</th>}
+                      <th className="py-3 px-4">Worker</th>
+                      <th className="py-3 px-4">Site</th>
+                      <th className="py-3 px-4">Check-In</th>
+                      <th className="py-3 px-4">Check-Out</th>
+                      <th className="py-3 px-4">Duration</th>
+                      <th className="py-3 px-4">Hajri Value</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-center">Overwrite / Edit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredRecords.map((r) => {
+                      const worker = workers.find(
+                        (w) => w.id === r.workerId || w.workerCode === r.workerId
+                      );
+                      const site = sites.find((s) => s.id === r.siteId);
+                      const isOverwritten = Boolean((r as any).isOverwrittenByContractor);
+
+                      return (
+                        <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                          {viewMode === 'all_history' && (
+                            <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
+                              {r.date}
+                            </td>
+                          )}
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{worker ? getWorkerDisplayName(worker) : r.workerId}</span>
+                              {isOverwritten && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-100 text-[9px] font-extrabold text-amber-800 border border-amber-300">
+                                  ✏️ Overwritten
+                                </span>
+                              )}
+                            </div>
+                            {worker?.phone && (
+                              <span className="text-[10px] text-slate-500 font-mono">{worker.phone}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-medium">
+                            {site ? site.name : 'Unknown Site'}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-medium">
+                            {formatTime(r.checkInTime, '10:00 AM')}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-600 font-medium">
+                            {formatTime(r.checkOutTime, '-')}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500 font-semibold">
+                            {r.workedHours || 'In Progress'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-md font-extrabold text-[11px] border ${getHajriBadgeStyle(
+                                r.hajri
+                              )}`}
+                            >
+                              {r.hajri !== undefined && r.hajri !== null
+                                ? `${r.hajri} (${r.hajriLabel || (r.hajri === 0 ? 'In Progress' : 'Normal')})`
+                                : '0.0 (In Progress)'}
+
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] uppercase border ${getStatusBadgeStyle(r.status)}`}>
+                              {r.status || 'present'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <button
+                              onClick={() => handleOpenEditModal(r)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                              title="Edit / Overwrite Check-In, Check-Out, Hajri or Status"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Edit / Overwrite</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Manual Entry Modal */}
       {showManualModal && (

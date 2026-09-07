@@ -21,8 +21,6 @@ import {
   Smartphone,
   Eye,
   DollarSign,
-  TrendingUp,
-  Award,
   Clock,
   ShieldCheck,
 } from 'lucide-react';
@@ -508,8 +506,8 @@ export default function WorkersPage() {
                       <span>Present ({typeof todayRec.hajri === 'number' ? todayRec.hajri : 0} Hajri)</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-slate-400 font-medium text-[11px]">
-                      <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 font-extrabold text-[11px] border border-rose-200">
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                       <span>Absent / Not checked-in</span>
                     </span>
                   )}
