@@ -1,17 +1,18 @@
 import {
   addDoc,
   updateDoc,
+  setDoc,
+  doc,
+  getDoc,
   where,
   serverTimestamp,
-  collectionGroup,
-  getDocs,
-  query,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { OrgContextService } from './org-context.service';
 import type { PendingCheckin } from '@/types/pendingCheckin';
 
 const COLLECTION_NAME = 'pendingCheckins';
+const GLOBAL_TOKENS_COLLECTION = 'pendingCheckinTokens';
 const TOKEN_TTL_MINUTES = 10;
 
 export class PendingCheckinService {
@@ -28,7 +29,8 @@ export class PendingCheckinService {
     },
     orgId?: string
   ): Promise<{ id: string; token: string }> {
-    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
+    const targetOrgId = orgId || OrgContextService.getOrgId();
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, targetOrgId);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + TOKEN_TTL_MINUTES * 60 * 1000);
 
@@ -36,8 +38,8 @@ export class PendingCheckinService {
     const timestampCode = Date.now().toString(36).substring(4).toUpperCase();
     const token = `CK_${timestampCode}_${randomHex}`;
 
-    const docRef = await addDoc(colRef, {
-      organizationId: orgId || OrgContextService.getOrgId(),
+    const docData = {
+      organizationId: targetOrgId,
       token,
       siteId: data.siteId,
       siteToken: data.siteToken,
@@ -48,7 +50,19 @@ export class PendingCheckinService {
       createdAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
       serverCreatedAt: serverTimestamp(),
-    });
+    };
+
+    const docRef = await addDoc(colRef, docData);
+
+    // Save global mapping document for instant, 0-index lookup across all organizations
+    try {
+      await setDoc(doc(db, GLOBAL_TOKENS_COLLECTION, token.trim().toUpperCase()), {
+        ...docData,
+        orgDocId: docRef.id,
+      });
+    } catch (e) {
+      console.warn('[PendingCheckinService] Error creating root token mapping:', e);
+    }
 
     return { id: docRef.id, token };
   }
@@ -59,26 +73,30 @@ export class PendingCheckinService {
   public static async getPendingCheckinByToken(token: string, orgId?: string): Promise<PendingCheckin | null> {
     if (!token) return null;
     const cleanToken = token.trim().toUpperCase();
-    const docs = await OrgContextService.getDocsWithFallback(
-      COLLECTION_NAME,
-      [where('token', '==', cleanToken)],
-      orgId
-    );
 
     let data: any = null;
-    if (docs.length > 0 && docs[0]) {
-      data = docs[0];
-    } else {
-      // Global collectionGroup fallback search for pending checkin tokens across all organizations
-      try {
-        const groupRef = collectionGroup(db, COLLECTION_NAME);
-        const groupSnap = await getDocs(query(groupRef, where('token', '==', cleanToken)));
-        if (!groupSnap.empty && groupSnap.docs[0]) {
-          const docSnap = groupSnap.docs[0];
-          data = { id: docSnap.id, ...docSnap.data() };
-        }
-      } catch (err) {
-        console.warn('[PendingCheckinService] Global token lookup error:', err);
+
+    // 1. Direct document ID lookup in root 'pendingCheckinTokens' collection (0 index required!)
+    try {
+      const globalTokenRef = doc(db, GLOBAL_TOKENS_COLLECTION, cleanToken);
+      const globalSnap = await getDoc(globalTokenRef);
+      if (globalSnap.exists()) {
+        const rawData = globalSnap.data();
+        data = { id: rawData.orgDocId || globalSnap.id, ...rawData };
+      }
+    } catch (err) {
+      console.warn('[PendingCheckinService] Global root token lookup error:', err);
+    }
+
+    // 2. Fallback to organization subcollection search
+    if (!data) {
+      const docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [where('token', '==', cleanToken)],
+        orgId
+      );
+      if (docs.length > 0 && docs[0]) {
+        data = docs[0];
       }
     }
 
@@ -163,12 +181,28 @@ export class PendingCheckinService {
       return null;
     }
 
-    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, session.id, orgId);
+    const trueOrgId = session.organizationId || orgId;
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, session.id, trueOrgId);
     await updateDoc(res.ref, {
       phone,
       triggerMessageId: triggerMessageId || '',
       updatedAt: serverTimestamp(),
     });
+
+    // Update global root pendingCheckinTokens mapping doc as well
+    try {
+      const globalTokenRef = doc(db, GLOBAL_TOKENS_COLLECTION, token.trim().toUpperCase());
+      const globalSnap = await getDoc(globalTokenRef);
+      if (globalSnap.exists()) {
+        await updateDoc(globalTokenRef, {
+          phone,
+          triggerMessageId: triggerMessageId || '',
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      console.warn('[PendingCheckinService] Error updating root token mapping doc:', e);
+    }
 
     session.phone = phone;
     session.triggerMessageId = triggerMessageId;
@@ -178,7 +212,7 @@ export class PendingCheckinService {
   /**
    * Marks a pending checkin session as used once attendance is successfully recorded.
    */
-  public static async markPendingCheckinUsed(id: string, orgId?: string): Promise<void> {
+  public static async markPendingCheckinUsed(id: string, orgId?: string, token?: string): Promise<void> {
     if (!id) return;
     const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
     await updateDoc(res.ref, {
@@ -186,5 +220,20 @@ export class PendingCheckinService {
       usedAt: new Date().toISOString(),
       updatedAt: serverTimestamp(),
     });
+
+    if (token) {
+      try {
+        const globalTokenRef = doc(db, GLOBAL_TOKENS_COLLECTION, token.trim().toUpperCase());
+        const globalSnap = await getDoc(globalTokenRef);
+        if (globalSnap.exists()) {
+          await updateDoc(globalTokenRef, {
+            status: 'used',
+            usedAt: new Date().toISOString(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (e) {}
+    }
   }
 }
+

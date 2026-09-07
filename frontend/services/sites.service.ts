@@ -1,17 +1,18 @@
 import {
   addDoc,
   updateDoc,
+  setDoc,
+  doc,
+  getDoc,
   orderBy,
   serverTimestamp,
-  collectionGroup,
-  getDocs,
-  query,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { OrgContextService } from './org-context.service';
 import type { Site } from '@/types/site';
 
 const COLLECTION_NAME = 'sites';
+const GLOBAL_SITE_TOKENS_COLLECTION = 'siteTokens';
 
 export class SitesService {
   public static async getSites(orgId?: string): Promise<Site[]> {
@@ -42,32 +43,33 @@ export class SitesService {
   }
 
   /**
-   * Resolves a site by its secure, non-guessable checkInToken.
-   * Performs global collectionGroup search across all organizations for unauthenticated QR checkin scans.
+   * Resolves a site by its secure, non-guessable checkInToken across any contractor organization.
+   * Performs instant, 0-index direct document lookup in root siteTokens collection.
    */
   public static async getSiteByCheckInToken(checkInToken: string, orgId?: string): Promise<Site | null> {
     if (!checkInToken) return null;
+
+    // 1. Direct document ID lookup in root 'siteTokens' mapping collection (0 index required!)
+    try {
+      const siteTokenRef = doc(db, GLOBAL_SITE_TOKENS_COLLECTION, checkInToken);
+      const siteTokenSnap = await getDoc(siteTokenRef);
+      if (siteTokenSnap.exists()) {
+        const { siteId, organizationId } = siteTokenSnap.data();
+        if (siteId && organizationId) {
+          const resolvedSite = await this.getSiteById(siteId, organizationId);
+          if (resolvedSite) return resolvedSite;
+        }
+      }
+    } catch (err) {
+      console.warn('[SitesService] Root siteTokens lookup error:', err);
+    }
+
+    // 2. Local org sites check
     const sites = await this.getSites(orgId);
     const tokenSite = sites.find((s) => s.checkInToken === checkInToken || s.id === checkInToken);
     if (tokenSite) return tokenSite;
 
-    // Global fallback across all organizations for unauthenticated QR check-ins
-    try {
-      const sitesGroupRef = collectionGroup(db, 'sites');
-      const groupSnap = await getDocs(query(sitesGroupRef));
-      const matchedDoc = groupSnap.docs.find((d) => {
-        const data = d.data();
-        return data.checkInToken === checkInToken || d.id === checkInToken;
-      });
-
-      if (matchedDoc) {
-        return { id: matchedDoc.id, ...matchedDoc.data() } as Site;
-      }
-    } catch (groupErr) {
-      console.warn('[SitesService] Global collectionGroup sites search error:', groupErr);
-    }
-
-    // Fallback: check if checkInToken matches site doc ID in orgId
+    // 3. Fallback: check if checkInToken matches site doc ID in orgId
     return await this.getSiteById(checkInToken, orgId);
   }
 
@@ -77,10 +79,38 @@ export class SitesService {
   public static async ensureSiteCheckInToken(siteId: string, orgId?: string): Promise<string> {
     const site = await this.getSiteById(siteId, orgId);
     if (!site) throw new Error('Site not found');
-    if (site.checkInToken) return site.checkInToken;
+    
+    const targetOrgId = site.organizationId || orgId || OrgContextService.getOrgId();
+
+    if (site.checkInToken) {
+      // Ensure global siteTokens mapping document exists
+      try {
+        const siteTokenRef = doc(db, GLOBAL_SITE_TOKENS_COLLECTION, site.checkInToken);
+        const snap = await getDoc(siteTokenRef);
+        if (!snap.exists()) {
+          await setDoc(siteTokenRef, {
+            siteId,
+            organizationId: targetOrgId,
+            checkInToken: site.checkInToken,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (e) {}
+      return site.checkInToken;
+    }
 
     const generatedToken = `st_${Math.random().toString(36).substring(2, 8)}_${Date.now().toString(36)}`;
-    await this.updateSite(siteId, { checkInToken: generatedToken }, orgId);
+    await this.updateSite(siteId, { checkInToken: generatedToken }, targetOrgId);
+    
+    try {
+      await setDoc(doc(db, GLOBAL_SITE_TOKENS_COLLECTION, generatedToken), {
+        siteId,
+        organizationId: targetOrgId,
+        checkInToken: generatedToken,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {}
+
     return generatedToken;
   }
 
@@ -95,11 +125,13 @@ export class SitesService {
     },
     orgId?: string
   ): Promise<string> {
-    const colRef = OrgContextService.getCollection(COLLECTION_NAME, orgId);
+    const targetOrgId = orgId || OrgContextService.getOrgId();
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, targetOrgId);
     const now = serverTimestamp();
     const checkInToken = `st_${Math.random().toString(36).substring(2, 8)}_${Date.now().toString(36)}`;
+    
     const docRef = await addDoc(colRef, {
-      organizationId: orgId || OrgContextService.getOrgId(),
+      organizationId: targetOrgId,
       name: data.name.trim(),
       address: data.address?.trim() || '',
       supervisorId: data.supervisorId || '',
@@ -111,6 +143,19 @@ export class SitesService {
       createdAt: now,
       updatedAt: now,
     });
+
+    // Write root siteTokens mapping doc for instant 0-index lookups
+    try {
+      await setDoc(doc(db, GLOBAL_SITE_TOKENS_COLLECTION, checkInToken), {
+        siteId: docRef.id,
+        organizationId: targetOrgId,
+        checkInToken,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('[SitesService] Error creating siteTokens mapping doc:', e);
+    }
+
     return docRef.id;
   }
 
@@ -124,6 +169,18 @@ export class SitesService {
       ...data,
       updatedAt: serverTimestamp(),
     });
+
+    if (data.checkInToken) {
+      try {
+        const targetOrg = res.data?.organizationId || orgId || OrgContextService.getOrgId();
+        await setDoc(doc(db, GLOBAL_SITE_TOKENS_COLLECTION, data.checkInToken), {
+          siteId: id,
+          organizationId: targetOrg,
+          checkInToken: data.checkInToken,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (e) {}
+    }
   }
 
   public static async toggleSiteActive(id: string, active: boolean, orgId?: string): Promise<void> {
@@ -146,3 +203,4 @@ export class SitesService {
     });
   }
 }
+
