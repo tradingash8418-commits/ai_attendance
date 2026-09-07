@@ -20,7 +20,7 @@ import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SitesService } from '@/services/sites.service';
 import { WorkersService } from '@/services/workers.service';
-import { getWorkerDisplayName, getTodayDateString, formatTime } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime, convertTimeToIsoString } from '@/lib/formatters';
 import type { AttendanceSession, AttendanceRecord } from '@/types/attendance';
 import type { Site } from '@/types/site';
 import type { Worker } from '@/types/worker';
@@ -113,9 +113,13 @@ export default function AttendancePage() {
     if (!editingRecord) return;
     setSavingEdit(true);
     try {
+      const recordDate = editingRecord.date || selectedDate || todayStr;
+      const isoCheckIn = convertTimeToIsoString(editCheckIn, recordDate);
+      const isoCheckOut = editCheckOut === '-' ? null : convertTimeToIsoString(editCheckOut, recordDate);
+
       await AttendanceService.updateAttendanceRecord(editingRecord.id, {
-        checkInTime: editCheckIn || null,
-        checkOutTime: editCheckOut === '-' ? null : editCheckOut,
+        checkInTime: isoCheckIn,
+        checkOutTime: isoCheckOut,
         hajri: Number(editHajri),
         hajriLabel: editHajriLabel,
         status: editStatus,

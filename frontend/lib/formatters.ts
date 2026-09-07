@@ -46,10 +46,37 @@ export const getWorkerDisplayName = (worker: Worker): string => {
 };
 
 /**
- * Formats a Date object, ISO string, timestamp number, or Firestore Timestamp to HH:MM AM/PM.
+ * Formats a Date object, ISO string, timestamp number, Firestore Timestamp,
+ * or 12h/24h time string to clean 12-hour HH:MM AM/PM format.
  */
 export const formatTime = (val: any, fallback = '-'): string => {
-  if (!val) return fallback;
+  if (!val || val === '-') return fallback;
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed === '-' || !trimmed) return fallback;
+
+    // Direct match for 12-hour AM/PM format e.g. "10:00 AM" or "6:30 pm"
+    const match12 = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match12 && match12[1] && match12[2] && match12[3]) {
+      const hh = match12[1].padStart(2, '0');
+      const mm = match12[2];
+      const ampm = match12[3].toUpperCase();
+      return `${hh}:${mm} ${ampm}`;
+    }
+
+    // Direct match for 24-hour time format e.g. "18:30" or "09:00"
+    const match24 = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24 && match24[1] && match24[2]) {
+      let h = parseInt(match24[1], 10);
+      const mm = match24[2];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      const hh = String(h).padStart(2, '0');
+      return `${hh}:${mm} ${ampm}`;
+    }
+  }
+
   try {
     let d: Date;
     if (typeof val === 'object' && 'toDate' in val && typeof val.toDate === 'function') {
@@ -64,6 +91,50 @@ export const formatTime = (val: any, fallback = '-'): string => {
   } catch {
     return fallback;
   }
+};
+
+/**
+ * Converts a user time string (e.g. "06:30 PM", "18:30", "10:00 AM") and base date ("YYYY-MM-DD")
+ * into a valid ISO 8601 string. Returns null if empty/invalid.
+ */
+export const convertTimeToIsoString = (timeStr: string | null | undefined, baseDateStr: string): string | null => {
+  if (!timeStr || !timeStr.trim() || timeStr.trim() === '-') return null;
+  const str = timeStr.trim();
+
+  let hours = -1;
+  let minutes = -1;
+
+  const match12 = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match12 && match12[1] && match12[2] && match12[3]) {
+    let h = parseInt(match12[1], 10);
+    minutes = parseInt(match12[2], 10);
+    const ampm = match12[3].toUpperCase();
+    if (ampm === 'PM' && h < 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    hours = h;
+  } else {
+    const match24 = str.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24 && match24[1] && match24[2]) {
+      hours = parseInt(match24[1], 10);
+      minutes = parseInt(match24[2], 10);
+    } else {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString();
+      }
+      return null;
+    }
+  }
+
+  if (hours < 0 || minutes < 0 || hours > 23 || minutes > 59) return null;
+
+  const dateParts = baseDateStr.split('-').map((v) => parseInt(v, 10));
+  const yyyy = dateParts[0] || new Date().getFullYear();
+  const mm = dateParts[1] || (new Date().getMonth() + 1);
+  const dd = dateParts[2] || new Date().getDate();
+
+  const resultDate = new Date(yyyy, mm - 1, dd, hours, minutes, 0, 0);
+  return resultDate.toISOString();
 };
 
 /**
