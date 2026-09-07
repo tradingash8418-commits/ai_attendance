@@ -85,19 +85,33 @@ export class AttendanceSessionsService {
     status: AttendanceSessionStatus,
     orgId?: string
   ): Promise<void> {
-    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
-    const now = serverTimestamp();
-    const updateData: Record<string, any> = {
-      status,
-      updatedAt: now,
-    };
+    if (!id) return;
+    try {
+      let res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+      if (!res.data && orgId && orgId !== 'org_primary') {
+        const fallbackRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, 'org_primary');
+        if (fallbackRes.data) {
+          res = fallbackRes;
+        }
+      }
 
-    if (status === 'processing') {
-      updateData.processingStartedAt = now;
-    } else if (status === 'completed' || status === 'failed') {
-      updateData.processingCompletedAt = now;
+      if (res.data && res.ref) {
+        const now = serverTimestamp();
+        const updateData: Record<string, any> = {
+          status,
+          updatedAt: now,
+        };
+
+        if (status === 'processing') {
+          updateData.processingStartedAt = now;
+        } else if (status === 'completed' || status === 'failed') {
+          updateData.processingCompletedAt = now;
+        }
+
+        await updateDoc(res.ref, updateData);
+      }
+    } catch (e) {
+      console.warn(`[AttendanceSessionsService] Error updating session status ${id}:`, e);
     }
-
-    await updateDoc(res.ref, updateData);
   }
 }

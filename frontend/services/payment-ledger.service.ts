@@ -97,10 +97,11 @@ export class PaymentLedgerService {
     },
     orgId?: string
   ): Promise<PaymentLedgerEntry[]> {
+    const targetOrg = orgId || OrgContextService.getOrgId();
     const docs = await OrgContextService.getDocsWithFallback(
       COLLECTION_NAME,
       [orderBy('paymentDate', 'desc')],
-      orgId
+      targetOrg
     );
 
     let entries = docs.map((d) => ({
@@ -108,6 +109,26 @@ export class PaymentLedgerService {
       ...d,
       paidTo: d.paidTo || d.workerName || 'Recipient',
     })) as PaymentLedgerEntry[];
+
+    if (targetOrg !== 'org_primary') {
+      try {
+        const primaryDocs = await OrgContextService.getDocsWithFallback(
+          COLLECTION_NAME,
+          [orderBy('paymentDate', 'desc')],
+          'org_primary'
+        );
+        const existingIds = new Set(entries.map((e) => e.id));
+        for (const pd of primaryDocs) {
+          if (!existingIds.has(pd.id)) {
+            entries.push({
+              id: pd.id,
+              ...pd,
+              paidTo: pd.paidTo || pd.workerName || 'Recipient',
+            } as PaymentLedgerEntry);
+          }
+        }
+      } catch (e) {}
+    }
 
     if (filters?.workerId) {
       entries = entries.filter((e) => e.workerId === filters.workerId);

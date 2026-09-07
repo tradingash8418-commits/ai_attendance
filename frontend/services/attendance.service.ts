@@ -90,11 +90,24 @@ export class AttendanceService {
     },
     orgId?: string
   ): Promise<AttendanceRecord[]> {
-    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], orgId);
+    const targetOrg = orgId || OrgContextService.getOrgId();
+    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], targetOrg);
     let records = docs.map((d) => ({
       id: d.id,
       ...d,
     })) as AttendanceRecord[];
+
+    if (targetOrg !== 'org_primary') {
+      try {
+        const primaryDocs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], 'org_primary');
+        const existingIds = new Set(records.map((r) => r.id));
+        for (const pd of primaryDocs) {
+          if (!existingIds.has(pd.id)) {
+            records.push({ id: pd.id, ...pd } as AttendanceRecord);
+          }
+        }
+      } catch (e) {}
+    }
 
     if (filters?.siteId) {
       records = records.filter((r) => r.siteId === filters.siteId);
