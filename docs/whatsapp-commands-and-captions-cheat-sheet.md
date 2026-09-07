@@ -384,5 +384,57 @@ Jab supervisor site par sabhi workers ke sath group photo / selfie WhatsApp par 
 3. **Transport (Gaadi Bhada)** ➔ `[Name], transport`, `[Name], t`
 4. **Thekedar (Contractor)** ➔ `[Name], thekedar`, `[Name], contractor`
 5. **QR Attendance** ➔ `CHECKIN_...`
+6. **Direct Text Cash Payments (No Screenshot)** ➔ `<Name>: <Amount> <Method> [Tag w/m/t/c/v]`
+
+---
+
+## 💵 6. Direct Text Cash Payment & Non-Screenshot Syntax (No Image Required)
+
+Jab online payment ka koi screenshot nahi hota (e.g. Cash payment, direct hand payment, ya WhatsApp text entry), to WhatsApp par niche di gayi simple text format bhej kar instant payment / advance record kiya jata hai:
+
+### 📝 Universal Syntax Format:
+```text
+<Name or Code>: <Amount> <Method/cash> [Tag]
+```
+
+---
+
+### 🏷️ Tag Routing Rules & Real WhatsApp Examples:
+
+#### 1. Default (No Tag or `v` / `vendor`) ➔ **Vendor Ledger**
+- **Example**: `pintu prajapati: 500 cash`
+  - **Action**: `/vendors` Ledger mein ₹500 Cash Vendor Payment add hoga.
+- **Example**: `ganesh pathak: 7000 cash v` ya `ganesh pathak: 7000 cash vendor`
+  - **Action**: `/vendors` Ledger mein ₹7,000 Cash Vendor Payment add hoga.
+
+#### 2. Worker Tag (`w` or `worker`) ➔ **Worker Khata Ledger**
+- **Example**: `rohit yadav: 300 cash w` ya `rohit yadav: 300 cash worker`
+  - **Action**: Worker **Rohit Yadav** ke Khata (`/workers`) mein ₹300 Cash Advance / Kharcha record hoga (bilkul AI OCR screenshot ki tarah!).
+
+#### 3. Material Tag (`m` or `material`) ➔ **Vendor Material & Hardware Ledger**
+- **Example**: `suresh hardware: 6000 cash m` ya `suresh hardware: 6000 cash material`
+  - **Action**: `/vendors` ke **Material & Hardware** category mein ₹6,000 Material Payment record hoga.
+
+#### 4. Transport Tag (`t` or `transport`) ➔ **Vendor Transport & Vehicles Ledger**
+- **Example**: `deepak: 500 cash t` ya `deepak: 500 cash transport`
+  - **Action**: `/vendors` ke **Transport & Vehicles** category mein ₹500 Transport Payment record hoga.
+
+#### 5. Subcontractor / Thekedar Tag (`c` or `contractor` / `thekedar`) ➔ **Subcontractors / Thekedar Ledger**
+- **Example**: `sanju singh yadav: 4000 cash c` ya `sanju singh yadav: 4000 cash contractor`
+  - **Action**: `/vendors` ke **Subcontractors / Thekedar** category mein ₹4,000 Payment record hoga.
+
+---
+
+### 📊 Quick Summary Table for Direct Text Cash Payments:
+
+| Real WhatsApp Text Input | Target Destination | Category Registered | Payment Method |
+| :--- | :--- | :--- | :--- |
+| `pintu prajapati: 500 cash` | `/vendors` (All Vendors) | Vendor Payment | Cash 💵 |
+| `rohit yadav: 300 cash w` | `/workers` (Worker Khata) | Worker Advance (Kharcha) | Cash 💵 |
+| `ganesh pathak: 7000 cash v` | `/vendors` (Vendor Ledger) | Vendor Payment | Cash 💵 |
+| `suresh hardware: 6000 cash m` | `/vendors` (Material Ledger) | Material & Hardware | Cash 💵 |
+| `deepak: 500 cash t` | `/vendors` (Transport Ledger) | Transport & Vehicles | Cash 💵 |
+| `sanju singh yadav: 4000 cash c` | `/vendors` (Thekedar Ledger) | Subcontractors / Thekedar | Cash 💵 |
 
 Is cheat sheet ko follow karke WhatsApp se construction site ka 100% attendance aur payment khata automated rahega!
+
