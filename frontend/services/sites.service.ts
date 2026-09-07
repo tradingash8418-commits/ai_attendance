@@ -3,7 +3,11 @@ import {
   updateDoc,
   orderBy,
   serverTimestamp,
+  collectionGroup,
+  getDocs,
+  query,
 } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { OrgContextService } from './org-context.service';
 import type { Site } from '@/types/site';
 
@@ -39,14 +43,31 @@ export class SitesService {
 
   /**
    * Resolves a site by its secure, non-guessable checkInToken.
+   * Performs global collectionGroup search across all organizations for unauthenticated QR checkin scans.
    */
   public static async getSiteByCheckInToken(checkInToken: string, orgId?: string): Promise<Site | null> {
     if (!checkInToken) return null;
     const sites = await this.getSites(orgId);
-    const tokenSite = sites.find((s) => s.checkInToken === checkInToken);
+    const tokenSite = sites.find((s) => s.checkInToken === checkInToken || s.id === checkInToken);
     if (tokenSite) return tokenSite;
 
-    // Fallback: check if checkInToken matches site doc ID
+    // Global fallback across all organizations for unauthenticated QR check-ins
+    try {
+      const sitesGroupRef = collectionGroup(db, 'sites');
+      const groupSnap = await getDocs(query(sitesGroupRef));
+      const matchedDoc = groupSnap.docs.find((d) => {
+        const data = d.data();
+        return data.checkInToken === checkInToken || d.id === checkInToken;
+      });
+
+      if (matchedDoc) {
+        return { id: matchedDoc.id, ...matchedDoc.data() } as Site;
+      }
+    } catch (groupErr) {
+      console.warn('[SitesService] Global collectionGroup sites search error:', groupErr);
+    }
+
+    // Fallback: check if checkInToken matches site doc ID in orgId
     return await this.getSiteById(checkInToken, orgId);
   }
 
