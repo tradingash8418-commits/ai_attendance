@@ -575,8 +575,10 @@ export default function AttendancePage() {
                       const worker = workers.find(
                         (w) => w.id === r.workerId || w.workerCode === r.workerId
                       );
-                      const site = sites.find((s) => s.id === r.siteId);
+                      const checkInSite = sites.find((s) => s.id === r.siteId);
+                      const checkOutSite = sites.find((s) => s.id === (r.checkOutSiteId || r.siteId));
                       const isOverwritten = Boolean((r as any).isOverwrittenByContractor);
+                      const isCrossSite = Boolean(r.checkOutSiteId && r.checkOutSiteId !== r.siteId);
 
                       return (
                         <tr
@@ -609,13 +611,32 @@ export default function AttendancePage() {
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 font-medium">
-                            {site ? site.name : 'Unknown Site'}
+                            {isCrossSite ? (
+                              <div className="flex flex-col text-[11px] leading-tight space-y-0.5">
+                                <span className="text-blue-700 font-extrabold flex items-center gap-1">
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-blue-100 text-blue-800">IN</span>
+                                  <span>{checkInSite?.name || 'Unknown'}</span>
+                                </span>
+                                <span className="text-purple-700 font-extrabold flex items-center gap-1">
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-purple-100 text-purple-800">OUT</span>
+                                  <span>{checkOutSite?.name || 'Unknown'}</span>
+                                </span>
+                              </div>
+                            ) : (
+                              <span>{checkInSite ? checkInSite.name : 'Unknown Site'}</span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 font-medium">
-                            {formatTime(r.checkInTime, '10:00 AM')}
+                            <div className="font-semibold text-slate-800">{formatTime(r.checkInTime, '10:00 AM')}</div>
+                            {checkInSite && (
+                              <span className="block text-[10px] text-slate-400 font-medium mt-0.5">📍 {checkInSite.name}</span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 font-medium">
-                            {formatTime(r.checkOutTime, '-')}
+                            <div className="font-semibold text-slate-800">{formatTime(r.checkOutTime, '-')}</div>
+                            {r.checkOutTime && checkOutSite && (
+                              <span className="block text-[10px] text-purple-600 font-bold mt-0.5">📍 {checkOutSite.name}</span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-slate-500 font-semibold">
                             {r.workedHours || 'In Progress'}

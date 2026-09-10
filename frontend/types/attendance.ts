@@ -33,6 +33,7 @@ export interface AttendanceRecord {
   attendanceSessionId: string;
   workerId: string;
   siteId: string;
+  checkOutSiteId?: string;
   date: string; // ISO Date String: YYYY-MM-DD
   checkInTime?: Timestamp | string | Date;
   checkOutTime?: Timestamp | string | Date | null;

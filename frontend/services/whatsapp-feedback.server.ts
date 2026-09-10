@@ -2,6 +2,7 @@ import { WhatsAppService } from './whatsapp.service';
 import { WorkersService } from './workers.service';
 import { AttendanceService } from './attendance.service';
 import { PaymentLedgerService } from './payment-ledger.service';
+import { SitesService } from './sites.service';
 import { getWorkerDisplayName } from '@/lib/formatters';
 import type { Worker } from '@/types/worker';
 
@@ -33,7 +34,7 @@ export class WhatsAppFeedbackServer {
   public static async sendAttendanceFeedbackReport(
     options: AttendanceFeedbackOptions
   ): Promise<{ success: boolean; error?: string }> {
-    const { supervisorWhatsAppNumber, siteName, date, siteId, orgId, recognizedWorkerIds, matchedWorkerIds, unknownFaceCount } = options;
+    const { supervisorWhatsAppNumber, siteName, date, orgId, recognizedWorkerIds, matchedWorkerIds, unknownFaceCount } = options;
 
     if (!supervisorWhatsAppNumber) {
       console.warn('[WhatsAppFeedbackServer] Missing supervisor WhatsApp sender number.');
@@ -43,8 +44,12 @@ export class WhatsAppFeedbackServer {
     const idsToMatch = matchedWorkerIds || recognizedWorkerIds || [];
 
     try {
-      // 1. Fetch worker records matching recognized IDs, codes, or worker names resiliently
-      const allWorkers = await WorkersService.getWorkers(orgId);
+      // 1. Fetch worker records & sites matching recognized IDs, codes, or worker names resiliently
+      const [allWorkers, allSites] = await Promise.all([
+        WorkersService.getWorkers(orgId),
+        SitesService.getSites(orgId),
+      ]);
+
       const recognizedWorkers: Worker[] = allWorkers.filter((w) =>
         idsToMatch.some((matchedId) => {
           const mappedCode = TEST_WORKER_CODE_MAP[matchedId] || matchedId;
@@ -63,9 +68,8 @@ export class WhatsAppFeedbackServer {
         })
       );
 
-      // 2. Fetch existing attendance records for (siteId, date) to display check-in/out & hajri
+      // 2. Fetch existing attendance records for date to display check-in/out & hajri
       const attendanceRecords = await AttendanceService.getAttendanceRecords({
-        siteId,
         date,
       }, orgId);
 
@@ -117,8 +121,13 @@ export class WhatsAppFeedbackServer {
             : (hasCheckedOut ? 1.0 : 0);
           const hajriLabel = attRecord?.hajriLabel || (hasCheckedOut ? 'Normal' : 'In Progress');
 
+          const checkInSiteObj = allSites.find((s) => s.id === attRecord?.siteId);
+          const checkOutSiteObj = allSites.find((s) => s.id === (attRecord?.checkOutSiteId || attRecord?.siteId));
+          const checkInSiteName = checkInSiteObj?.name || siteName;
+          const checkOutSiteName = checkOutSiteObj?.name || siteName;
+
           messageLines.push(`${index}. ${nameDisplay}`);
-          messageLines.push(`   Check-in: ${checkInFormatted}`);
+          messageLines.push(`   Check-in: ${checkInFormatted} (📍 Site: ${checkInSiteName})`);
 
           if (hasCheckedOut && checkOutFormatted) {
             const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : 500;
@@ -134,7 +143,7 @@ export class WhatsAppFeedbackServer {
             const totalPaidOrAdvance = workerPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
             const remainingBalance = totalEarnedSalary - totalPaidOrAdvance;
 
-            messageLines.push(`   Check-out: ${checkOutFormatted}`);
+            messageLines.push(`   Check-out: ${checkOutFormatted} (📍 Site: ${checkOutSiteName})`);
             messageLines.push(`   Worked: ${workedStr}`);
             messageLines.push(`   Hajri Today: ${hajriVal} (${hajriLabel})`);
             messageLines.push(`   Rate: ₹${dailyRate}/Hajri`);
