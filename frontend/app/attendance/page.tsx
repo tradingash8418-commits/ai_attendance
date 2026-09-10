@@ -16,11 +16,13 @@ import {
   Pencil,
   AlertTriangle,
   XCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { AttendanceService } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
 import { SitesService } from '@/services/sites.service';
 import { WorkersService } from '@/services/workers.service';
+import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
 import { getWorkerDisplayName, getTodayDateString, formatTime, convertTimeToIsoString } from '@/lib/formatters';
 import type { AttendanceSession, AttendanceRecord } from '@/types/attendance';
 import type { Site } from '@/types/site';
@@ -36,6 +38,9 @@ export default function AttendancePage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Worker Profile Dossier Modal State
+  const [selectedDossierWorker, setSelectedDossierWorker] = useState<Worker | null>(null);
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -486,9 +491,17 @@ export default function AttendancePage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {absentWorkersList.map((worker) => (
-                      <tr key={worker.id} className="hover:bg-rose-50/30 transition-colors">
+                      <tr
+                        key={worker.id}
+                        className="hover:bg-rose-50/50 transition-colors cursor-pointer group"
+                        onClick={() => setSelectedDossierWorker(worker)}
+                        title="Click to view worker profile dossier & khata"
+                      >
                         <td className="py-3.5 px-4">
-                          <div className="font-extrabold text-slate-900">{getWorkerDisplayName(worker)}</div>
+                          <div className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                            <span className="hover:underline">{getWorkerDisplayName(worker)}</span>
+                            <ExternalLink className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600">
                           {worker.phone || 'No phone linked'}
@@ -505,7 +518,7 @@ export default function AttendancePage() {
                             <span>ABSENT / NOT CHECKED-IN</span>
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => {
                               setSelectedWorkerId(worker.id);
@@ -566,15 +579,25 @@ export default function AttendancePage() {
                       const isOverwritten = Boolean((r as any).isOverwrittenByContractor);
 
                       return (
-                        <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                        <tr
+                          key={r.id}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                          onClick={() => {
+                            if (worker) setSelectedDossierWorker(worker);
+                          }}
+                          title="Click to view worker profile dossier & khata"
+                        >
                           {viewMode === 'all_history' && (
                             <td className="py-3.5 px-4 font-mono font-bold text-slate-700">
                               {r.date}
                             </td>
                           )}
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                              <span>{worker ? getWorkerDisplayName(worker) : r.workerId}</span>
+                            <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                              <span className="hover:underline">
+                                {worker ? getWorkerDisplayName(worker) : r.workerId}
+                              </span>
+                              <ExternalLink className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                               {isOverwritten && (
                                 <span className="px-1.5 py-0.2 rounded bg-amber-100 text-[9px] font-extrabold text-amber-800 border border-amber-300">
                                   ✏️ Overwritten
@@ -614,7 +637,7 @@ export default function AttendancePage() {
                               {r.status || 'present'}
                             </span>
                           </td>
-                          <td className="py-3.5 px-4 text-center">
+                          <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleOpenEditModal(r)}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
@@ -896,6 +919,15 @@ export default function AttendancePage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Worker Profile Dossier Modal */}
+      {selectedDossierWorker && (
+        <WorkerProfileDossierModal
+          worker={selectedDossierWorker}
+          onClose={() => setSelectedDossierWorker(null)}
+          onWorkerUpdated={loadAttendanceData}
+        />
       )}
     </div>
   );

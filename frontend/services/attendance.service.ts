@@ -145,7 +145,7 @@ export class AttendanceService {
     const eventDate = data.messageTimestamp ? new Date(data.messageTimestamp) : new Date();
 
     const existingRecords = await this.getAttendanceRecords(
-      { workerId: data.workerId, siteId: data.siteId, date: data.date },
+      { workerId: data.workerId, date: data.date },
       orgId
     );
 
@@ -178,6 +178,7 @@ export class AttendanceService {
       const docRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, existingId, orgId);
       await updateDoc(docRes.ref, {
         checkOutTime: checkOutDate.toISOString(),
+        checkOutSiteId: data.siteId,
         attendancePhotoUrl: data.attendancePhotoUrl,
         hajri: hajriResult.hajri,
         hajriLabel: hajriResult.label,
