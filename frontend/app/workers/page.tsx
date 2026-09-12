@@ -48,7 +48,7 @@ export default function WorkersPage() {
   const [workerCode, setWorkerCode] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [role, setRole] = useState<string>('');
-  const [dailyRate, setDailyRate] = useState<string>('500');
+  const [dailyRate, setDailyRate] = useState<string>('0');
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
 
@@ -58,7 +58,7 @@ export default function WorkersPage() {
   const [editPhone, setEditPhone] = useState<string>('');
   const [editWorkerCode, setEditWorkerCode] = useState<string>('');
   const [editRole, setEditRole] = useState<string>('');
-  const [editDailyRate, setEditDailyRate] = useState<string>('500');
+  const [editDailyRate, setEditDailyRate] = useState<string>('0');
   const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -129,7 +129,7 @@ export default function WorkersPage() {
       formData.append('workerCode', nextCode);
       formData.append('phone', phone);
       formData.append('role', role || 'General Worker');
-      formData.append('dailyRate', dailyRate || '500');
+      formData.append('dailyRate', dailyRate || '0');
       
       if (selectedPhotoFile) {
         // Automatically compress camera image before sending to avoid Vercel 413 Payload limit
@@ -159,7 +159,7 @@ export default function WorkersPage() {
         setWorkerCode('');
         setPhone('');
         setRole('');
-        setDailyRate('500');
+        setDailyRate('0');
         setSelectedPhotoFile(null);
         setPhotoPreviewUrl(null);
         setShowAddModal(false);
@@ -181,7 +181,7 @@ export default function WorkersPage() {
     setEditPhone(worker.phone || '');
     setEditWorkerCode(worker.workerCode || '');
     setEditRole(worker.role || 'General Worker');
-    setEditDailyRate(worker.dailyRate ? worker.dailyRate.toString() : '500');
+    setEditDailyRate(typeof worker.dailyRate === 'number' ? worker.dailyRate.toString() : '0');
     setEditError(null);
   };
 
@@ -194,8 +194,8 @@ export default function WorkersPage() {
     }
 
     const rateNum = parseFloat(editDailyRate);
-    if (isNaN(rateNum) || rateNum <= 0) {
-      setEditError('Please enter a valid daily rate greater than 0.');
+    if (isNaN(rateNum) || rateNum < 0) {
+      setEditError('Please enter a valid daily rate of 0 or greater.');
       return;
     }
 
@@ -473,7 +473,7 @@ export default function WorkersPage() {
                           {worker.role || 'General Worker'}
                         </span>
                         <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
-                          ₹{worker.dailyRate || 500}/day
+                          ₹{typeof worker.dailyRate === 'number' ? worker.dailyRate : 0}/day
                         </span>
                         {worker.phone ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
@@ -673,7 +673,7 @@ export default function WorkersPage() {
                   <input
                     type="number"
                     step="any"
-                    placeholder="e.g. 500"
+                    placeholder="e.g. 0"
                     value={dailyRate}
                     onChange={(e) => setDailyRate(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-900 focus:outline-none focus:border-blue-600"

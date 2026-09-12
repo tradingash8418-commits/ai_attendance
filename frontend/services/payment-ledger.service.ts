@@ -149,7 +149,7 @@ export class PaymentLedgerService {
    * Supports optional date range filtering for Month-End / Week-End consolidated charts.
    */
   public static async getAllWorkersKhataSummary(
-    defaultDailyRate = 500,
+    defaultDailyRate = 0,
     dateRange?: { startDate?: string; endDate?: string },
     orgId?: string
   ): Promise<{
@@ -202,7 +202,7 @@ export class PaymentLedgerService {
         .filter((p) => p.category === 'wage')
         .reduce((sum, p) => sum + p.amount, 0);
 
-      const workerDailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : defaultDailyRate;
+      const workerDailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate >= 0 ? worker.dailyRate : defaultDailyRate;
       const totalEarnedAmount = totalHajriEarned * workerDailyRate;
       const netPayableBalance = totalEarnedAmount - totalAdvancesPaid - totalWagesPaid;
 

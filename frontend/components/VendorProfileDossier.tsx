@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Link from 'next/link';
 import {
   Building2,
   Receipt,
@@ -13,19 +12,12 @@ import {
   ExternalLink,
   X,
   Filter,
-  ArrowDownLeft,
-  Truck,
   Store,
-  ShieldCheck,
-  CheckCircle,
-  Clock,
-  ChevronRight,
   TrendingUp,
 } from 'lucide-react';
 import { PaymentLedgerService } from '@/services/payment-ledger.service';
 import { getTodayDateString } from '@/lib/formatters';
 import type { VendorSummary } from '@/services/vendors.service';
-import type { PaymentLedgerEntry } from '@/types/payment';
 
 interface VendorProfileDossierProps {
   vendor: VendorSummary;

@@ -25,12 +25,14 @@ import {
   Printer,
   CalendarRange,
   Pencil,
+  ExternalLink,
 } from 'lucide-react';
 import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
 import { WorkersService } from '@/services/workers.service';
 import { SitesService } from '@/services/sites.service';
 import RecycleBinModal from '@/components/RecycleBinModal';
+import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
 import { compressImageClient } from '@/lib/image-compress';
 import { getTodayDateString, compareWorkerCodes } from '@/lib/formatters';
 import type { PaymentLedgerEntry, PaymentCategory, PaymentMethod, ExtractedPaymentData } from '@/types/payment';
@@ -54,7 +56,8 @@ export default function PaymentsPage() {
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
-  const dailyRate = 500;
+  const [selectedDossierWorker, setSelectedDossierWorker] = useState<Worker | null>(null);
+  const dailyRate = 0;
 
   // Period / Date Range Filter for Month-End & Week-End Consolidated Sheet
   const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | 'last_month' | 'this_week' | 'custom'>('all');
@@ -416,6 +419,38 @@ export default function PaymentsPage() {
     }
   };
 
+  const handleDeleteVendor = async (vendor: VendorSummary) => {
+    const count = vendor.payments.length;
+    if (!confirm(`Are you sure you want to delete all ${count} payment record(s) for vendor "${vendor.vendorName}"? They will be moved to the Recycle Bin.`)) return;
+    try {
+      for (const p of vendor.payments) {
+        await PaymentLedgerService.deletePayment(p.id);
+      }
+      await loadData();
+    } catch (err) {
+      console.error('Delete vendor payments error:', err);
+      alert('Failed to delete vendor payment records.');
+    }
+  };
+
+  const getWorkerForEntry = (identifier?: { id?: string; code?: string; name?: string }): Worker | null => {
+    if (!identifier) return null;
+    if (identifier.id) {
+      const byId = workers.find((w) => w.id === identifier.id);
+      if (byId) return byId;
+    }
+    if (identifier.code) {
+      const byCode = workers.find((w) => w.workerCode?.toLowerCase() === identifier.code?.toLowerCase());
+      if (byCode) return byCode;
+    }
+    if (identifier.name) {
+      const cleanName = identifier.name.replace(/\s*\(Daily\/Temp\)/i, '').trim().toLowerCase();
+      const byName = workers.find((w) => w.name.trim().toLowerCase() === cleanName);
+      if (byName) return byName;
+    }
+    return null;
+  };
+
   const handleOpenMigration = (payment: PaymentLedgerEntry, targetType?: 'worker' | 'vendor') => {
     setMigrationPayment(payment);
     const target =
@@ -706,11 +741,29 @@ export default function PaymentsPage() {
       if (acMatch && acMatch[1]) beneficiary = acMatch[1].trim();
     }
 
+    const matchedWorker = !isVendor
+      ? getWorkerForEntry({ id: p.workerId, code: p.workerCode, name: p.workerName || p.paidTo })
+      : null;
 
     return (
       <div>
         <div className="font-bold text-slate-900 uppercase flex items-center gap-1.5">
-          <span>{mainName}</span>
+          {matchedWorker ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedDossierWorker(matchedWorker);
+              }}
+              className="hover:text-blue-600 hover:underline flex items-center gap-1 text-left transition-colors group cursor-pointer"
+              title="Click to view full worker profile dossier"
+            >
+              <span>{mainName}</span>
+              <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-blue-600 shrink-0" />
+            </button>
+          ) : (
+            <span>{mainName}</span>
+          )}
         </div>
         <div className="flex flex-col text-[10px] text-slate-400 mt-0.5">
           {beneficiary && beneficiary.toLowerCase() !== mainName.toLowerCase() && (
@@ -973,18 +1026,30 @@ export default function PaymentsPage() {
                   ) : (
                     filteredAttendanceSummaries.map((summary) => {
                       const isPositive = summary.netPayableBalance >= 0;
+                      const matchedWorker = getWorkerForEntry({ id: summary.workerId, code: summary.workerCode, name: summary.workerName });
 
                       return (
                         <tr key={summary.workerId} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-4">
-                            <div className="font-bold text-slate-900">{summary.workerName}</div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-                                {summary.workerCode || 'WRK-ID'}
-                              </span>
-                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-bold text-slate-600 border border-slate-200">
-                                ₹{summary.dailyRate}/day
-                              </span>
+                            <div
+                              onClick={() => {
+                                if (matchedWorker) setSelectedDossierWorker(matchedWorker);
+                              }}
+                              className={matchedWorker ? "cursor-pointer group" : ""}
+                              title={matchedWorker ? "Click to view full worker profile dossier" : ""}
+                            >
+                              <div className="font-bold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 transition-colors">
+                                <span className={matchedWorker ? "group-hover:underline" : ""}>{summary.workerName}</span>
+                                {matchedWorker && <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-blue-600 shrink-0" />}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                  {summary.workerCode || 'WRK-ID'}
+                                </span>
+                                <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-bold text-slate-600 border border-slate-200">
+                                  ₹{summary.dailyRate}/day
+                                </span>
+                              </div>
                             </div>
                           </td>
                           <td className="py-3 px-4 font-mono text-slate-600">
@@ -1010,13 +1075,25 @@ export default function PaymentsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => handleOpenPaymentModal(summary.workerId, false)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Give Advance</span>
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              {matchedWorker && (
+                                <button
+                                  onClick={() => setSelectedDossierWorker(matchedWorker)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] border border-slate-200 transition-colors shadow-2xs"
+                                  title="View Full Profile Dossier"
+                                >
+                                  <Eye className="w-3 h-3 text-slate-600" />
+                                  <span>Profile</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleOpenPaymentModal(summary.workerId, false)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Give Advance</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1083,6 +1160,7 @@ export default function PaymentsPage() {
                     </tr>
                   ) : (
                     filteredWorkerPayments.map((p) => {
+                      const matchedWorker = getWorkerForEntry({ id: p.workerId, code: p.workerCode, name: p.workerName || p.paidTo });
                       return (
                         <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4 font-semibold text-slate-700">
@@ -1139,6 +1217,16 @@ export default function PaymentsPage() {
                           </td>
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-2">
+                              {matchedWorker && (
+                                <button
+                                  onClick={() => setSelectedDossierWorker(matchedWorker)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-colors shadow-2xs"
+                                  title="View Worker Profile Dossier"
+                                >
+                                  <Eye className="w-3 h-3 text-slate-600" />
+                                  <span>Profile</span>
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleOpenEditPaymentModal(p)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200 transition-colors shadow-2xs"
@@ -1342,13 +1430,25 @@ export default function PaymentsPage() {
                       const isTemp = s.workerId.startsWith('temp_');
                       const isPositive = s.netPayableBalance > 0;
                       const isSettled = s.netPayableBalance === 0;
+                      const matchedWorker = getWorkerForEntry({ id: s.workerId, code: s.workerCode, name: s.workerName });
 
                       return (
                         <tr key={s.workerId} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900">{s.workerName}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {s.workerCode || s.phone || '—'}
+                            <div
+                              onClick={() => {
+                                if (matchedWorker) setSelectedDossierWorker(matchedWorker);
+                              }}
+                              className={matchedWorker ? "cursor-pointer group" : ""}
+                              title={matchedWorker ? "Click to view full worker profile dossier" : ""}
+                            >
+                              <div className="font-bold text-slate-900 group-hover:text-blue-600 flex items-center gap-1.5 transition-colors">
+                                <span className={matchedWorker ? "group-hover:underline" : ""}>{s.workerName}</span>
+                                {matchedWorker && <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-blue-600 shrink-0" />}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                {s.workerCode || s.phone || '—'}
+                              </div>
                             </div>
                           </td>
                           <td className="py-3.5 px-4">
@@ -1407,13 +1507,25 @@ export default function PaymentsPage() {
                             </span>
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            <button
-                              onClick={() => handleOpenPaymentModal(s.workerId, false)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Give Advance</span>
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              {matchedWorker && (
+                                <button
+                                  onClick={() => setSelectedDossierWorker(matchedWorker)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] border border-slate-200 transition-colors shadow-2xs"
+                                  title="View Full Profile Dossier"
+                                >
+                                  <Eye className="w-3 h-3 text-slate-600" />
+                                  <span>Profile</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleOpenPaymentModal(s.workerId, false)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition-colors shadow-2xs"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Give Advance</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1540,6 +1652,14 @@ export default function PaymentsPage() {
                                   <span>Move to Worker</span>
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleDeleteVendor(v)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold border border-rose-200 transition-colors shadow-2xs"
+                                title={`Delete all ${v.billsCount} payment record(s) for ${v.vendorName}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Delete</span>
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1977,7 +2097,7 @@ export default function PaymentsPage() {
                     >
                       {workers.map((w) => (
                         <option key={w.id} value={w.id}>
-                          {w.name} ({w.workerCode || 'ID'}) - ₹{w.dailyRate || dailyRate}/day
+                          {w.name} ({w.workerCode || 'ID'}) - ₹{typeof w.dailyRate === 'number' ? w.dailyRate : 0}/day
                         </option>
                       ))}
                     </select>
@@ -2228,7 +2348,7 @@ export default function PaymentsPage() {
                       >
                         {workers.map((w) => (
                           <option key={w.id} value={w.id}>
-                            {w.name} ({w.workerCode || 'ID'}) - ₹{w.dailyRate || dailyRate}/day
+                            {w.name} ({w.workerCode || 'ID'}) - ₹{typeof w.dailyRate === 'number' ? w.dailyRate : 0}/day
                           </option>
                         ))}
                       </select>
@@ -2454,6 +2574,15 @@ export default function PaymentsPage() {
         onClose={() => setShowRecycleBin(false)}
         onItemRestored={loadData}
       />
+
+      {/* Worker Profile Dossier 360° Modal */}
+      {selectedDossierWorker && (
+        <WorkerProfileDossierModal
+          worker={selectedDossierWorker}
+          onClose={() => setSelectedDossierWorker(null)}
+          onWorkerUpdated={loadData}
+        />
+      )}
     </div>
   );
 }

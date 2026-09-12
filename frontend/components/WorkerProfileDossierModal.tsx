@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
-  User,
   Phone,
   Calendar,
   DollarSign,
@@ -13,7 +11,6 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  ArrowUpRight,
   ArrowDownLeft,
   Filter,
   Download,
@@ -21,22 +18,20 @@ import {
   Sparkles,
   ExternalLink,
   Plus,
-  Edit2,
-  ChevronRight,
   ShieldCheck,
-  AlertCircle,
   X,
-  Smartphone,
   CreditCard,
-  Layers,
   Award,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  MapPin,
 } from 'lucide-react';
-import { WorkersService } from '@/services/workers.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { PaymentLedgerService } from '@/services/payment-ledger.service';
 import { SitesService } from '@/services/sites.service';
 import { WorkerPhotosService } from '@/services/workerPhotos.service';
-import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime } from '@/lib/formatters';
 import type { Worker, WorkerPhoto } from '@/types/worker';
 import type { AttendanceRecord } from '@/types/attendance';
 import type { PaymentLedgerEntry } from '@/types/payment';
@@ -76,6 +71,42 @@ export default function WorkerProfileDossierModal({
   const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
 
   const today = getTodayDateString();
+
+  // Interactive Month Calendar State for Attendance History Tab
+  const [calendarYear, setCalendarYear] = useState<number>(() => {
+    const todayParts = getTodayDateString().split('-');
+    return parseInt(todayParts[0] || '2026', 10) || new Date().getFullYear();
+  });
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => {
+    const todayParts = getTodayDateString().split('-');
+    return (parseInt(todayParts[1] || '9', 10) || (new Date().getMonth() + 1)) - 1; // 0-indexed
+  });
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
+  const handlePrevMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear((y) => y - 1);
+    } else {
+      setCalendarMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear((y) => y + 1);
+    } else {
+      setCalendarMonth((m) => m + 1);
+    }
+  };
+
+  const handleGoToCurrentMonth = () => {
+    const todayParts = getTodayDateString().split('-');
+    setCalendarYear(parseInt(todayParts[0] || '2026', 10) || new Date().getFullYear());
+    setCalendarMonth((parseInt(todayParts[1] || '9', 10) || (new Date().getMonth() + 1)) - 1);
+    setSelectedCalendarDate(null);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -182,7 +213,7 @@ export default function WorkerProfileDossierModal({
   }, [payments, periodFilter]);
 
   // Calculated Metrics
-  const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : 500;
+  const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate >= 0 ? worker.dailyRate : 0;
 
   const totalHajri = useMemo(() => {
     return filteredAttendance.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
@@ -240,6 +271,100 @@ export default function WorkerProfileDossierModal({
     }).sort((a, b) => b.hajriCount - a.hajriCount);
   }, [filteredAttendance, siteMap, dailyRate, totalHajri]);
 
+  // Computed Month Name for Attendance Calendar
+  const monthName = useMemo(() => {
+    const d = new Date(calendarYear, calendarMonth, 1);
+    return d.toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+  }, [calendarYear, calendarMonth]);
+
+  // Calendar days grid computation
+  const calendarDays = useMemo(() => {
+    const totalDaysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay(); // 0 = Sun, 1 = Mon, ...
+    
+    // Map of dateStr -> AttendanceRecord[]
+    const attendanceMap = new Map<string, AttendanceRecord[]>();
+    attendanceRecords.forEach((r) => {
+      if (!r.date) return;
+      if (!attendanceMap.has(r.date)) {
+        attendanceMap.set(r.date, []);
+      }
+      attendanceMap.get(r.date)!.push(r);
+    });
+
+    const days = [];
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push({
+        dayNumber: null,
+        dateStr: '',
+        records: [] as AttendanceRecord[],
+        isPresent: false,
+        totalHajri: 0,
+        isToday: false,
+        isFuture: false,
+      });
+    }
+
+    const todayStr = getTodayDateString();
+
+    for (let d = 1; d <= totalDaysInMonth; d++) {
+      const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const records = attendanceMap.get(dateStr) || [];
+      const isPresent = records.length > 0;
+      const totalHajri = records.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
+      const isToday = dateStr === todayStr;
+      const isFuture = dateStr > todayStr;
+
+      days.push({
+        dayNumber: d,
+        dateStr,
+        records,
+        isPresent,
+        totalHajri: Number(totalHajri.toFixed(1)),
+        isToday,
+        isFuture,
+      });
+    }
+
+    return days;
+  }, [calendarYear, calendarMonth, attendanceRecords]);
+
+  // Total present days and hajri in active calendar month
+  const calendarMonthStats = useMemo(() => {
+    const monthPrefix = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const monthRecords = attendanceRecords.filter((r) => r.date && r.date.startsWith(monthPrefix));
+    const uniqueDays = new Set(monthRecords.map((r) => r.date)).size;
+    const totalHajri = monthRecords.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
+    const totalEarnings = Math.round(totalHajri * dailyRate);
+    return { uniqueDays, totalHajri: Number(totalHajri.toFixed(1)), totalEarnings };
+  }, [calendarYear, calendarMonth, attendanceRecords, dailyRate]);
+
+  // Selected date record details (if user clicks on a date in the calendar)
+  const selectedDateDetails = useMemo(() => {
+    if (!selectedCalendarDate) return null;
+    const records = attendanceRecords.filter((r) => r.date === selectedCalendarDate);
+    const isPresent = records.length > 0;
+    const totalHajri = records.reduce((sum, r) => sum + (typeof r.hajri === 'number' ? r.hajri : 0), 0);
+    const dayEarnings = Math.round(totalHajri * dailyRate);
+    return {
+      date: selectedCalendarDate,
+      records,
+      isPresent,
+      totalHajri: Number(totalHajri.toFixed(1)),
+      dayEarnings,
+    };
+  }, [selectedCalendarDate, attendanceRecords, dailyRate]);
+
+  // Displayed attendance logs (filtered if date clicked, or all month logs if matching)
+  const displayedAttendance = useMemo(() => {
+    if (selectedCalendarDate) {
+      return attendanceRecords.filter((r) => r.date === selectedCalendarDate);
+    }
+    return filteredAttendance;
+  }, [selectedCalendarDate, attendanceRecords, filteredAttendance]);
+
   // Handle Record Advance / Payment
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,6 +404,91 @@ export default function WorkerProfileDossierModal({
   // 1-Click Print Worker Statement
   const handlePrintStatement = () => {
     window.print();
+  };
+
+  // 1-Click Download Worker Complete Hisab & Khata Statement as CSV / Excel
+  const handleDownloadCsv = () => {
+    const periodLabel = periodFilter === 'all'
+      ? 'All_Time'
+      : periodFilter === 'this_month'
+      ? 'This_Month'
+      : periodFilter === 'last_month'
+      ? 'Last_Month'
+      : 'This_Week';
+
+    const safeWorkerName = (worker.name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${safeWorkerName}_Hisab_Ledger_${periodLabel}_${getTodayDateString()}.csv`;
+
+    const lines: string[] = [];
+
+    // 1. Worker Header Dossier
+    lines.push(`"WORKER HISAB & KHATA STATEMENT"`);
+    lines.push(`"Worker Name","${(worker.name || '').replace(/"/g, '""')}"`);
+    lines.push(`"Worker Code","${(worker.workerCode || 'N/A').replace(/"/g, '""')}"`);
+    lines.push(`"Phone","${(worker.phone || 'N/A').replace(/"/g, '""')}"`);
+    lines.push(`"Role","${(worker.role || 'General Worker').replace(/"/g, '""')}"`);
+    lines.push(`"Daily Wage Rate","₹${dailyRate}/day"`);
+    lines.push(`"Statement Period","${periodFilter.toUpperCase()}"`);
+    lines.push(`"Generated On","${new Date().toLocaleString('en-IN')}"`);
+    lines.push(``);
+
+    // 2. Financial Summary KPI
+    lines.push(`"FINANCIAL SUMMARY"`);
+    lines.push(`"Total Hajri Units","${totalHajri.toFixed(1)} Hajri"`);
+    lines.push(`"Total Gross Wages Earned","₹${grossEarnings}"`);
+    lines.push(`"Total Advances / Payments Received","₹${totalPaidAll}"`);
+    lines.push(`"Net Balance (Payable / Due)","₹${netPayableBalance}"`);
+    lines.push(`"Status","${netPayableBalance > 0 ? 'Payment Due' : netPayableBalance === 0 ? 'Settled' : 'Advance Excess'}"`);
+    lines.push(``);
+
+    // 3. Site-Wise Hajri Distribution
+    lines.push(`"SITE-WISE HAJRI BREAKDOWN"`);
+    lines.push(`"Site Name","Hajri Count","Earnings (₹)","% of Total"`);
+    siteBreakdown.forEach((s) => {
+      lines.push(`"${s.siteName.replace(/"/g, '""')}","${s.hajriCount} Hajri","₹${s.siteEarnings}","${s.pct}%"`);
+    });
+    lines.push(``);
+
+    // 4. Detailed Attendance & Hajri Logs
+    lines.push(`"DAILY ATTENDANCE & HAJRI LOGS"`);
+    lines.push(`"Date","Site","Check-In","Check-Out","Worked Hours","Hajri","Daily Earnings (₹)","Status"`);
+    filteredAttendance
+      .slice()
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+      .forEach((r) => {
+        const sName = siteMap.get(r.siteId) || 'Site';
+        const hVal = typeof r.hajri === 'number' ? r.hajri : 0;
+        const dayEarn = Math.round(hVal * dailyRate);
+        const inTime = formatTime(r.checkInTime, '10:00 AM');
+        const outTime = formatTime(r.checkOutTime, '-');
+        lines.push(
+          `"${r.date}","${sName.replace(/"/g, '""')}","${inTime}","${outTime}","${r.workedHours || '-'}","${hVal} Hajri","₹${dayEarn}","${r.status || 'present'}"`
+        );
+      });
+    lines.push(``);
+
+    // 5. Payment & Advance Ledger History
+    lines.push(`"PAYMENTS & ADVANCES HISTORY"`);
+    lines.push(`"Date","Time","Category","Payment Method","Amount (₹)","UPI / Payee Details","Notes / Purpose","Recorded By"`);
+    filteredPayments
+      .slice()
+      .sort((a, b) => (b.paymentDate || '').localeCompare(a.paymentDate || ''))
+      .forEach((p) => {
+        lines.push(
+          `"${p.paymentDate}","${p.paymentTime || '-'}","${(p.category || 'advance').toUpperCase()}","${(p.paymentMethod || 'gpay').toUpperCase()}","${p.amount}","${(p.upiId || p.paidTo || '').replace(/"/g, '""')}","${(p.notes || '').replace(/"/g, '""')}","${(p.recordedBy || 'Admin').replace(/"/g, '""')}"`
+        );
+      });
+
+    const csvContent = '\uFEFF' + lines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -367,6 +577,15 @@ export default function WorkerProfileDossierModal({
                 <span>+ Give Advance / Payment</span>
               </button>
               
+              <button
+                onClick={handleDownloadCsv}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-extrabold border border-emerald-400/40 transition-all shadow-sm active:scale-95"
+                title="Download Complete Hisab / Khata Ledger in Excel CSV format"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Download Excel (CSV)</span>
+              </button>
+
               <button
                 onClick={handlePrintStatement}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/10 transition-colors"
@@ -744,60 +963,266 @@ export default function WorkerProfileDossierModal({
               )}
             </div>
           ) : activeTab === 'attendance' ? (
-            /* TAB 3: ATTENDANCE HISTORY TIMELINE */
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 mb-1 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                  <span>Daily Attendance Log & Verification</span>
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Every attendance session logged by AI Face Recognition or QR check-in:
-                </p>
+            /* TAB 3: ATTENDANCE HISTORY & INTERACTIVE MONTH CALENDAR */
+            <div className="space-y-6">
+              {/* Header Title */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 mb-0.5 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    <span>Monthly Attendance Calendar & Verification</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Interactive calendar with present dates marked in green • Tap any date to view complete shift logs
+                  </p>
+                </div>
               </div>
 
-              {filteredAttendance.length === 0 ? (
-                <div className="p-12 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500">
-                  No attendance records logged in the selected period.
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {filteredAttendance.map((r) => (
-                    <div
-                      key={r.id}
-                      className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between gap-4 text-xs hover:border-slate-300 transition-all"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
-                          <Clock className="w-4 h-4" />
-                        </div>
+              {/* 1. Interactive Month Calendar Card (Compact & Clean Circular Design) */}
+              <div className="max-w-xl mx-auto w-full p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-4">
+                {/* Month Navigator Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
+                      <CalendarDays className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 capitalize tracking-tight flex items-center gap-2">
+                        <span>{monthName}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-200">
+                          {calendarMonthStats.uniqueDays} Days Present • {calendarMonthStats.totalHajri} Hajri
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        Monthly Earned: <span className="font-extrabold text-slate-700">₹{calendarMonthStats.totalEarnings.toLocaleString('en-IN')}</span>
+                      </p>
+                    </div>
+                  </div>
 
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-slate-900 text-sm">{r.date}</span>
-                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-black border border-blue-200">
-                              {typeof r.hajri === 'number' ? r.hajri : 0} Hajri
+                  {/* Navigation Controls */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handlePrevMonth}
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-2xs"
+                      title="Previous Month"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGoToCurrentMonth}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors shadow-2xs"
+                    >
+                      This Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNextMonth}
+                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-2xs"
+                      title="Next Month"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Calendar 7-Day Grid */}
+                <div className="w-full">
+                  {/* Weekday Names Header */}
+                  <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    <span className="text-rose-400">Sun</span>
+                    <span>Mon</span>
+                    <span>Tue</span>
+                    <span>Wed</span>
+                    <span>Thu</span>
+                    <span>Fri</span>
+                    <span>Sat</span>
+                  </div>
+
+                  {/* Day Cells (No Boxes, Clean Circular Translucent Badges) */}
+                  <div className="grid grid-cols-7 gap-y-2 gap-x-1 sm:gap-x-2 place-items-center">
+                    {calendarDays.map((cell, idx) => {
+                      if (!cell.dayNumber) {
+                        return <div key={`empty-${idx}`} className="w-8 h-8 sm:w-9 sm:h-9" />;
+                      }
+
+                      const isSelected = selectedCalendarDate === cell.dateStr;
+
+                      return (
+                        <button
+                          key={cell.dateStr}
+                          type="button"
+                          onClick={() => {
+                            if (selectedCalendarDate === cell.dateStr) {
+                              setSelectedCalendarDate(null);
+                            } else {
+                              setSelectedCalendarDate(cell.dateStr);
+                            }
+                          }}
+                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm transition-all cursor-pointer relative group ${
+                            isSelected
+                              ? 'ring-2 ring-blue-600 ring-offset-2 scale-110 font-black z-10 ' + (cell.isPresent ? 'bg-emerald-500/30 border border-emerald-500 text-emerald-950' : 'bg-blue-600 text-white shadow-xs')
+                              : cell.isPresent
+                              ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-900 font-extrabold hover:bg-emerald-500/30 shadow-2xs'
+                              : cell.isToday
+                              ? 'border border-blue-400 text-blue-600 font-bold hover:bg-blue-50'
+                              : cell.isFuture
+                              ? 'text-slate-300 opacity-40 hover:bg-slate-50'
+                              : 'text-slate-700 hover:bg-slate-100 font-medium'
+                          }`}
+                          title={`${cell.dateStr}${cell.isPresent ? ` • Present (${cell.totalHajri} Hajri)` : ''}`}
+                        >
+                          <span>{cell.dayNumber}</span>
+                          {cell.isToday && !isSelected && (
+                            <span className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-blue-600" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Selected Day Inspection Box */}
+                {selectedDateDetails && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 text-white shadow-lg space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className="text-sm font-black text-white">
+                            {new Date(selectedDateDetails.date + 'T00:00:00').toLocaleDateString('en-IN', {
+                              weekday: 'long',
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </h5>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            selectedDateDetails.isPresent
+                              ? 'bg-emerald-500 text-white shadow-xs'
+                              : 'bg-rose-500/80 text-white'
+                          }`}>
+                            {selectedDateDetails.isPresent ? `Present (${selectedDateDetails.totalHajri} Hajri)` : 'Absent / No Log'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-200 mt-0.5">
+                          {selectedDateDetails.isPresent
+                            ? `Daily Wages: ₹${selectedDateDetails.dayEarnings.toLocaleString('en-IN')} (${selectedDateDetails.totalHajri} Hajri × ₹${dailyRate})`
+                            : 'No attendance was recorded on this date.'}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCalendarDate(null)}
+                        className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                        title="Close Inspector"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {selectedDateDetails.records.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/10 text-xs">
+                        {selectedDateDetails.records.map((rec, i) => (
+                          <div key={rec.id || i} className="p-2.5 rounded-xl bg-white/10 space-y-1">
+                            <div className="flex items-center justify-between font-bold">
+                              <span className="text-emerald-300 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5" />
+                                <span>{siteMap.get(rec.siteId) || 'Site'}</span>
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 text-[10px] font-mono">
+                                {rec.hajri || 1} Hajri
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-300 flex items-center gap-3">
+                              <span>Check-In: <strong>{formatTime(rec.checkInTime, '10:00 AM')}</strong></span>
+                              <span>Check-Out: <strong>{formatTime(rec.checkOutTime, '—')}</strong></span>
+                              {rec.workedHours && <span>({rec.workedHours} hrs)</span>}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Method: {rec.method === 'face_recognition' ? 'AI Neural Face Match' : (rec.method === 'worker_qr_whatsapp' ? '1-Tap QR Checkin' : (rec.method || 'Manual Checkin'))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Detailed Attendance Logs Timeline List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Attendance Records List ({displayedAttendance.length})</span>
+                  </h4>
+                  {selectedCalendarDate && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCalendarDate(null)}
+                      className="text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      Showing {selectedCalendarDate} • View All Logs
+                    </button>
+                  )}
+                </div>
+
+                {displayedAttendance.length === 0 ? (
+                  <div className="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500">
+                    No attendance records found for {selectedCalendarDate ? selectedCalendarDate : 'the selected period'}.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {displayedAttendance
+                      .slice()
+                      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+                      .map((r) => (
+                        <div
+                          key={r.id}
+                          className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-4 text-xs hover:border-blue-300 transition-all"
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                              <Clock className="w-4 h-4" />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-slate-900 text-sm">{r.date}</span>
+                                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-black border border-blue-200">
+                                  {typeof r.hajri === 'number' ? r.hajri : 0} Hajri
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-extrabold border border-emerald-200">
+                                  ₹{Math.round((typeof r.hajri === 'number' ? r.hajri : 0) * dailyRate).toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              <p className="text-slate-500 text-xs font-medium mt-0.5">
+                                Site: <span className="font-bold text-slate-700">{siteMap.get(r.siteId) || 'Construction Site'}</span>
+                              </p>
+                              <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
+                                <span>In: <strong>{formatTime(r.checkInTime, '10:00 AM')}</strong></span>
+                                <span>Out: <strong>{formatTime(r.checkOutTime, '—')}</strong></span>
+                                {r.workedHours && <span>({r.workedHours} hrs)</span>}
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                Method: {r.method === 'face_recognition' ? 'SFace Neural AI Match' : (r.method === 'worker_qr_whatsapp' ? '1-Tap QR Checkin' : (r.method || 'Manual Log'))}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] uppercase">
+                              <CheckCircle className="w-3 h-3 text-emerald-600" />
+                              <span>Present</span>
                             </span>
                           </div>
-                          <p className="text-slate-500 text-xs font-medium mt-0.5">
-                            Site: <span className="font-bold text-slate-700">{siteMap.get(r.siteId) || 'Construction Site'}</span>
-                          </p>
-                          <p className="text-[10px] text-slate-400">
-                            Method: {r.method === 'face_recognition' ? 'SFace Neural AI Match' : (r.method === 'worker_qr_whatsapp' ? '1-Tap QR Checkin' : (r.method || 'Manual Log'))}
-                          </p>
                         </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] uppercase">
-                          <CheckCircle className="w-3 h-3 text-emerald-600" />
-                          <span>Present</span>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             /* TAB 4: PHOTOS & AI BIOMETRICS */

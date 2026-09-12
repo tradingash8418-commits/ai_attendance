@@ -518,7 +518,7 @@ export default function AttendancePage() {
                           <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold mr-1.5 border border-slate-200">
                             {worker.role || 'General Worker'}
                           </span>
-                          <span className="font-extrabold text-blue-700">₹{worker.dailyRate || 500}/day</span>
+                          <span className="font-extrabold text-blue-700">₹{typeof worker.dailyRate === 'number' ? worker.dailyRate : 0}/day</span>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 font-black text-[11px] border border-rose-200">

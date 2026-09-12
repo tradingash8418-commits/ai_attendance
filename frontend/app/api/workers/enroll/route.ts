@@ -11,8 +11,8 @@ export async function POST(request: Request) {
     const rawWorkerCode = (formData.get('workerCode') as string || '').trim();
     const phone = (formData.get('phone') as string || '').trim();
     const role = (formData.get('role') as string || 'General Worker').trim();
-    const dailyRateStr = (formData.get('dailyRate') as string || '500').trim();
-    const dailyRate = !isNaN(parseFloat(dailyRateStr)) ? parseFloat(dailyRateStr) : 500;
+    const dailyRateStr = (formData.get('dailyRate') as string || '0').trim();
+    const dailyRate = !isNaN(parseFloat(dailyRateStr)) && parseFloat(dailyRateStr) >= 0 ? parseFloat(dailyRateStr) : 0;
     const file = formData.get('file') as File | null;
 
     if (!name) {

@@ -9,12 +9,6 @@ import {
   Receipt,
   DollarSign,
   TrendingUp,
-  Calendar,
-  Building2,
-  ExternalLink,
-  CreditCard,
-  Truck,
-  ShieldCheck,
   Eye,
   CheckCircle,
 } from 'lucide-react';

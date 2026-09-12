@@ -130,7 +130,7 @@ export class WhatsAppFeedbackServer {
           messageLines.push(`   Check-in: ${checkInFormatted} (📍 Site: ${checkInSiteName})`);
 
           if (hasCheckedOut && checkOutFormatted) {
-            const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate > 0 ? worker.dailyRate : 500;
+            const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate >= 0 ? worker.dailyRate : 0;
             const todaySalary = Math.round(hajriVal * dailyRate);
 
             // Fetch lifetime attendance for this worker under contractor's orgId
