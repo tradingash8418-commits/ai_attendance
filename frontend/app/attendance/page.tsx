@@ -23,7 +23,7 @@ import { AttendanceSessionsService } from '@/services/attendanceSessions.service
 import { SitesService } from '@/services/sites.service';
 import { WorkersService } from '@/services/workers.service';
 import WorkerProfileDossierModal from '@/components/WorkerProfileDossierModal';
-import { getWorkerDisplayName, getTodayDateString, formatTime, convertTimeToIsoString } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime, convertTimeToIsoString, compareWorkerCodes } from '@/lib/formatters';
 import type { AttendanceSession, AttendanceRecord } from '@/types/attendance';
 import type { Site } from '@/types/site';
 import type { Worker } from '@/types/worker';
@@ -114,7 +114,7 @@ export default function AttendancePage() {
       const wCode = (w.workerCode || '').toLowerCase();
       const wPhone = (w.phone || '').toLowerCase();
       return wName.includes(q) || wCode.includes(q) || wPhone.includes(q);
-    });
+    }).sort(compareWorkerCodes);
   }, [workers, presentWorkerIds, searchTerm]);
 
   // Date Navigation Helpers
@@ -219,17 +219,25 @@ export default function AttendancePage() {
     return 'bg-slate-50 text-slate-600 border-slate-200';
   };
 
-  // Filtered records based on search & site filter
-  const filteredRecords = records.filter((r) => {
-    const worker = workers.find((w) => w.id === r.workerId || w.workerCode === r.workerId);
-    const workerName = worker ? worker.name.toLowerCase() : '';
-    const workerCode = worker?.workerCode ? worker.workerCode.toLowerCase() : '';
-    const q = searchTerm.toLowerCase();
+  // Filtered records based on search & site filter (Sorted by Worker ID)
+  const filteredRecords = useMemo(() => {
+    return records
+      .filter((r) => {
+        const worker = workers.find((w) => w.id === r.workerId || w.workerCode === r.workerId);
+        const workerName = worker ? worker.name.toLowerCase() : '';
+        const workerCode = worker?.workerCode ? worker.workerCode.toLowerCase() : '';
+        const q = searchTerm.toLowerCase();
 
-    const matchesSearch = !searchTerm || workerName.includes(q) || workerCode.includes(q) || r.workerId.toLowerCase().includes(q);
-    const matchesSite = siteFilter === 'all' || r.siteId === siteFilter;
-    return matchesSearch && matchesSite;
-  });
+        const matchesSearch = !searchTerm || workerName.includes(q) || workerCode.includes(q) || r.workerId.toLowerCase().includes(q);
+        const matchesSite = siteFilter === 'all' || r.siteId === siteFilter;
+        return matchesSearch && matchesSite;
+      })
+      .sort((a, b) => {
+        const workerA = workers.find((w) => w.id === a.workerId || w.workerCode === a.workerId);
+        const workerB = workers.find((w) => w.id === b.workerId || w.workerCode === b.workerId);
+        return compareWorkerCodes(workerA || { name: a.workerId }, workerB || { name: b.workerId });
+      });
+  }, [records, workers, searchTerm, siteFilter]);
 
   const totalHajriInView = filteredRecords.reduce((sum, r) => {
     const h = typeof r.hajri === 'number' ? r.hajri : 0;

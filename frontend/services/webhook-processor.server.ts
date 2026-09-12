@@ -11,7 +11,13 @@ import { PaymentOcrService } from './payment-ocr.service';
 import { PaymentLedgerService } from './payment-ledger.service';
 import { SupervisorsService } from './supervisors.service';
 import { OrgContextService } from './org-context.service';
-import { getTodayDateString, normalizeWhatsAppNumber, getWorkerDisplayName } from '@/lib/formatters';
+import {
+  getTodayDateString,
+  normalizeWhatsAppNumber,
+  getWorkerDisplayName,
+  normalizeWorkerCode,
+  cleanWorkerCodeForComparison,
+} from '@/lib/formatters';
 import type { PaymentCategory, PaymentMethod } from '@/types/payment';
 
 export class WebhookProcessorServer {
@@ -952,11 +958,23 @@ export function findBestWorkerMatch(
     if (exactMatch) return exactMatch;
   }
 
-  // Tier 2: EXACT Worker Code Match (e.g. "WRK-001" or "0692")
+  // Tier 2: EXACT Worker Code Match (e.g. "WRK-0035", "0035", "35", "WRK-001")
   if (rawClean) {
-    const codeMatch = allWorkers.find(
-      (w) => w.workerCode && w.workerCode.trim().toLowerCase() === rawClean
-    );
+    const rawCleanToken = cleanWorkerCodeForComparison(rawClean);
+    const rawCleanNorm = normalizeWorkerCode(rawClean).toLowerCase();
+
+    const codeMatch = allWorkers.find((w) => {
+      if (!w.workerCode) return false;
+      const wRaw = w.workerCode.trim().toLowerCase();
+      const wCleanToken = cleanWorkerCodeForComparison(w.workerCode);
+      const wNorm = normalizeWorkerCode(w.workerCode).toLowerCase();
+
+      return (
+        wRaw === rawClean ||
+        wNorm === rawCleanNorm ||
+        (rawCleanToken && wCleanToken && wCleanToken === rawCleanToken)
+      );
+    });
     if (codeMatch) return codeMatch;
   }
 

@@ -25,6 +25,79 @@ export const normalizeWhatsAppNumber = (input: string): string => {
 };
 
 /**
+ * Normalizes any worker code into standard uppercase format (e.g. '0035' -> 'WRK-0035', '35' -> 'WRK-0035', 'wrk-0035' -> 'WRK-0035')
+ */
+export const normalizeWorkerCode = (code?: string): string => {
+  if (!code) return '';
+  const trimmed = code.trim().toUpperCase();
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
+    return `WRK-${String(num).padStart(4, '0')}`;
+  }
+  const match = trimmed.match(/^WRK[-_\s]*0*(\d+)$/i);
+  if (match && match[1]) {
+    const num = parseInt(match[1], 10);
+    return `WRK-${String(num).padStart(4, '0')}`;
+  }
+  return trimmed;
+};
+
+/**
+ * Cleans a worker code or search term to bare numeric token for flexible comparison.
+ * e.g. "WRK-0035", "wrk-35", "0035", "35" all become "35".
+ */
+export const cleanWorkerCodeForComparison = (code?: string): string => {
+  if (!code) return '';
+  const cleaned = code.trim().toLowerCase().replace(/^wrk[-_\s]*/i, '').replace(/^0+/, '');
+  return cleaned || code.trim().toLowerCase();
+};
+
+/**
+ * Compares two workers or objects containing workerCode (or strings) in ascending numerical/natural order.
+ * e.g. "WRK-001" < "WRK-002" < "WRK-0010" < "WRK-0027" < "WRK-0035" < "WRK-0038".
+ * Items with valid codes are listed first in numerical order, followed by items without codes sorted by name.
+ */
+export const compareWorkerCodes = (
+  a?: { workerCode?: string; name?: string; workerName?: string } | string | null,
+  b?: { workerCode?: string; name?: string; workerName?: string } | string | null
+): number => {
+  const getCode = (item: any): string => {
+    if (!item) return '';
+    if (typeof item === 'string') return item.trim();
+    return (item.workerCode || '').trim();
+  };
+
+  const getName = (item: any): string => {
+    if (!item || typeof item === 'string') return '';
+    return (item.name || item.workerName || '').trim().toLowerCase();
+  };
+
+  const codeA = getCode(a);
+  const codeB = getCode(b);
+
+  if (codeA && codeB) {
+    const numMatchA = codeA.match(/(\d+)/);
+    const numMatchB = codeB.match(/(\d+)/);
+
+    if (numMatchA && numMatchA[1] && numMatchB && numMatchB[1]) {
+      const numA = parseInt(numMatchA[1], 10);
+      const numB = parseInt(numMatchB[1], 10);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        return numA - numB;
+      }
+    }
+    const codeCmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    if (codeCmp !== 0) return codeCmp;
+  } else if (codeA && !codeB) {
+    return -1;
+  } else if (!codeA && codeB) {
+    return 1;
+  }
+
+  return getName(a).localeCompare(getName(b));
+};
+
+/**
  * Generates a unambiguous display name for a worker to handle duplicate/same names.
  * Example: "Ramesh Kumar (#WRK-002)" or "Ramesh Kumar (+919876543210)"
  */

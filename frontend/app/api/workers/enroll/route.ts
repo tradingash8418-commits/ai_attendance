@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { WorkersService } from '@/services/workers.service';
 import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
 import { ImageStorageServer } from '@/services/image-storage.server';
+import { normalizeWorkerCode } from '@/lib/formatters';
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const name = (formData.get('name') as string || '').trim();
-    const workerCode = (formData.get('workerCode') as string || '').trim();
+    const rawWorkerCode = (formData.get('workerCode') as string || '').trim();
     const phone = (formData.get('phone') as string || '').trim();
     const role = (formData.get('role') as string || 'General Worker').trim();
     const dailyRateStr = (formData.get('dailyRate') as string || '500').trim();
@@ -18,8 +19,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Worker name is required' }, { status: 400 });
     }
 
-    if (!workerCode) {
-      return NextResponse.json({ error: 'Worker Code (e.g. WRK-006) is required' }, { status: 400 });
+    const allWorkers = await WorkersService.getWorkers();
+    const workerCode = rawWorkerCode
+      ? normalizeWorkerCode(rawWorkerCode)
+      : WorkersService.generateNextWorkerCode(allWorkers);
+
+    if (WorkersService.isWorkerCodeTaken(workerCode, allWorkers)) {
+      return NextResponse.json(
+        { error: `Worker Code "${workerCode}" is already in use. Please choose a unique Worker Code.` },
+        { status: 400 }
+      );
     }
 
     let photoUrl = '';

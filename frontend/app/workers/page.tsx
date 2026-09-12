@@ -29,7 +29,7 @@ import { WorkerPhotosService } from '@/services/workerPhotos.service';
 import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { PaymentLedgerService, WorkerKhataSummary } from '@/services/payment-ledger.service';
-import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, normalizeWorkerCode, compareWorkerCodes } from '@/lib/formatters';
 import type { Worker, WorkerPhoto } from '@/types/worker';
 import type { AttendanceRecord } from '@/types/attendance';
 import { compressImageFile } from '@/lib/image-compress';
@@ -111,7 +111,15 @@ export default function WorkersPage() {
       return;
     }
 
-    const nextCode = workerCode.trim() || `WRK-00${workers.length + 1}`;
+    const nextCode = workerCode.trim()
+      ? normalizeWorkerCode(workerCode.trim())
+      : WorkersService.generateNextWorkerCode(workers);
+
+    if (WorkersService.isWorkerCodeTaken(nextCode, workers)) {
+      setErrorMsg(`Worker Code "${nextCode}" is already in use by another worker. Please choose a unique Worker Code.`);
+      return;
+    }
+
     setSubmitting(true);
     setErrorMsg(null);
 
@@ -191,6 +199,15 @@ export default function WorkersPage() {
       return;
     }
 
+    const trimmedCode = editWorkerCode.trim();
+    if (trimmedCode) {
+      const normCode = normalizeWorkerCode(trimmedCode);
+      if (WorkersService.isWorkerCodeTaken(normCode, workers, editingWorker.id)) {
+        setEditError(`Worker Code "${normCode}" is already assigned to another worker. Please choose a unique Worker Code.`);
+        return;
+      }
+    }
+
     setEditSubmitting(true);
     setEditError(null);
 
@@ -198,7 +215,7 @@ export default function WorkersPage() {
       await WorkersService.updateWorker(editingWorker.id, {
         name: editName.trim(),
         phone: editPhone.trim(),
-        workerCode: editWorkerCode.trim(),
+        workerCode: trimmedCode ? normalizeWorkerCode(trimmedCode) : '',
         role: editRole.trim(),
         dailyRate: rateNum,
       });
@@ -288,7 +305,7 @@ export default function WorkersPage() {
         return Boolean(w.photoUrl);
       }
       return true;
-    });
+    }).sort(compareWorkerCodes);
   }, [workers, searchTerm, workerFilterTab, presentTodayWorkerIds]);
 
   return (
@@ -305,7 +322,8 @@ export default function WorkersPage() {
 
         <button
           onClick={() => {
-            setWorkerCode(`WRK-00${workers.length + 1}`);
+            const nextCode = WorkersService.generateNextWorkerCode(workers);
+            setWorkerCode(nextCode);
             setShowAddModal(true);
           }}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-lg transition-all active:scale-95"

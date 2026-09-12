@@ -8,6 +8,7 @@ import { WorkersService } from './workers.service';
 import { AttendanceService } from './attendance.service';
 import { OrgContextService } from './org-context.service';
 import { RecycleBinService } from './recycle-bin.service';
+import { compareWorkerCodes } from '@/lib/formatters';
 import type { PaymentLedgerEntry, PaymentCategory, PaymentMethod } from '@/types/payment';
 
 const COLLECTION_NAME = 'paymentLedger';
@@ -266,6 +267,14 @@ export class PaymentLedgerService {
         recentPayments: tempPayments.slice(0, 5),
       });
     }
+
+    summaries.sort((a, b) => {
+      const aTemp = a.workerId.startsWith('temp_');
+      const bTemp = b.workerId.startsWith('temp_');
+      if (aTemp && !bTemp) return 1;
+      if (!aTemp && bTemp) return -1;
+      return compareWorkerCodes(a, b);
+    });
 
     return {
       summaries,

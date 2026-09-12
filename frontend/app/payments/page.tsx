@@ -32,7 +32,7 @@ import { WorkersService } from '@/services/workers.service';
 import { SitesService } from '@/services/sites.service';
 import RecycleBinModal from '@/components/RecycleBinModal';
 import { compressImageClient } from '@/lib/image-compress';
-import { getTodayDateString } from '@/lib/formatters';
+import { getTodayDateString, compareWorkerCodes } from '@/lib/formatters';
 import type { PaymentLedgerEntry, PaymentCategory, PaymentMethod, ExtractedPaymentData } from '@/types/payment';
 import type { Worker } from '@/types/worker';
 import type { Site } from '@/types/site';
@@ -591,8 +591,8 @@ export default function PaymentsPage() {
     }
   };
 
-  // 1. Registered Karigars (Face Attendance & Hajri Wages Calculation)
-  const registeredSummaries = summaries.filter((s) => !s.workerId.startsWith('temp_'));
+  // 1. Registered Karigars (Face Attendance & Hajri Wages Calculation - Sorted by Worker ID)
+  const registeredSummaries = summaries.filter((s) => !s.workerId.startsWith('temp_')).sort(compareWorkerCodes);
   const filteredAttendanceSummaries = registeredSummaries.filter((s) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -601,7 +601,7 @@ export default function PaymentsPage() {
       (s.phone && s.phone.includes(q)) ||
       (s.workerCode && s.workerCode.toLowerCase().includes(q))
     );
-  });
+  }).sort(compareWorkerCodes);
 
   // 2. Worker Payments Done (All advance and wage payments processed for workers via WhatsApp/OCR/Manual)
   const workerPayments = payments.filter(

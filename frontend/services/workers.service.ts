@@ -5,7 +5,12 @@ import {
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
-import { normalizeWhatsAppNumber } from '@/lib/formatters';
+import {
+  normalizeWhatsAppNumber,
+  normalizeWorkerCode,
+  cleanWorkerCodeForComparison,
+  compareWorkerCodes,
+} from '@/lib/formatters';
 import { OrgContextService } from './org-context.service';
 import type { Worker } from '@/types/worker';
 
@@ -13,6 +18,73 @@ const COLLECTION_NAME = 'workers';
 const DEFAULT_ORG_ID = 'org_primary';
 
 export class WorkersService {
+  /**
+   * Calculates the next guaranteed unique worker code (e.g. WRK-0037).
+   * Finds the highest numeric code in existing workers and increments it,
+   * avoiding any collision with manually created or pre-existing worker codes.
+   */
+  public static generateNextWorkerCode(existingWorkers: Array<{ workerCode?: string }>): string {
+    const existingNumSet = new Set<number>();
+    const existingCodeSet = new Set<string>();
+
+    let maxNum = 0;
+
+    for (const w of existingWorkers) {
+      if (!w.workerCode) continue;
+      const rawCode = w.workerCode.trim();
+      existingCodeSet.add(rawCode.toUpperCase());
+      existingCodeSet.add(cleanWorkerCodeForComparison(rawCode));
+
+      const numMatch = rawCode.match(/(\d+)/);
+      if (numMatch && numMatch[1]) {
+        const parsed = parseInt(numMatch[1], 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          existingNumSet.add(parsed);
+          if (parsed > maxNum) {
+            maxNum = parsed;
+          }
+        }
+      }
+    }
+
+    let candidateNum = Math.max(1, maxNum + 1);
+
+    // Loop until we find a candidate number not used anywhere
+    while (true) {
+      const candidateCode = `WRK-${String(candidateNum).padStart(4, '0')}`;
+      const candidateClean = cleanWorkerCodeForComparison(candidateCode);
+
+      if (!existingNumSet.has(candidateNum) && !existingCodeSet.has(candidateCode) && !existingCodeSet.has(candidateClean)) {
+        return candidateCode;
+      }
+      candidateNum++;
+    }
+  }
+
+  /**
+   * Checks whether a worker code is already assigned to another worker.
+   */
+  public static isWorkerCodeTaken(
+    code: string,
+    existingWorkers: Array<{ id?: string; workerCode?: string }>,
+    excludeWorkerId?: string
+  ): boolean {
+    if (!code || !code.trim()) return false;
+    const targetClean = cleanWorkerCodeForComparison(code);
+    const targetNorm = normalizeWorkerCode(code);
+
+    return existingWorkers.some((w) => {
+      if (excludeWorkerId && w.id === excludeWorkerId) return false;
+      if (!w.workerCode) return false;
+      const wClean = cleanWorkerCodeForComparison(w.workerCode);
+      const wNorm = normalizeWorkerCode(w.workerCode);
+      return (
+        wClean === targetClean ||
+        wNorm.toUpperCase() === targetNorm.toUpperCase() ||
+        w.workerCode.trim().toUpperCase() === code.trim().toUpperCase()
+      );
+    });
+  }
   public static async getWorkers(orgId?: string): Promise<Worker[]> {
     const targetOrg = orgId || OrgContextService.getOrgId();
     const docs = await OrgContextService.getDocsWithFallback(
@@ -56,6 +128,8 @@ export class WorkersService {
       }
       return w;
     });
+
+    sanitizedResult.sort(compareWorkerCodes);
 
     return sanitizedResult;
   }
@@ -158,7 +232,7 @@ export class WorkersService {
         : defaultWorkerName;
 
     const allWorkers = await this.getWorkers(finalOrgId);
-    const nextWorkerCode = `WRK-00${allWorkers.length + 1}`;
+    const nextWorkerCode = this.generateNextWorkerCode(allWorkers);
 
     const newId = await this.createWorker(
       {
@@ -199,12 +273,14 @@ export class WorkersService {
     const targetOrgId = orgId || OrgContextService.getOrgId();
     const docRef = OrgContextService.getDocRef(COLLECTION_NAME, docId, targetOrgId);
     const now = serverTimestamp();
+    const normalizedCode = data.workerCode ? normalizeWorkerCode(data.workerCode) : '';
+
     await setDoc(
       docRef,
       {
         organizationId: targetOrgId,
         name: data.name.trim(),
-        workerCode: data.workerCode?.trim() || '',
+        workerCode: normalizedCode,
         phone: data.phone?.trim() || '',
         role: data.role?.trim() || 'General Worker',
         dailyRate: typeof data.dailyRate === 'number' && data.dailyRate > 0 ? data.dailyRate : 500,
@@ -232,10 +308,12 @@ export class WorkersService {
     const targetOrgId = orgId || OrgContextService.getOrgId();
     const colRef = OrgContextService.getCollection(COLLECTION_NAME, targetOrgId);
     const now = serverTimestamp();
+    const normalizedCode = data.workerCode ? normalizeWorkerCode(data.workerCode) : '';
+
     const docRef = await addDoc(colRef, {
       organizationId: targetOrgId,
       name: data.name.trim(),
-      workerCode: data.workerCode?.trim() || '',
+      workerCode: normalizedCode,
       phone: data.phone?.trim() || '',
       role: data.role?.trim() || 'General Worker',
       dailyRate: typeof data.dailyRate === 'number' && data.dailyRate > 0 ? data.dailyRate : 500,
@@ -253,10 +331,11 @@ export class WorkersService {
     orgId?: string
   ): Promise<void> {
     const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
-    await updateDoc(res.ref, {
-      ...data,
-      updatedAt: serverTimestamp(),
-    });
+    const updatePayload: any = { ...data, updatedAt: serverTimestamp() };
+    if (typeof data.workerCode !== 'undefined') {
+      updatePayload.workerCode = data.workerCode ? normalizeWorkerCode(data.workerCode) : '';
+    }
+    await updateDoc(res.ref, updatePayload);
   }
 
   public static async toggleWorkerActive(id: string, active: boolean, orgId?: string): Promise<void> {

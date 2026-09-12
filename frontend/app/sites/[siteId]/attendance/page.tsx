@@ -17,7 +17,7 @@ import { SitesService } from '@/services/sites.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { SiteAssignmentsService } from '@/services/siteAssignments.service';
 import { WorkersService } from '@/services/workers.service';
-import { getWorkerDisplayName, getTodayDateString, formatTime } from '@/lib/formatters';
+import { getWorkerDisplayName, getTodayDateString, formatTime, compareWorkerCodes } from '@/lib/formatters';
 import type { Site } from '@/types/site';
 import type { AttendanceRecord } from '@/types/attendance';
 import type { Worker } from '@/types/worker';
@@ -50,13 +50,19 @@ export default function SiteAttendancePage() {
         WorkersService.getWorkers(),
       ]);
 
+      const sortedRecords = records.slice().sort((a, b) => {
+        const workerA = workersList.find((w) => w.id === a.workerId || w.workerCode === a.workerId);
+        const workerB = workersList.find((w) => w.id === b.workerId || w.workerCode === b.workerId);
+        return compareWorkerCodes(workerA || { name: a.workerId }, workerB || { name: b.workerId });
+      });
+
       setSite(siteData);
-      setAttendanceRecords(records);
+      setAttendanceRecords(sortedRecords);
       setAllWorkers(workersList);
 
-      const assignedWorkerList = workersList.filter((w) =>
-        siteAssignments.some((a) => a.workerId === w.id)
-      );
+      const assignedWorkerList = workersList
+        .filter((w) => siteAssignments.some((a) => a.workerId === w.id))
+        .sort(compareWorkerCodes);
       setAssignedWorkers(assignedWorkerList);
     } catch (err) {
       console.error('Failed to load site attendance data:', err);
