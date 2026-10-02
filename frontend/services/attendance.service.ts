@@ -1,6 +1,8 @@
 import {
   addDoc,
   updateDoc,
+  where,
+  QueryConstraint,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -91,33 +93,23 @@ export class AttendanceService {
     orgId?: string
   ): Promise<AttendanceRecord[]> {
     const targetOrg = orgId || OrgContextService.getOrgId();
-    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], targetOrg);
+    const constraints: QueryConstraint[] = [];
+
+    if (filters?.date) {
+      constraints.push(where('date', '==', filters.date));
+    }
+    if (filters?.workerId) {
+      constraints.push(where('workerId', '==', filters.workerId));
+    }
+    if (filters?.siteId) {
+      constraints.push(where('siteId', '==', filters.siteId));
+    }
+
+    const docs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, constraints, targetOrg);
     let records = docs.map((d) => ({
       id: d.id,
       ...d,
     })) as AttendanceRecord[];
-
-    if (targetOrg !== 'org_primary') {
-      try {
-        const primaryDocs = await OrgContextService.getDocsWithFallback(COLLECTION_NAME, [], 'org_primary');
-        const existingIds = new Set(records.map((r) => r.id));
-        for (const pd of primaryDocs) {
-          if (!existingIds.has(pd.id)) {
-            records.push({ id: pd.id, ...pd } as AttendanceRecord);
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (filters?.siteId) {
-      records = records.filter((r) => r.siteId === filters.siteId);
-    }
-    if (filters?.date) {
-      records = records.filter((r) => r.date === filters.date);
-    }
-    if (filters?.workerId) {
-      records = records.filter((r) => r.workerId === filters.workerId);
-    }
 
     return records;
   }

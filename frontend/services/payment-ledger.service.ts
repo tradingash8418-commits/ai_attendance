@@ -2,6 +2,8 @@ import {
   addDoc,
   updateDoc,
   orderBy,
+  where,
+  QueryConstraint,
   serverTimestamp,
 } from 'firebase/firestore';
 import { WorkersService } from './workers.service';
@@ -99,9 +101,25 @@ export class PaymentLedgerService {
     orgId?: string
   ): Promise<PaymentLedgerEntry[]> {
     const targetOrg = orgId || OrgContextService.getOrgId();
+    const constraints: QueryConstraint[] = [];
+
+    if (filters?.workerId) {
+      constraints.push(where('workerId', '==', filters.workerId));
+    }
+    if (filters?.siteId) {
+      constraints.push(where('siteId', '==', filters.siteId));
+    }
+    if (filters?.date) {
+      constraints.push(where('paymentDate', '==', filters.date));
+    }
+
+    if (!filters?.workerId && !filters?.siteId && !filters?.date) {
+      constraints.push(orderBy('paymentDate', 'desc'));
+    }
+
     const docs = await OrgContextService.getDocsWithFallback(
       COLLECTION_NAME,
-      [orderBy('paymentDate', 'desc')],
+      constraints,
       targetOrg
     );
 
@@ -110,36 +128,6 @@ export class PaymentLedgerService {
       ...d,
       paidTo: d.paidTo || d.workerName || 'Recipient',
     })) as PaymentLedgerEntry[];
-
-    if (targetOrg !== 'org_primary') {
-      try {
-        const primaryDocs = await OrgContextService.getDocsWithFallback(
-          COLLECTION_NAME,
-          [orderBy('paymentDate', 'desc')],
-          'org_primary'
-        );
-        const existingIds = new Set(entries.map((e) => e.id));
-        for (const pd of primaryDocs) {
-          if (!existingIds.has(pd.id)) {
-            entries.push({
-              id: pd.id,
-              ...pd,
-              paidTo: pd.paidTo || pd.workerName || 'Recipient',
-            } as PaymentLedgerEntry);
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (filters?.workerId) {
-      entries = entries.filter((e) => e.workerId === filters.workerId);
-    }
-    if (filters?.siteId) {
-      entries = entries.filter((e) => e.siteId === filters.siteId);
-    }
-    if (filters?.date) {
-      entries = entries.filter((e) => e.paymentDate === filters.date);
-    }
 
     return entries;
   }

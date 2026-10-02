@@ -57,9 +57,8 @@ export class OrgContextService {
   }
 
   /**
-   * Dual-read fallback helper:
-   * 1. Checks organizations/{orgId}/{collectionName}/{docId}
-   * 2. If not found, falls back to legacy root collection/{docId} (ONLY for org_primary)
+   * Scoped document read helper:
+   * Checks organizations/{orgId}/{collectionName}/{docId}
    */
   public static async getDocWithFallback(
     collectionName: string,
@@ -74,22 +73,12 @@ export class OrgContextService {
       return { data: orgSnap.data(), isLegacy: false, ref: orgDocRef };
     }
 
-    // Fallback to legacy root collection ONLY for default org_primary
-    if (orgId === DEFAULT_ORG_ID) {
-      const legacyDocRef = doc(customDb, collectionName, docId);
-      const legacySnap = await getDoc(legacyDocRef);
-
-      if (legacySnap.exists()) {
-        return { data: legacySnap.data(), isLegacy: true, ref: legacyDocRef };
-      }
-    }
-
     return { data: null, isLegacy: false, ref: orgDocRef };
   }
 
   /**
-   * Dual-read fallback collection query helper:
-   * Fetches docs from organizations/{orgId}/{collectionName}, and if empty, checks legacy root (ONLY for org_primary).
+   * Scoped collection query helper:
+   * Executes constraints directly on organizations/{orgId}/{collectionName}.
    */
   public static async getDocsWithFallback(
     collectionName: string,
@@ -101,19 +90,10 @@ export class OrgContextService {
     const orgQuery = query(orgColRef, ...constraints);
     const orgSnap = await getDocs(orgQuery);
 
-    if (!orgSnap.empty) {
-      return orgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (orgSnap.empty) {
+      return [];
     }
 
-    // Fallback to legacy root collection ONLY for default org_primary
-    if (orgId === DEFAULT_ORG_ID) {
-      const legacyColRef = collection(customDb, collectionName);
-      const legacyQuery = query(legacyColRef, ...constraints);
-      const legacySnap = await getDocs(legacyQuery);
-
-      return legacySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    }
-
-    return [];
+    return orgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 }

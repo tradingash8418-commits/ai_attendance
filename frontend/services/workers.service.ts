@@ -15,7 +15,6 @@ import { OrgContextService } from './org-context.service';
 import type { Worker } from '@/types/worker';
 
 const COLLECTION_NAME = 'workers';
-const DEFAULT_ORG_ID = 'org_primary';
 
 export class WorkersService {
   /**
@@ -98,33 +97,11 @@ export class WorkersService {
       ...d,
     })) as Worker[];
 
-    // Fallback: If contractor org has docs, but worker was created in default org_primary, merge primary workers
-    if (targetOrg !== DEFAULT_ORG_ID) {
-      try {
-        const primaryDocs = await OrgContextService.getDocsWithFallback(
-          COLLECTION_NAME,
-          [orderBy('createdAt', 'desc')],
-          DEFAULT_ORG_ID
-        );
-        const existingIds = new Set(result.map((w) => w.id));
-        for (const pd of primaryDocs) {
-          if (!existingIds.has(pd.id)) {
-            result.push({ id: pd.id, ...pd } as Worker);
-          }
-        }
-      } catch (e) {
-        console.warn('[WorkersService] Error fetching fallback workers:', e);
-      }
-    }
-
     const sanitizedResult = result.map((w) => {
       if (!w.name || w.name.startsWith('org_')) {
         const phone = w.phone ? normalizeWhatsAppNumber(w.phone) : '';
         const last4 = phone ? phone.slice(-4) : w.id.slice(-4);
-        const cleanName = `Worker (${last4})`;
-        w.name = cleanName;
-        // Background auto-heal update in Firestore
-        this.updateWorker(w.id, { name: cleanName }, targetOrg).catch(() => { });
+        w.name = `Worker (${last4})`;
       }
       return w;
     });
@@ -136,26 +113,13 @@ export class WorkersService {
 
   public static async getWorkerById(id: string, orgId?: string): Promise<Worker | null> {
     const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
-    let worker: Worker | null = null;
-
-    if (res.data) {
-      worker = { id, ...res.data } as Worker;
-    } else if (orgId && orgId !== DEFAULT_ORG_ID) {
-      // Fallback search under DEFAULT_ORG_ID if worker was initially created in primary org
-      const fallbackRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, DEFAULT_ORG_ID);
-      if (fallbackRes.data) {
-        worker = { id, ...fallbackRes.data } as Worker;
-      }
-    }
-
-    if (worker && (!worker.name || worker.name.startsWith('org_'))) {
+    if (!res.data) return null;
+    const worker = { id, ...res.data } as Worker;
+    if (!worker.name || worker.name.startsWith('org_')) {
       const phone = worker.phone ? normalizeWhatsAppNumber(worker.phone) : '';
       const last4 = phone ? phone.slice(-4) : worker.id.slice(-4);
-      const cleanName = `Worker (${last4})`;
-      worker.name = cleanName;
-      this.updateWorker(worker.id, { name: cleanName }, orgId).catch(() => { });
+      worker.name = `Worker (${last4})`;
     }
-
     return worker;
   }
 
