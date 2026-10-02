@@ -200,23 +200,23 @@ export default function BroadcastPage() {
   }, [logs, searchTerm]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 min-w-0 overflow-x-hidden">
       {/* Top Banner Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 pb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <Megaphone className="w-7 h-7 text-blue-600" />
-            <span>Workforce Broadcast & Emergency Notice Board</span>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 border-b border-slate-200/80 pb-6 min-w-0 w-full">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-start sm:items-center gap-2.5 min-w-0">
+            <Megaphone className="w-5 h-5 sm:w-7 sm:h-7 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
+            <span className="break-words min-w-0 flex-1">Workforce Broadcast &amp; Emergency Notice Board</span>
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Dispatch 1-click WhatsApp notices, holiday updates, safety warnings, and instructions to all labours & supervisors simultaneously.
+          <p className="text-xs text-slate-500 font-medium mt-1 break-words">
+            Dispatch 1-click WhatsApp notices, holiday updates, safety warnings, and instructions to all labours &amp; supervisors simultaneously.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold flex items-center gap-2">
-            <Users className="w-4 h-4 text-blue-600" />
-            <span>Total Reach: {workerCount + supervisorCount} Contact Numbers</span>
+        <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
+          <div className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold flex items-center justify-center gap-2 min-w-0">
+            <Users className="w-4 h-4 text-blue-600 shrink-0" />
+            <span className="truncate">Total Reach: {workerCount + supervisorCount} Contact Numbers</span>
           </div>
         </div>
       </div>
@@ -224,14 +224,14 @@ export default function BroadcastPage() {
       {/* Notification Toast */}
       {notificationStatus && (
         <div
-          className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+          className={`p-3.5 sm:p-4 rounded-xl border flex items-center justify-between text-xs font-bold transition-all min-w-0 ${
             notificationStatus.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
               : 'bg-amber-50 text-amber-800 border-amber-200'
           }`}
         >
-          <span>{notificationStatus.msg}</span>
-          <button onClick={() => setNotificationStatus(null)} className="p-1 hover:bg-black/5 rounded">
+          <span className="break-words min-w-0 flex-1">{notificationStatus.msg}</span>
+          <button onClick={() => setNotificationStatus(null)} className="p-1 hover:bg-black/5 rounded shrink-0 ml-2">
             <X className="w-4 h-4" />
           </button>
         </div>
