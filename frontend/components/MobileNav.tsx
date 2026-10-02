@@ -17,6 +17,7 @@ import {
   X,
   ChevronRight,
   HardHat,
+  ClipboardList,
 } from 'lucide-react';
 
 interface NavItem {
@@ -40,6 +41,7 @@ export const MobileNav: React.FC = () => {
     { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
     { href: '/attendance', label: 'Attendance', icon: CalendarCheck },
     { href: '/payments', label: 'Khata', icon: IndianRupee },
+    { href: '/tasks', label: 'Tasks', icon: ClipboardList, desc: 'Work tasks & WhatsApp labour dispatch' },
     { href: '/sites', label: 'Sites', icon: Building2 },
     { href: '/workers', label: 'Workers', icon: Users },
   ];

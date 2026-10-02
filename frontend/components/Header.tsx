@@ -62,7 +62,7 @@ export const Header: React.FC = () => {
       : 'CA';
 
   return (
-    <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md">
+    <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md w-full max-w-full overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Brand Logo & Title */}
@@ -166,28 +166,6 @@ export const Header: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Mobile Navigation Links Bar (Horizontal Scroll) */}
-      <div className="md:hidden border-t border-slate-800/80 bg-[#0b0f19]/95 px-3 py-2 overflow-x-auto scrollbar-none flex items-center gap-1.5 z-40">
-        {navLinks.map((link) => {
-          const Icon = link.icon;
-          const isActive = pathname === link.href;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-                isActive
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-bold'
-                  : 'text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-800'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{link.label}</span>
-            </Link>
-          );
-        })}
       </div>
     </header>
   );
