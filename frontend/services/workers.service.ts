@@ -124,7 +124,7 @@ export class WorkersService {
         const cleanName = `Worker (${last4})`;
         w.name = cleanName;
         // Background auto-heal update in Firestore
-        this.updateWorker(w.id, { name: cleanName }, targetOrg).catch(() => {});
+        this.updateWorker(w.id, { name: cleanName }, targetOrg).catch(() => { });
       }
       return w;
     });
@@ -153,7 +153,7 @@ export class WorkersService {
       const last4 = phone ? phone.slice(-4) : worker.id.slice(-4);
       const cleanName = `Worker (${last4})`;
       worker.name = cleanName;
-      this.updateWorker(worker.id, { name: cleanName }, orgId).catch(() => {});
+      this.updateWorker(worker.id, { name: cleanName }, orgId).catch(() => { });
     }
 
     return worker;
@@ -203,7 +203,7 @@ export class WorkersService {
       // If existing worker doc has org_... as name, auto-heal to Worker (last4)!
       if (!existing.name || existing.name.startsWith('org_')) {
         existing.name = defaultWorkerName;
-        await this.updateWorker(existing.id, { name: defaultWorkerName }, finalOrgId).catch(() => {});
+        await this.updateWorker(existing.id, { name: defaultWorkerName }, finalOrgId).catch(() => { });
       }
 
       // If existing worker doc is found, ensure doc exists under target orgId too
@@ -221,7 +221,7 @@ export class WorkersService {
             },
             finalOrgId
           );
-        } catch (e) {}
+        } catch (e) { }
       }
       return existing;
     }

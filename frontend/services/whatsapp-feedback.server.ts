@@ -126,8 +126,12 @@ export class WhatsAppFeedbackServer {
           const checkInSiteName = checkInSiteObj?.name || siteName;
           const checkOutSiteName = checkOutSiteObj?.name || siteName;
 
+          const checkInTimeVal = attRecord?.checkInTime || new Date();
+          const isLate = this.isCheckInLate(checkInTimeVal);
+          const lateNotice = isLate ? ' ⚠️ (aap late hain)' : '';
+
           messageLines.push(`${index}. ${nameDisplay}`);
-          messageLines.push(`   Check-in: ${checkInFormatted} (📍 Site: ${checkInSiteName})`);
+          messageLines.push(`   Check-in: ${checkInFormatted}${lateNotice} (📍 Site: ${checkInSiteName})`);
 
           if (hasCheckedOut && checkOutFormatted) {
             const dailyRate = typeof worker.dailyRate === 'number' && worker.dailyRate >= 0 ? worker.dailyRate : 0;
@@ -156,6 +160,9 @@ export class WhatsAppFeedbackServer {
             messageLines.push(`   • Net Payable Balance: ₹${remainingBalance.toLocaleString('en-IN')}`);
           } else {
             messageLines.push(`   Status: Present (Shift Active)`);
+            if (isLate) {
+              messageLines.push(`   ⚠️ Note: aap late hain`);
+            }
             messageLines.push(`   Hajri: 0.0 (In Progress)`);
           }
           messageLines.push('');
@@ -201,5 +208,39 @@ export class WhatsAppFeedbackServer {
       minute: '2-digit',
       hour12: true,
     }).format(d);
+  }
+
+  private static isCheckInLate(dateInput: any): boolean {
+    if (!dateInput) return false;
+    let d: Date;
+    if (dateInput?.toDate && typeof dateInput.toDate === 'function') {
+      d = dateInput.toDate();
+    } else if (dateInput instanceof Date) {
+      d = dateInput;
+    } else {
+      d = new Date(dateInput);
+    }
+
+    if (isNaN(d.getTime())) return false;
+
+    // Evaluate time in IST timezone (Asia/Kolkata)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    }).formatToParts(d);
+
+    let hour = 0;
+    let minute = 0;
+    for (const p of parts) {
+      if (p.type === 'hour') hour = parseInt(p.value, 10);
+      if (p.type === 'minute') minute = parseInt(p.value, 10);
+    }
+
+    if (hour === 24) hour = 0;
+
+    // Returns true if check-in time is strictly after 10:00 AM IST
+    return hour > 10 || (hour === 10 && minute > 0);
   }
 }
