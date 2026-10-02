@@ -18,6 +18,7 @@ import {
   ChevronRight,
   HardHat,
   ClipboardList,
+  Megaphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -47,6 +48,7 @@ export const MobileNav: React.FC = () => {
   ];
 
   const secondaryItems: NavItem[] = [
+    { href: '/broadcast', label: 'Broadcast 📢', icon: Megaphone, desc: '1-Click WhatsApp announcements & notices' },
     { href: '/vendors', label: 'Vendors', icon: Store, desc: 'Material suppliers & payment ledger' },
     { href: '/supervisors', label: 'Supervisors', icon: UserCheck, desc: 'Manage site supervisors & WhatsApp' },
     { href: '/profile', label: 'My Profile', icon: User, desc: 'Registered contractor profile & settings' },

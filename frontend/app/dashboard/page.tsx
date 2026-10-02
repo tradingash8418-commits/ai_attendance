@@ -15,6 +15,7 @@ import {
   UserCheck,
   IndianRupee,
   ClipboardList,
+  Megaphone,
 } from 'lucide-react';
 import { AttendanceService, type TodayDashboardSummary } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
@@ -56,6 +57,7 @@ export default function DashboardPage() {
     { label: 'Attendance', href: '/attendance', icon: CalendarCheck, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { label: 'Khata / Ledger', href: '/payments', icon: IndianRupee, color: 'bg-violet-50 text-violet-600 border-violet-200' },
     { label: 'Tasks 📋', href: '/tasks', icon: ClipboardList, color: 'bg-teal-50 text-teal-600 border-teal-200' },
+    { label: 'Broadcast 📢', href: '/broadcast', icon: Megaphone, color: 'bg-rose-50 text-rose-600 border-rose-200' },
     { label: 'Workers', href: '/workers', icon: Users, color: 'bg-sky-50 text-sky-600 border-sky-200' },
     { label: 'Sites', href: '/sites', icon: Building2, color: 'bg-amber-50 text-amber-600 border-amber-200' },
     { label: 'Supervisors', href: '/supervisors', icon: UserCheck, color: 'bg-purple-50 text-purple-600 border-purple-200' },

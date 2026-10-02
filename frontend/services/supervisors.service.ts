@@ -1,6 +1,7 @@
 import {
   addDoc,
   updateDoc,
+  deleteDoc,
   orderBy,
   serverTimestamp,
   collection,
@@ -180,5 +181,10 @@ export class SupervisorsService {
       active,
       updatedAt: serverTimestamp(),
     });
+  }
+
+  public static async deleteSupervisor(id: string, orgId?: string): Promise<void> {
+    const res = await OrgContextService.getDocWithFallback(COLLECTION_NAME, id, orgId);
+    await deleteDoc(res.ref);
   }
 }
