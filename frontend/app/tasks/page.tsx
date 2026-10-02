@@ -128,7 +128,7 @@ export default function TasksPage() {
     setFormSupervisorId(task.supervisorId);
     setFormSupervisorTasks(task.supervisorTasks || '');
     setFormSelectedWorkerIds(task.assignedWorkerIds || []);
-    
+
     // Map per-worker task details if available
     const tasksMap: Record<string, string> = {};
     if (task.workerDetails && task.workerDetails.length > 0) {
@@ -164,8 +164,8 @@ export default function TasksPage() {
       const supervisorName = foundSupervisor
         ? foundSupervisor.name
         : foundWorkerSup
-        ? getWorkerDisplayName(foundWorkerSup)
-        : 'Supervisor';
+          ? getWorkerDisplayName(foundWorkerSup)
+          : 'Supervisor';
 
       const supervisorPhone = foundSupervisor?.phone || foundWorkerSup?.phone || '';
 
@@ -376,11 +376,10 @@ export default function TasksPage() {
       {/* Notification Toast */}
       {notificationStatus && (
         <div
-          className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
-            notificationStatus.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-amber-50 text-amber-800 border-amber-200'
-          }`}
+          className={`p-4 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${notificationStatus.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-amber-50 text-amber-800 border-amber-200'
+            }`}
         >
           <span>{notificationStatus.msg}</span>
           <button onClick={() => setNotificationStatus(null)} className="p-1 hover:bg-black/5 rounded">
@@ -518,13 +517,12 @@ export default function TasksPage() {
                     </div>
 
                     <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${
-                        task.status === 'completed'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : task.status === 'notified' || task.supervisorNotified
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${task.status === 'completed'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : task.status === 'notified' || task.supervisorNotified
                           ? 'bg-blue-50 text-blue-700 border-blue-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
-                      }`}
+                        }`}
                     >
                       {task.status === 'completed' ? '✓ Completed' : task.supervisorNotified ? '📲 Sup. Notified' : 'Draft'}
                     </span>
@@ -571,36 +569,36 @@ export default function TasksPage() {
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                       {workerDetails.length > 0
                         ? workerDetails.map((wd) => {
-                            const isNotifyingThisWorker = notifyingWorkerId === `${task.id}_${wd.workerId}`;
+                          const isNotifyingThisWorker = notifyingWorkerId === `${task.id}_${wd.workerId}`;
 
-                            return (
-                              <div
-                                key={wd.workerId}
-                                className="p-2.5 rounded-lg border border-slate-200 bg-white text-xs space-y-1 hover:border-slate-300 transition-colors"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-bold text-slate-900">{wd.workerName}</span>
-                                  <button
-                                    onClick={() => handleNotifyWorker(task, wd.workerId)}
-                                    disabled={isNotifyingThisWorker}
-                                    className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[10px] border border-emerald-200 flex items-center gap-1 active:scale-95 transition-all"
-                                  >
-                                    <Send className="w-2.5 h-2.5" />
-                                    <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
-                                  </button>
-                                </div>
-                                <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
-                                  {wd.tasks || task.description}
-                                </div>
+                          return (
+                            <div
+                              key={wd.workerId}
+                              className="p-2.5 rounded-lg border border-slate-200 bg-white text-xs space-y-1 hover:border-slate-300 transition-colors"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-900">{wd.workerName}</span>
+                                <button
+                                  onClick={() => handleNotifyWorker(task, wd.workerId)}
+                                  disabled={isNotifyingThisWorker}
+                                  className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[10px] border border-emerald-200 flex items-center gap-1 active:scale-95 transition-all"
+                                >
+                                  <Send className="w-2.5 h-2.5" />
+                                  <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
+                                </button>
                               </div>
-                            );
-                          })
-                        : task.assignedWorkerNames.map((wName, idx) => (
-                            <div key={idx} className="p-2 rounded-lg border border-slate-200 bg-white text-xs flex items-center justify-between">
-                              <span className="font-bold text-slate-800">{wName}</span>
-                              <span className="text-[10px] font-semibold text-slate-400">Default task</span>
+                              <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
+                                {wd.tasks || task.description}
+                              </div>
                             </div>
-                          ))}
+                          );
+                        })
+                        : task.assignedWorkerNames.map((wName, idx) => (
+                          <div key={idx} className="p-2 rounded-lg border border-slate-200 bg-white text-xs flex items-center justify-between">
+                            <span className="font-bold text-slate-800">{wName}</span>
+                            <span className="text-[10px] font-semibold text-slate-400">Default task</span>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -624,11 +622,10 @@ export default function TasksPage() {
                   <div className="flex items-center justify-between gap-2 pt-1 text-xs">
                     <button
                       onClick={() => handleToggleComplete(task)}
-                      className={`flex-1 py-1.5 rounded-lg border font-bold text-[11px] transition-colors ${
-                        task.status === 'completed'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                          : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                      }`}
+                      className={`flex-1 py-1.5 rounded-lg border font-bold text-[11px] transition-colors ${task.status === 'completed'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                        }`}
                     >
                       {task.status === 'completed' ? 'Reopen Task' : '✓ Mark Complete'}
                     </button>
@@ -808,11 +805,10 @@ export default function TasksPage() {
                     return (
                       <label
                         key={worker.id}
-                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
-                            : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
-                        }`}
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${isSelected
+                          ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
+                          : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -910,7 +906,7 @@ export default function TasksPage() {
                   >
                     <option value="">-- Select from All Workers / Contacts --</option>
                     <optgroup label="Default Admin">
-                      <option value="+9199936364036">Contractor Admin (+9199936364036)</option>
+                      <option value="+919936364036">Contractor Admin (+919936364036)</option>
                     </optgroup>
                     <optgroup label="All Workers List">
                       {workers.map((w) => (
