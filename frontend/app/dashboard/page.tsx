@@ -7,54 +7,37 @@ import {
   Building2,
   CalendarCheck,
   RefreshCw,
-  Database,
-  CheckCircle2,
-  MessageSquare,
-  Camera,
   Activity,
   Sparkles,
   TrendingUp,
-  ArrowUpRight,
   ShieldCheck,
   Briefcase,
   UserCheck,
   IndianRupee,
+  ClipboardList,
 } from 'lucide-react';
 import { AttendanceService, type TodayDashboardSummary } from '@/services/attendance.service';
 import { AttendanceSessionsService } from '@/services/attendanceSessions.service';
-import { SitesService } from '@/services/sites.service';
-import { SupervisorsService } from '@/services/supervisors.service';
-import { SeedService } from '@/services/seed.service';
 import { getTodayDateString } from '@/lib/formatters';
 import type { AttendanceSession } from '@/types/attendance';
-import type { Site } from '@/types/site';
-import type { Supervisor } from '@/types/supervisor';
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState<TodayDashboardSummary | null>(null);
   const [recentSessions, setRecentSessions] = useState<AttendanceSession[]>([]);
-  const [sites, setSites] = useState<Site[]>([]);
-  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
-  const [seeding, setSeeding] = useState<boolean>(false);
-  const [seedMessage, setSeedMessage] = useState<string | null>(null);
 
   const today = getTodayDateString();
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sumData, sessionsData, sitesData, supsData] = await Promise.all([
+      const [sumData, sessionsData] = await Promise.all([
         AttendanceService.getTodayDashboardSummary(today),
         AttendanceSessionsService.getAttendanceSessions(today),
-        SitesService.getSites(),
-        SupervisorsService.getSupervisors(),
       ]);
       setSummary(sumData);
       setRecentSessions(sessionsData);
-      setSites(sitesData);
-      setSupervisors(supsData);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
@@ -72,6 +55,7 @@ export default function DashboardPage() {
     { label: 'Home', href: '/dashboard', icon: Briefcase, color: 'bg-blue-50 text-blue-600 border-blue-200' },
     { label: 'Attendance', href: '/attendance', icon: CalendarCheck, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { label: 'Khata / Ledger', href: '/payments', icon: IndianRupee, color: 'bg-violet-50 text-violet-600 border-violet-200' },
+    { label: 'Tasks 📋', href: '/tasks', icon: ClipboardList, color: 'bg-teal-50 text-teal-600 border-teal-200' },
     { label: 'Workers', href: '/workers', icon: Users, color: 'bg-sky-50 text-sky-600 border-sky-200' },
     { label: 'Sites', href: '/sites', icon: Building2, color: 'bg-amber-50 text-amber-600 border-amber-200' },
     { label: 'Supervisors', href: '/supervisors', icon: UserCheck, color: 'bg-purple-50 text-purple-600 border-purple-200' },
@@ -117,13 +101,6 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
-
-      {seedMessage && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{seedMessage}</span>
-        </div>
-      )}
 
       {/* 2. Connected Flow Chart Card (Razorpay "Your business with Razorpay" Style) */}
       <div className="razorpay-card p-6 space-y-4">
@@ -174,7 +151,7 @@ export default function DashboardPage() {
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <span>WHATSAPP REPORTS</span>
-              <MessageSquare className="w-4 h-4 text-emerald-600" />
+              <Activity className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-3xl font-extrabold text-slate-900">
               {recentSessions.length > 0 ? `${recentSessions.length}` : '0'}{' '}

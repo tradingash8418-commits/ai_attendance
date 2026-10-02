@@ -158,7 +158,16 @@ export default function TasksPage() {
     setSubmitting(true);
     try {
       const selectedSite = sites.find((s) => s.id === formSiteId);
-      const selectedSupervisor = supervisors.find((sup) => sup.id === formSupervisorId);
+      const foundSupervisor = supervisors.find((sup) => sup.id === formSupervisorId);
+      const foundWorkerSup = workers.find((w) => w.id === formSupervisorId);
+
+      const supervisorName = foundSupervisor
+        ? foundSupervisor.name
+        : foundWorkerSup
+        ? getWorkerDisplayName(foundWorkerSup)
+        : 'Supervisor';
+
+      const supervisorPhone = foundSupervisor?.phone || foundWorkerSup?.phone || '';
 
       const assignedWorkerNames = formSelectedWorkerIds.map((id) => {
         const w = workers.find((wrk) => wrk.id === id);
@@ -191,8 +200,8 @@ export default function TasksPage() {
         siteName: selectedSite?.name || 'Site',
         date: formDate,
         supervisorId: formSupervisorId,
-        supervisorName: selectedSupervisor?.name || 'Supervisor',
-        supervisorPhone: selectedSupervisor?.phone || '',
+        supervisorName,
+        supervisorPhone,
         supervisorTasks: formSupervisorTasks,
         workerDetails,
         assignedWorkerIds: formSelectedWorkerIds,
@@ -724,11 +733,20 @@ export default function TasksPage() {
                     onChange={(e) => setFormSupervisorId(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                   >
-                    {supervisors.map((sup) => (
-                      <option key={sup.id} value={sup.id}>
-                        {sup.name} ({sup.phone})
-                      </option>
-                    ))}
+                    <optgroup label="Supervisors List">
+                      {supervisors.map((sup) => (
+                        <option key={`sup_${sup.id}`} value={sup.id}>
+                          {sup.name} ({sup.phone || 'No phone'})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All Workers List">
+                      {workers.map((w) => (
+                        <option key={`wrk_${w.id}`} value={w.id}>
+                          {getWorkerDisplayName(w)} ({w.phone || 'No phone'})
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -867,18 +885,54 @@ export default function TasksPage() {
                     placeholder="e.g. Contractor Admin / Site Engineer"
                     value={formContactName}
                     onChange={(e) => setFormContactName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
 
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Query Contact Phone Number</label>
+                  <select
+                    value={formContactPhone}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      setFormContactPhone(selectedVal);
+                      const foundW = workers.find((w) => w.phone === selectedVal || w.id === selectedVal);
+                      const foundS = supervisors.find((sup) => sup.phone === selectedVal || sup.id === selectedVal);
+                      if (foundW) {
+                        setFormContactName(getWorkerDisplayName(foundW));
+                        if (foundW.phone) setFormContactPhone(foundW.phone);
+                      } else if (foundS) {
+                        setFormContactName(foundS.name);
+                        if (foundS.phone) setFormContactPhone(foundS.phone);
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                  >
+                    <option value="">-- Select from All Workers / Contacts --</option>
+                    <optgroup label="Default Admin">
+                      <option value="+9199936364036">Contractor Admin (+9199936364036)</option>
+                    </optgroup>
+                    <optgroup label="All Workers List">
+                      {workers.map((w) => (
+                        <option key={`contact_wrk_${w.id}`} value={w.phone || w.id}>
+                          {getWorkerDisplayName(w)} ({w.phone || 'No phone'})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Supervisors List">
+                      {supervisors.map((sup) => (
+                        <option key={`contact_sup_${sup.id}`} value={sup.phone || sup.id}>
+                          {sup.name} ({sup.phone || 'No phone'})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
                   <input
                     type="text"
-                    placeholder="e.g. +919876543210"
+                    placeholder="Or type custom phone number..."
                     value={formContactPhone}
                     onChange={(e) => setFormContactPhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900"
+                    className="w-full mt-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600"
                   />
                 </div>
               </div>
