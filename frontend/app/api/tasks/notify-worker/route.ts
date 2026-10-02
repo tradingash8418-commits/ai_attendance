@@ -59,12 +59,14 @@ export async function POST(req: NextRequest) {
             .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
             .join('\n');
 
+          const completionTimeStr = task.completionTime ? `\n*Overall Deadline Time:* ⏰ ${task.completionTime}` : '';
+
           const workerMsg =
             `📋 *Daily Work Task Assigned!*\n\n` +
             `Hello *${wName}*,\n` +
             `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
             `*Site:* 🏗️ ${task.siteName}\n` +
-            `*Date:* 📅 ${task.date}\n` +
+            `*Assignment Date:* 📅 ${task.date}${completionTimeStr}\n` +
             `*Work:* 📌 *${task.title}*\n\n` +
             `📝 *Your Assigned Tasks:* \n${bulletedDescription}\n\n` +
             `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +
@@ -93,12 +95,15 @@ export async function POST(req: NextRequest) {
           .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
           .join('\n');
 
+        const completionTimeStr = task.completionTime ? `\n*Overall Deadline Time:* ⏰ ${task.completionTime}` : '';
+        const workerCompletionDateStr = target.completionDate ? `\n*Target Task Completion Date:* 📅 ${target.completionDate}` : `\n*Target Task Completion Date:* 📅 ${task.date}`;
+
         const workerMsg =
           `📋 *Daily Work Task Assigned!*\n\n` +
           `Hello *${target.workerName}*,\n` +
           `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
           `*Site:* 🏗️ ${task.siteName}\n` +
-          `*Date:* 📅 ${task.date}\n` +
+          `*Assignment Date:* 📅 ${task.date}${completionTimeStr}${workerCompletionDateStr}\n` +
           `*Work:* 📌 *${task.title}*\n\n` +
           `📝 *Your Specific Tasks:* \n${bulletedTasks}\n\n` +
           `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +

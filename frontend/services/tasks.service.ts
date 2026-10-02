@@ -75,6 +75,7 @@ export class TasksService {
       siteId: data.siteId || '',
       siteName: data.siteName || '',
       date: data.date,
+      completionTime: (data.completionTime || '').trim(),
       supervisorId: data.supervisorId || '',
       supervisorName: data.supervisorName || '',
       supervisorPhone: data.supervisorPhone || '',

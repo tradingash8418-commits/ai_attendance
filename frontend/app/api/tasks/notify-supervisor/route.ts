@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
             .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? `   ${line}` : `   • ${line}`))
             .join('\n');
 
-          return `${idx + 1}. *${w.workerName}* (${w.workerPhone || 'No phone'})\n${formattedTasks}`;
+          const compDateText = w.completionDate ? ` (Target Completion: 📅 ${w.completionDate})` : ` (Target Completion: 📅 ${task.date})`;
+          return `${idx + 1}. *${w.workerName}* (${w.workerPhone || 'No phone'})${compDateText}\n${formattedTasks}`;
         })
         .join('\n\n');
     } else if (task.assignedWorkerNames && task.assignedWorkerNames.length > 0) {
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
             .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? `   ${line}` : `   • ${line}`))
             .join('\n');
 
-          return `${idx + 1}. *${wName}*${wPhone}\n${defaultTasks}`;
+          return `${idx + 1}. *${wName}*${wPhone} (Target Completion: 📅 ${task.date})\n${defaultTasks}`;
         })
         .join('\n\n');
     } else {
@@ -74,13 +75,14 @@ export async function POST(req: NextRequest) {
     }
 
     const supervisorDirectives = task.supervisorTasks || task.description;
+    const overallDeadlineStr = task.completionTime ? `\n*Overall Task Deadline Time:* ⏰ ${task.completionTime}` : '';
 
     const supervisorMsg =
       `📋 *Supervisor Master Team Deployment Order*\n\n` +
       `Hello *${task.supervisorName}*,\n` +
       `Aaj ki site deployment aur worker task breakdown:\n\n` +
       `*Site:* 🏗️ ${task.siteName}\n` +
-      `*Date:* 📅 ${task.date}\n` +
+      `*Assignment Date:* 📅 ${task.date}${overallDeadlineStr}\n` +
       `*Primary Work:* 📌 *${task.title}*\n\n` +
       `🎯 *Supervisor Directives:* \n${supervisorDirectives}\n\n` +
       `👥 *Team Allocations & Worker Tasks (${task.assignedWorkerNames.length || workerDetails.length} Workers):*\n\n` +

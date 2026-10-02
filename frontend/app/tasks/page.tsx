@@ -15,8 +15,7 @@ import {
   Search,
   X,
   FileText,
-  ChevronDown,
-  ChevronUp,
+  Clock,
 } from 'lucide-react';
 import { TasksService } from '@/services/tasks.service';
 import { SitesService } from '@/services/sites.service';
@@ -51,15 +50,16 @@ export default function TasksPage() {
   const [formTitle, setFormTitle] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formDate, setFormDate] = useState<string>(todayStr);
+  const [formCompletionTime, setFormCompletionTime] = useState<string>('06:00 PM');
   const [formSiteId, setFormSiteId] = useState<string>('');
   const [formSupervisorId, setFormSupervisorId] = useState<string>('');
   const [formSupervisorTasks, setFormSupervisorTasks] = useState<string>('');
   const [formSelectedWorkerIds, setFormSelectedWorkerIds] = useState<string[]>([]);
   const [formWorkerTasksMap, setFormWorkerTasksMap] = useState<Record<string, string>>({});
+  const [formWorkerCompletionDateMap, setFormWorkerCompletionDateMap] = useState<Record<string, string>>({});
   const [formContactName, setFormContactName] = useState<string>('Contractor Admin');
   const [formContactPhone, setFormContactPhone] = useState<string>('');
   const [workerSearchTerm, setWorkerSearchTerm] = useState<string>('');
-  const [expandedWorkerTasksId, setExpandedWorkerTasksId] = useState<string | null>(null);
 
   // Processing Action States
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -108,15 +108,16 @@ export default function TasksPage() {
     setFormTitle('');
     setFormDescription('');
     setFormDate(selectedDate || todayStr);
+    setFormCompletionTime('06:00 PM');
     setFormSiteId(sites[0]?.id || '');
     setFormSupervisorId(supervisors[0]?.id || '');
     setFormSupervisorTasks('');
     setFormSelectedWorkerIds([]);
     setFormWorkerTasksMap({});
+    setFormWorkerCompletionDateMap({});
     setFormContactName('Contractor Admin');
     setFormContactPhone('');
     setWorkerSearchTerm('');
-    setExpandedWorkerTasksId(null);
   };
 
   // Open Edit Modal
@@ -125,6 +126,7 @@ export default function TasksPage() {
     setFormTitle(task.title);
     setFormDescription(task.description);
     setFormDate(task.date);
+    setFormCompletionTime(task.completionTime || '06:00 PM');
     setFormSiteId(task.siteId);
     setFormSupervisorId(task.supervisorId);
     setFormSupervisorTasks(task.supervisorTasks || '');
@@ -132,12 +134,15 @@ export default function TasksPage() {
 
     // Map per-worker task details if available
     const tasksMap: Record<string, string> = {};
+    const compDatesMap: Record<string, string> = {};
     if (task.workerDetails && task.workerDetails.length > 0) {
       task.workerDetails.forEach((wd) => {
         tasksMap[wd.workerId] = wd.tasks || '';
+        compDatesMap[wd.workerId] = wd.completionDate || task.date || selectedDate;
       });
     }
     setFormWorkerTasksMap(tasksMap);
+    setFormWorkerCompletionDateMap(compDatesMap);
 
     setFormContactName(task.contactPersonName || 'Contractor Admin');
     setFormContactPhone(task.contactPersonPhone || '');
@@ -189,6 +194,7 @@ export default function TasksPage() {
           workerName: w ? getWorkerDisplayName(w) : wId,
           workerPhone: w?.phone || '',
           tasks: (formWorkerTasksMap[wId] || formDescription || '').trim(),
+          completionDate: formWorkerCompletionDateMap[wId] || formDate,
           notified: existingDetail?.notified || false,
           notifiedAt: existingDetail?.notifiedAt || null,
         };
@@ -200,6 +206,7 @@ export default function TasksPage() {
         siteId: formSiteId,
         siteName: selectedSite?.name || 'Site',
         date: formDate,
+        completionTime: formCompletionTime,
         supervisorId: formSupervisorId,
         supervisorName,
         supervisorPhone,
@@ -549,9 +556,17 @@ export default function TasksPage() {
                   <div className="flex items-start justify-between gap-2 min-w-0">
                     <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-extrabold text-slate-900 leading-snug break-words">{task.title}</h3>
-                      <div className="flex items-center gap-1.5 mt-1 text-[11px] font-bold text-blue-700 min-w-0">
-                        <Building2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{task.siteName}</span>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] font-bold text-blue-700 min-w-0 flex-wrap">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <Building2 className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                          <span className="truncate">{task.siteName}</span>
+                        </div>
+                        {task.completionTime && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3 text-indigo-600" />
+                            <span>Deadline: {task.completionTime}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -626,6 +641,14 @@ export default function TasksPage() {
                                   <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
                                 </button>
                               </div>
+
+                              {wd.completionDate && (
+                                <div className="text-[10px] font-bold text-purple-700 flex items-center gap-1 mt-0.5">
+                                  <Calendar className="w-3 h-3 text-purple-600 shrink-0" />
+                                  <span>Target Completion: {wd.completionDate}</span>
+                                </div>
+                              )}
+
                               <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
                                 {wd.tasks || task.description}
                               </div>
@@ -729,8 +752,8 @@ export default function TasksPage() {
             </div>
 
             <form onSubmit={handleSubmitTask} className="space-y-4 text-xs">
-              {/* Task Title & Date */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Task Title, Date & Overall Completion Time */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="md:col-span-2">
                   <label className="font-bold text-slate-700 block mb-1">General Work Title *</label>
                   <input
@@ -750,6 +773,17 @@ export default function TasksPage() {
                     required
                     value={formDate}
                     onChange={(e) => setFormDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Overall Deadline Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 05:00 PM"
+                    value={formCompletionTime}
+                    onChange={(e) => setFormCompletionTime(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>
@@ -881,24 +915,34 @@ export default function TasksPage() {
                 {formSelectedWorkerIds.length > 0 && (
                   <div className="space-y-2 pt-2">
                     <label className="font-extrabold text-slate-800 text-xs block">
-                      📝 Per-Worker Individual Tasks Breakdown:
+                      📝 Per-Worker Individual Tasks &amp; Completion Date:
                     </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
                       {formSelectedWorkerIds.map((wId) => {
                         const worker = workers.find((w) => w.id === wId);
                         const workerName = worker ? getWorkerDisplayName(worker) : wId;
-                        const isExpanded = expandedWorkerTasksId === wId;
 
                         return (
                           <div key={wId} className="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
-                            <div
-                              onClick={() => setExpandedWorkerTasksId(isExpanded ? null : wId)}
-                              className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-900"
-                            >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-bold text-xs text-slate-900 border-b border-slate-100 pb-2">
                               <span>Task for: {workerName}</span>
-                              <button type="button" className="text-slate-400 hover:text-slate-600">
-                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] font-semibold text-purple-800 shrink-0 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                                  <span>Completion Date:</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={formWorkerCompletionDateMap[wId] || formDate}
+                                  onChange={(e) =>
+                                    setFormWorkerCompletionDateMap({
+                                      ...formWorkerCompletionDateMap,
+                                      [wId]: e.target.value,
+                                    })
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                                />
+                              </div>
                             </div>
 
                             <textarea
