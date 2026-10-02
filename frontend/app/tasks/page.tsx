@@ -371,6 +371,81 @@ export default function TasksPage() {
     });
   }, [tasks, searchTerm, siteFilter, statusFilter]);
 
+  // Helper to determine precise notification target status & badge
+  const getTaskNotificationScope = useCallback((task: TaskAssignment) => {
+    if (task.status === 'completed') {
+      return {
+        label: '✓ Task Completed',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      };
+    }
+
+    const isSup = Boolean(task.supervisorNotified);
+    const workerDetails = task.workerDetails || [];
+    const totalWorkers = workerDetails.length || task.assignedWorkerIds.length;
+    const notifiedWorkers = workerDetails.filter((w) => w.notified).length;
+
+    if (isSup && totalWorkers > 0 && notifiedWorkers === totalWorkers) {
+      return {
+        label: '📲 Supervisor + All Workers',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      };
+    }
+    if (isSup && notifiedWorkers > 0) {
+      return {
+        label: `📲 Sup + Workers (${notifiedWorkers}/${totalWorkers})`,
+        badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+      };
+    }
+    if (isSup && (totalWorkers === 0 || notifiedWorkers === 0)) {
+      return {
+        label: '📢 Supervisor Only',
+        badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+      };
+    }
+    if (!isSup && totalWorkers > 0 && notifiedWorkers === totalWorkers) {
+      return {
+        label: '👥 All Workers Only',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+      };
+    }
+    if (!isSup && notifiedWorkers > 0) {
+      return {
+        label: `👥 Workers Only (${notifiedWorkers}/${totalWorkers})`,
+        badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+      };
+    }
+
+    return {
+      label: '⏳ Draft (Unsent)',
+      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+    };
+  }, []);
+
+  // Group filtered tasks into Sections: Draft (Unsent), Notified & Active, Completed
+  const { draftTasks, notifiedTasks, completedTasks } = useMemo(() => {
+    const draft: TaskAssignment[] = [];
+    const notified: TaskAssignment[] = [];
+    const completed: TaskAssignment[] = [];
+
+    filteredTasks.forEach((t) => {
+      if (t.status === 'completed') {
+        completed.push(t);
+        return;
+      }
+      const hasNotifiedWorker = t.workerDetails?.some((w) => w.notified);
+      const isNotified = t.supervisorNotified || hasNotifiedWorker || t.status === 'notified';
+
+      if (isNotified) {
+        notified.push(t);
+      } else {
+        draft.push(t);
+      }
+    });
+
+    return { draftTasks: draft, notifiedTasks: notified, completedTasks: completed };
+  }, [filteredTasks]);
+
   // Metrics Computation
   const metrics = useMemo(() => {
     const total = tasks.length;
@@ -529,201 +604,277 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Tasks Grid List */}
-      {loading ? (
-        <div className="py-16 text-center text-xs text-slate-400">Loading tasks...</div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="razorpay-card p-12 text-center space-y-3">
-          <FileText className="w-10 h-10 text-slate-300 mx-auto" />
-          <h3 className="text-sm font-extrabold text-slate-800">No tasks found for {selectedDate}</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Click &quot;Create New Task&quot; above to assign tasks to your supervisors and worker teams for this site.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
-          {filteredTasks.map((task) => {
-            const isSupervisorNotifying = notifyingSupervisorTaskId === task.id;
-            const workerDetails = task.workerDetails || [];
+      {/* Tasks Grid List Rendered in 3 Sections: Drafts -> Notified -> Completed */}
+      {(() => {
+        const renderTaskCard = (task: TaskAssignment) => {
+          const isSupervisorNotifying = notifyingSupervisorTaskId === task.id;
+          const workerDetails = task.workerDetails || [];
+          const scope = getTaskNotificationScope(task);
 
-            return (
-              <div
-                key={task.id}
-                className="razorpay-card p-4 sm:p-5 space-y-4 flex flex-col justify-between hover:border-blue-300 transition-all shadow-xs w-full min-w-0 overflow-hidden"
-              >
-                <div className="space-y-3 min-w-0">
-                  {/* Card Header: Title & Status */}
-                  <div className="flex items-start justify-between gap-2 min-w-0">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-extrabold text-slate-900 leading-snug break-words">{task.title}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] font-bold text-blue-700 min-w-0 flex-wrap">
-                        <div className="flex items-center gap-1 min-w-0">
-                          <Building2 className="w-3.5 h-3.5 shrink-0 text-blue-600" />
-                          <span className="truncate">{task.siteName}</span>
-                        </div>
-                        {(task.completionDate || task.completionTime) && (
-                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
-                            <Calendar className="w-3 h-3 text-indigo-600" />
-                            <span>Target Completion: {task.completionDate || task.completionTime}</span>
-                          </span>
-                        )}
+          return (
+            <div
+              key={task.id}
+              className="razorpay-card p-4 sm:p-5 space-y-4 flex flex-col justify-between hover:border-blue-300 transition-all shadow-xs w-full min-w-0 overflow-hidden"
+            >
+              <div className="space-y-3 min-w-0">
+                {/* Card Header: Title & Target Notification Scope Badge */}
+                <div className="flex items-start justify-between gap-2 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-extrabold text-slate-900 leading-snug break-words">{task.title}</h3>
+                    <div className="flex items-center gap-2 mt-1 text-[11px] font-bold text-blue-700 min-w-0 flex-wrap">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <Building2 className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                        <span className="truncate">{task.siteName}</span>
                       </div>
+                      {(task.completionDate || task.completionTime) && (
+                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
+                          <Calendar className="w-3 h-3 text-indigo-600" />
+                          <span>Target Completion: {task.completionDate || task.completionTime}</span>
+                        </span>
+                      )}
                     </div>
+                  </div>
 
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${task.status === 'completed'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : task.status === 'notified' || task.supervisorNotified
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                    >
-                      {task.status === 'completed' ? '✓ Completed' : task.supervisorNotified ? '📲 Sup. Notified' : 'Draft'}
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold border shrink-0 ${scope.badgeClass}`}
+                  >
+                    {scope.label}
+                  </span>
+                </div>
+
+                {/* Overview Description */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-normal whitespace-pre-line max-h-28 overflow-y-auto break-words min-w-0">
+                  {task.description}
+                </div>
+
+                {/* Supervisor Header Info */}
+                <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 text-xs space-y-1">
+                  <div className="flex items-center justify-between font-bold text-purple-900">
+                    <span className="flex items-center gap-1">
+                      <UserCheck className="w-3.5 h-3.5 text-purple-700" />
+                      <span>Supervisor on Duty:</span>
                     </span>
+                    <span>{task.supervisorName}</span>
                   </div>
-
-                  {/* Overview Description */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-normal whitespace-pre-line max-h-28 overflow-y-auto break-words min-w-0">
-                    {task.description}
-                  </div>
-
-                  {/* Supervisor Header Info */}
-                  <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 text-xs space-y-1">
-                    <div className="flex items-center justify-between font-bold text-purple-900">
-                      <span className="flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5 text-purple-700" />
-                        <span>Supervisor on Duty:</span>
-                      </span>
-                      <span>{task.supervisorName}</span>
-                    </div>
-                    <div className="text-[11px] text-purple-700 font-mono flex items-center justify-between">
-                      <span>Phone: {task.supervisorPhone || 'No phone'}</span>
-                      <span className="font-extrabold">
-                        {task.supervisorNotified ? 'Notified ✓' : 'Pending ⏳'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Individual Worker Task Allocation List */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-extrabold text-slate-800 flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Labours Assigned ({workerDetails.length || task.assignedWorkerNames.length}):</span>
-                      </span>
-                      <button
-                        onClick={() => handleNotifyWorker(task, 'all')}
-                        disabled={Boolean(notifyingWorkerId)}
-                        className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-800 underline"
-                      >
-                        Notify All Workers
-                      </button>
-                    </div>
-
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {workerDetails.length > 0
-                        ? workerDetails.map((wd) => {
-                          const isNotifyingThisWorker = notifyingWorkerId === `${task.id}_${wd.workerId}`;
-
-                          return (
-                            <div
-                              key={wd.workerId}
-                              className="p-2.5 rounded-lg border border-slate-200 bg-white text-xs space-y-1 hover:border-slate-300 transition-colors"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-900">{wd.workerName}</span>
-                                <button
-                                  onClick={() => handleNotifyWorker(task, wd.workerId)}
-                                  disabled={isNotifyingThisWorker}
-                                  className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[10px] border border-emerald-200 flex items-center gap-1 active:scale-95 transition-all"
-                                >
-                                  <Send className="w-2.5 h-2.5" />
-                                  <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
-                                </button>
-                              </div>
-
-                              {wd.completionDate && (
-                                <div className="text-[10px] font-bold text-purple-700 flex items-center gap-1 mt-0.5">
-                                  <Calendar className="w-3 h-3 text-purple-600 shrink-0" />
-                                  <span>Target Completion: {wd.completionDate}</span>
-                                </div>
-                              )}
-
-                              <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
-                                {wd.tasks || task.description}
-                              </div>
-                            </div>
-                          );
-                        })
-                        : task.assignedWorkerNames.map((wName, idx) => (
-                          <div key={idx} className="p-2 rounded-lg border border-slate-200 bg-white text-xs flex items-center justify-between">
-                            <span className="font-bold text-slate-800">{wName}</span>
-                            <span className="text-[10px] font-semibold text-slate-400">Default task</span>
-                          </div>
-                        ))}
-                    </div>
+                  <div className="text-[11px] text-purple-700 font-mono flex items-center justify-between">
+                    <span>Phone: {task.supervisorPhone || 'No phone'}</span>
+                    <span className="font-extrabold">
+                      {task.supervisorNotified ? (
+                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Notified ✓</span>
+                      ) : (
+                        <span className="text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Pending ⏳</span>
+                      )}
+                    </span>
                   </div>
                 </div>
 
-                {/* Card Actions Footer */}
-                <div className="pt-3 border-t border-slate-100 space-y-2">
-                  {/* 1-Click Dispatch All Button (Workers + Supervisor) */}
-                  <button
-                    onClick={() => handleDispatchAll(task)}
-                    disabled={dispatchingAllTaskId === task.id || isSupervisorNotifying || Boolean(notifyingWorkerId)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    <Send className="w-4 h-4 shrink-0" />
-                    <span>
-                      {dispatchingAllTaskId === task.id
-                        ? '🚀 Dispatching to Workers & Supervisor...'
-                        : '🚀 1-Click Dispatch All (Workers + Supervisor)'}
+                {/* Individual Worker Task Allocation List */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Labours Assigned ({workerDetails.length || task.assignedWorkerNames.length}):</span>
                     </span>
-                  </button>
-
-                  <div className="flex items-center justify-between gap-1.5 pt-1 text-xs">
-                    {/* Secondary Supervisor Only Dispatch Button */}
                     <button
-                      onClick={() => handleNotifySupervisor(task)}
-                      disabled={isSupervisorNotifying || dispatchingAllTaskId === task.id}
-                      className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all shrink-0"
-                      title="Notify Supervisor Only with Master Summary Order"
+                      onClick={() => handleNotifyWorker(task, 'all')}
+                      disabled={Boolean(notifyingWorkerId)}
+                      className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-800 underline"
                     >
-                      <span>{isSupervisorNotifying ? 'Sending...' : '📢 Sup. Only'}</span>
+                      Notify All Workers
                     </button>
+                  </div>
 
-                    <button
-                      onClick={() => handleToggleComplete(task)}
-                      className={`flex-1 py-1.5 px-2 rounded-lg border font-bold text-[11px] transition-colors truncate ${task.status === 'completed'
-                        ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                        }`}
-                    >
-                      {task.status === 'completed' ? 'Reopen' : '✓ Complete'}
-                    </button>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {workerDetails.length > 0
+                      ? workerDetails.map((wd) => {
+                        const isNotifyingThisWorker = notifyingWorkerId === `${task.id}_${wd.workerId}`;
 
-                    <button
-                      onClick={() => handleOpenEditModal(task)}
-                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 shrink-0"
-                      title="Edit Task"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
+                        return (
+                          <div
+                            key={wd.workerId}
+                            className="p-2.5 rounded-lg border border-slate-200 bg-white text-xs space-y-1 hover:border-slate-300 transition-colors"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-bold text-slate-900 truncate">{wd.workerName}</span>
+                                {wd.notified ? (
+                                  <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded shrink-0">
+                                    ✓ Sent
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded shrink-0">
+                                    Unsent ⏳
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleNotifyWorker(task, wd.workerId)}
+                                disabled={isNotifyingThisWorker}
+                                className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[10px] border border-emerald-200 flex items-center gap-1 active:scale-95 transition-all shrink-0 ml-auto"
+                              >
+                                <Send className="w-2.5 h-2.5" />
+                                <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
+                              </button>
+                            </div>
 
-                    <button
-                      onClick={() => handleDeleteTask(task.id)}
-                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 shrink-0"
-                      title="Delete Task"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                            {wd.completionDate && (
+                              <div className="text-[10px] font-bold text-purple-700 flex items-center gap-1 mt-0.5">
+                                <Calendar className="w-3 h-3 text-purple-600 shrink-0" />
+                                <span>Target Completion: {wd.completionDate}</span>
+                              </div>
+                            )}
+
+                            <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
+                              {wd.tasks || task.description}
+                            </div>
+                          </div>
+                        );
+                      })
+                      : task.assignedWorkerNames.map((wName, idx) => (
+                        <div key={idx} className="p-2 rounded-lg border border-slate-200 bg-white text-xs flex items-center justify-between">
+                          <span className="font-bold text-slate-800">{wName}</span>
+                          <span className="text-[10px] font-semibold text-slate-400">Default task</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {/* Card Actions Footer */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                {/* 1-Click Dispatch All Button (Workers + Supervisor) */}
+                <button
+                  onClick={() => handleDispatchAll(task)}
+                  disabled={dispatchingAllTaskId === task.id || isSupervisorNotifying || Boolean(notifyingWorkerId)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4 shrink-0" />
+                  <span>
+                    {dispatchingAllTaskId === task.id
+                      ? '🚀 Dispatching to Workers & Supervisor...'
+                      : '🚀 1-Click Dispatch All (Workers + Supervisor)'}
+                  </span>
+                </button>
+
+                <div className="flex items-center justify-between gap-1.5 pt-1 text-xs">
+                  {/* Secondary Supervisor Only Dispatch Button */}
+                  <button
+                    onClick={() => handleNotifySupervisor(task)}
+                    disabled={isSupervisorNotifying || dispatchingAllTaskId === task.id}
+                    className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-[11px] flex items-center gap-1 active:scale-95 transition-all shrink-0"
+                    title="Notify Supervisor Only with Master Summary Order"
+                  >
+                    <span>{isSupervisorNotifying ? 'Sending...' : '📢 Sup. Only'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleComplete(task)}
+                    className={`flex-1 py-1.5 px-2 rounded-lg border font-bold text-[11px] transition-colors truncate ${task.status === 'completed'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                      }`}
+                  >
+                    {task.status === 'completed' ? 'Reopen' : '✓ Complete'}
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenEditModal(task)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 shrink-0"
+                    title="Edit Task"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 shrink-0"
+                    title="Delete Task"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        if (loading) {
+          return <div className="py-16 text-center text-xs text-slate-400">Loading tasks...</div>;
+        }
+
+        if (filteredTasks.length === 0) {
+          return (
+            <div className="razorpay-card p-12 text-center space-y-3">
+              <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+              <h3 className="text-sm font-extrabold text-slate-800">No tasks found for {selectedDate}</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Click &quot;Create New Task&quot; above to assign tasks to your supervisors and worker teams for this site.
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-8 min-w-0 w-full">
+            {/* SECTION 1: DRAFT TASKS (UNSENT) */}
+            {draftTasks.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900">
+                  <div className="flex items-center gap-2 font-extrabold text-xs sm:text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    <span>📌 Pending Draft Tasks ({draftTasks.length})</span>
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full hidden sm:inline">
+                      Pending WhatsApp Dispatch
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-amber-800">
+                    {draftTasks.length} {draftTasks.length === 1 ? 'task' : 'tasks'} waiting to be sent
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+                  {draftTasks.map(renderTaskCard)}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2: DISPATCHED & NOTIFIED TASKS */}
+            {notifiedTasks.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/90 border border-emerald-200 text-emerald-900">
+                  <div className="flex items-center gap-2 font-extrabold text-xs sm:text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span>📲 Dispatched &amp; Notified Tasks ({notifiedTasks.length})</span>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-emerald-800">
+                    {notifiedTasks.length} active {notifiedTasks.length === 1 ? 'task' : 'tasks'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+                  {notifiedTasks.map(renderTaskCard)}
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3: COMPLETED TASKS */}
+            {completedTasks.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-800">
+                  <div className="flex items-center gap-2 font-extrabold text-xs sm:text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>✅ Completed Tasks ({completedTasks.length})</span>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-slate-600">
+                    {completedTasks.length} finished {completedTasks.length === 1 ? 'task' : 'tasks'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+                  {completedTasks.map(renderTaskCard)}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Create / Edit Task Modal */}
       {showTaskModal && (
