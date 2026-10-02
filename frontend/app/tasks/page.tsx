@@ -15,13 +15,15 @@ import {
   Search,
   X,
   FileText,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { TasksService } from '@/services/tasks.service';
 import { SitesService } from '@/services/sites.service';
 import { SupervisorsService } from '@/services/supervisors.service';
 import { WorkersService } from '@/services/workers.service';
 import { getWorkerDisplayName, getTodayDateString } from '@/lib/formatters';
-import type { TaskAssignment, TaskStatus } from '@/types/task';
+import type { TaskAssignment, TaskStatus, WorkerTaskDetail } from '@/types/task';
 import type { Site } from '@/types/site';
 import type { Supervisor } from '@/types/supervisor';
 import type { Worker } from '@/types/worker';
@@ -53,13 +55,16 @@ export default function TasksPage() {
   const [formSupervisorId, setFormSupervisorId] = useState<string>('');
   const [formSupervisorTasks, setFormSupervisorTasks] = useState<string>('');
   const [formSelectedWorkerIds, setFormSelectedWorkerIds] = useState<string[]>([]);
+  const [formWorkerTasksMap, setFormWorkerTasksMap] = useState<Record<string, string>>({});
   const [formContactName, setFormContactName] = useState<string>('Contractor Admin');
   const [formContactPhone, setFormContactPhone] = useState<string>('');
   const [workerSearchTerm, setWorkerSearchTerm] = useState<string>('');
+  const [expandedWorkerTasksId, setExpandedWorkerTasksId] = useState<string | null>(null);
 
   // Processing Action States
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [notifyingTaskId, setNotifyingTaskId] = useState<string | null>(null);
+  const [notifyingWorkerId, setNotifyingWorkerId] = useState<string | null>(null);
+  const [notifyingSupervisorTaskId, setNotifyingSupervisorTaskId] = useState<string | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   // Load Data
@@ -106,9 +111,11 @@ export default function TasksPage() {
     setFormSupervisorId(supervisors[0]?.id || '');
     setFormSupervisorTasks('');
     setFormSelectedWorkerIds([]);
+    setFormWorkerTasksMap({});
     setFormContactName('Contractor Admin');
     setFormContactPhone('');
     setWorkerSearchTerm('');
+    setExpandedWorkerTasksId(null);
   };
 
   // Open Edit Modal
@@ -121,6 +128,16 @@ export default function TasksPage() {
     setFormSupervisorId(task.supervisorId);
     setFormSupervisorTasks(task.supervisorTasks || '');
     setFormSelectedWorkerIds(task.assignedWorkerIds || []);
+    
+    // Map per-worker task details if available
+    const tasksMap: Record<string, string> = {};
+    if (task.workerDetails && task.workerDetails.length > 0) {
+      task.workerDetails.forEach((wd) => {
+        tasksMap[wd.workerId] = wd.tasks || '';
+      });
+    }
+    setFormWorkerTasksMap(tasksMap);
+
     setFormContactName(task.contactPersonName || 'Contractor Admin');
     setFormContactPhone(task.contactPersonPhone || '');
     setShowTaskModal(true);
@@ -153,6 +170,20 @@ export default function TasksPage() {
         return w?.phone || '';
       });
 
+      const workerDetails: WorkerTaskDetail[] = formSelectedWorkerIds.map((wId) => {
+        const w = workers.find((wrk) => wrk.id === wId);
+        const existingDetail = editingTask?.workerDetails?.find((wd) => wd.workerId === wId);
+
+        return {
+          workerId: wId,
+          workerName: w ? getWorkerDisplayName(w) : wId,
+          workerPhone: w?.phone || '',
+          tasks: (formWorkerTasksMap[wId] || formDescription || '').trim(),
+          notified: existingDetail?.notified || false,
+          notifiedAt: existingDetail?.notifiedAt || null,
+        };
+      });
+
       const taskData = {
         title: formTitle,
         description: formDescription,
@@ -163,6 +194,7 @@ export default function TasksPage() {
         supervisorName: selectedSupervisor?.name || 'Supervisor',
         supervisorPhone: selectedSupervisor?.phone || '',
         supervisorTasks: formSupervisorTasks,
+        workerDetails,
         assignedWorkerIds: formSelectedWorkerIds,
         assignedWorkerNames,
         assignedWorkerPhones,
@@ -188,32 +220,61 @@ export default function TasksPage() {
     }
   };
 
-  // Notify Task via WhatsApp
-  const handleNotifyTask = async (task: TaskAssignment) => {
-    setNotifyingTaskId(task.id);
+  // Notify Single Worker (or all workers) via WhatsApp WITHOUT notifying supervisor
+  const handleNotifyWorker = async (task: TaskAssignment, workerId: string = 'all') => {
+    setNotifyingWorkerId(`${task.id}_${workerId}`);
     setNotificationStatus(null);
     try {
-      const res = await TasksService.notifyTaskViaWhatsApp(task.id, task.organizationId);
+      const res = await TasksService.notifyWorkerViaWhatsApp(task.id, workerId, task.organizationId);
       if (res.success) {
         setNotificationStatus({
-          msg: `✅ WhatsApp Notifications dispatched successfully to ${res.notifiedCount} recipient(s)!`,
+          msg: `✅ WhatsApp Task message sent to worker(s)! (${res.notifiedCount} delivered)`,
           type: 'success',
         });
       } else {
         setNotificationStatus({
-          msg: `⚠️ Notifications completed with warnings: ${res.errors.join(', ')}`,
+          msg: `⚠️ Notifications warning: ${res.errors.join(', ')}`,
           type: 'error',
         });
       }
       await loadData();
     } catch (err: any) {
-      console.error('Failed to dispatch task notifications:', err);
+      console.error('Failed to dispatch worker task notification:', err);
       setNotificationStatus({
-        msg: `❌ Error sending WhatsApp notification: ${err?.message || 'Failed to dispatch'}`,
+        msg: `❌ Error sending WhatsApp message: ${err?.message || 'Failed to dispatch'}`,
         type: 'error',
       });
     } finally {
-      setNotifyingTaskId(null);
+      setNotifyingWorkerId(null);
+    }
+  };
+
+  // Notify Supervisor Master Deployment Order (Single Consolidated Message)
+  const handleNotifySupervisor = async (task: TaskAssignment) => {
+    setNotifyingSupervisorTaskId(task.id);
+    setNotificationStatus(null);
+    try {
+      const res = await TasksService.notifySupervisorViaWhatsApp(task.id, task.organizationId);
+      if (res.success) {
+        setNotificationStatus({
+          msg: `✅ Master Team Deployment Order sent to Supervisor ${task.supervisorName} via WhatsApp!`,
+          type: 'success',
+        });
+      } else {
+        setNotificationStatus({
+          msg: `⚠️ Supervisor notification warning: ${res.errors.join(', ')}`,
+          type: 'error',
+        });
+      }
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to dispatch supervisor master deployment order:', err);
+      setNotificationStatus({
+        msg: `❌ Error sending WhatsApp to supervisor: ${err?.message || 'Failed to dispatch'}`,
+        type: 'error',
+      });
+    } finally {
+      setNotifyingSupervisorTaskId(null);
     }
   };
 
@@ -258,7 +319,7 @@ export default function TasksPage() {
   // Metrics Computation
   const metrics = useMemo(() => {
     const total = tasks.length;
-    const notified = tasks.filter((t) => t.status === 'notified').length;
+    const notified = tasks.filter((t) => t.status === 'notified' || t.supervisorNotified).length;
     const completed = tasks.filter((t) => t.status === 'completed').length;
     const assignedWorkersCount = new Set(tasks.flatMap((t) => t.assignedWorkerIds)).size;
 
@@ -282,10 +343,10 @@ export default function TasksPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
             <ClipboardList className="w-7 h-7 text-blue-600" />
-            <span>Task Management & WhatsApp Dispatch</span>
+            <span>Task Management & Individual Labour Dispatch</span>
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Assign daily work tasks to supervisors and labours, and dispatch instant automated WhatsApp notifications.
+            Assign individual tasks to workers, notify labours via WhatsApp, and dispatch a single Master Summary to supervisors.
           </p>
         </div>
 
@@ -376,7 +437,6 @@ export default function TasksPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-1 max-w-xl">
-            {/* Search Input */}
             <div className="relative flex-1">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
@@ -388,7 +448,6 @@ export default function TasksPage() {
               />
             </div>
 
-            {/* Site Filter */}
             <select
               value={siteFilter}
               onChange={(e) => setSiteFilter(e.target.value)}
@@ -402,7 +461,6 @@ export default function TasksPage() {
               ))}
             </select>
 
-            {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -410,7 +468,7 @@ export default function TasksPage() {
             >
               <option value="all">All Status</option>
               <option value="draft">Draft</option>
-              <option value="notified">Notified (WhatsApp Sent)</option>
+              <option value="notified">Notified</option>
               <option value="completed">Completed</option>
             </select>
           </div>
@@ -429,9 +487,10 @@ export default function TasksPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTasks.map((task) => {
-            const isNotifying = notifyingTaskId === task.id;
+            const isSupervisorNotifying = notifyingSupervisorTaskId === task.id;
+            const workerDetails = task.workerDetails || [];
 
             return (
               <div
@@ -439,7 +498,7 @@ export default function TasksPage() {
                 className="razorpay-card p-5 space-y-4 flex flex-col justify-between hover:border-blue-300 transition-all shadow-xs"
               >
                 <div className="space-y-3">
-                  {/* Card Top: Title & Status */}
+                  {/* Card Header: Title & Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-extrabold text-slate-900 leading-snug">{task.title}</h3>
@@ -453,53 +512,104 @@ export default function TasksPage() {
                       className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border shrink-0 ${
                         task.status === 'completed'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : task.status === 'notified'
+                          : task.status === 'notified' || task.supervisorNotified
                           ? 'bg-blue-50 text-blue-700 border-blue-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}
                     >
-                      {task.status === 'notified' ? '📲 Notified' : task.status}
+                      {task.status === 'completed' ? '✓ Completed' : task.supervisorNotified ? '📲 Sup. Notified' : 'Draft'}
                     </span>
                   </div>
 
-                  {/* Task Description Preview */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-normal whitespace-pre-line max-h-32 overflow-y-auto">
+                  {/* Overview Description */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-normal whitespace-pre-line max-h-28 overflow-y-auto">
                     {task.description}
                   </div>
 
-                  {/* Supervisor & Workers Info */}
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span className="font-semibold flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Supervisor:</span>
+                  {/* Supervisor Header Info */}
+                  <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-purple-900">
+                      <span className="flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Supervisor on Duty:</span>
                       </span>
-                      <span className="font-bold text-slate-800">
-                        {task.supervisorName} {task.supervisorPhone ? `(${task.supervisorPhone})` : ''}
+                      <span>{task.supervisorName}</span>
+                    </div>
+                    <div className="text-[11px] text-purple-700 font-mono flex items-center justify-between">
+                      <span>Phone: {task.supervisorPhone || 'No phone'}</span>
+                      <span className="font-extrabold">
+                        {task.supervisorNotified ? 'Notified ✓' : 'Pending ⏳'}
                       </span>
                     </div>
+                  </div>
 
-                    <div className="flex items-start justify-between text-slate-600">
-                      <span className="font-semibold flex items-center gap-1 mt-0.5">
+                  {/* Individual Worker Task Allocation List */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-extrabold text-slate-800 flex items-center gap-1">
                         <Users className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Assigned Workers ({task.assignedWorkerNames.length}):</span>
+                        <span>Labours Assigned ({workerDetails.length || task.assignedWorkerNames.length}):</span>
                       </span>
-                      <div className="text-right max-w-[160px] truncate font-medium text-slate-700">
-                        {task.assignedWorkerNames.join(', ') || 'None assigned'}
-                      </div>
+                      <button
+                        onClick={() => handleNotifyWorker(task, 'all')}
+                        disabled={Boolean(notifyingWorkerId)}
+                        className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-800 underline"
+                      >
+                        Notify All Workers
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {workerDetails.length > 0
+                        ? workerDetails.map((wd) => {
+                            const isNotifyingThisWorker = notifyingWorkerId === `${task.id}_${wd.workerId}`;
+
+                            return (
+                              <div
+                                key={wd.workerId}
+                                className="p-2.5 rounded-lg border border-slate-200 bg-white text-xs space-y-1 hover:border-slate-300 transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-slate-900">{wd.workerName}</span>
+                                  <button
+                                    onClick={() => handleNotifyWorker(task, wd.workerId)}
+                                    disabled={isNotifyingThisWorker}
+                                    className="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[10px] border border-emerald-200 flex items-center gap-1 active:scale-95 transition-all"
+                                  >
+                                    <Send className="w-2.5 h-2.5" />
+                                    <span>{isNotifyingThisWorker ? 'Sending...' : 'Notify Worker'}</span>
+                                  </button>
+                                </div>
+                                <div className="text-[11px] text-slate-600 whitespace-pre-line bg-slate-50 p-1.5 rounded border border-slate-100 font-normal">
+                                  {wd.tasks || task.description}
+                                </div>
+                              </div>
+                            );
+                          })
+                        : task.assignedWorkerNames.map((wName, idx) => (
+                            <div key={idx} className="p-2 rounded-lg border border-slate-200 bg-white text-xs flex items-center justify-between">
+                              <span className="font-bold text-slate-800">{wName}</span>
+                              <span className="text-[10px] font-semibold text-slate-400">Default task</span>
+                            </div>
+                          ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Card Footer Action Buttons */}
+                {/* Card Actions Footer */}
                 <div className="pt-3 border-t border-slate-100 space-y-2">
+                  {/* Supervisor Master Order Dispatch Button */}
                   <button
-                    onClick={() => handleNotifyTask(task)}
-                    disabled={isNotifying}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                    onClick={() => handleNotifySupervisor(task)}
+                    disabled={isSupervisorNotifying}
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-purple-700/20 active:scale-95 transition-all"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{isNotifying ? 'Sending WhatsApp Messages...' : '🚀 Notify via WhatsApp'}</span>
+                    <span>
+                      {isSupervisorNotifying
+                        ? 'Sending Master Summary...'
+                        : '📢 Send Supervisor Master Order'}
+                    </span>
                   </button>
 
                   <div className="flex items-center justify-between gap-2 pt-1 text-xs">
@@ -540,7 +650,7 @@ export default function TasksPage() {
       {/* Create / Edit Task Modal */}
       {showTaskModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-2xl w-full bg-white rounded-2xl p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div className="max-w-3xl w-full bg-white rounded-2xl p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -548,7 +658,7 @@ export default function TasksPage() {
                   <span>{editingTask ? 'Edit Work Task Assignment' : 'Create Daily Work Task Assignment'}</span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Assign site tasks to labours and supervisor with automated WhatsApp dispatch.
+                  Assign individual specific tasks to labours and supervisor with decoupled WhatsApp dispatch.
                 </p>
               </div>
 
@@ -567,7 +677,7 @@ export default function TasksPage() {
               {/* Task Title & Date */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
-                  <label className="font-bold text-slate-700 block mb-1">Task Title *</label>
+                  <label className="font-bold text-slate-700 block mb-1">General Work Title *</label>
                   <input
                     type="text"
                     required
@@ -623,22 +733,21 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              {/* Detailed Description / Bullet Points */}
+              {/* General Description */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  Task Details & Bullet Points (Sent to Workers & Supervisor) *
+                  General Task Overview (Default tasks if worker tasks not specified)
                 </label>
                 <textarea
-                  rows={4}
-                  required
-                  placeholder={`1. Complete column shuttering by 1 PM\n2. Tie 12mm steel mesh coils\n3. Clear debris before 3 PM`}
+                  rows={2}
+                  placeholder={`1. Complete column shuttering by 1 PM\n2. Tie rebar mesh`}
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600"
                 />
               </div>
 
-              {/* Supervisor Specific Directives */}
+              {/* Supervisor Directives */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
                   Supervisor Directives / Special Instructions (Optional)
@@ -652,14 +761,14 @@ export default function TasksPage() {
                 />
               </div>
 
-              {/* Worker Selection Grid */}
-              <div className="space-y-2 border-t border-slate-100 pt-3">
+              {/* Worker Selection & Per-Worker Specific Tasks Grid */}
+              <div className="space-y-3 border-t border-slate-100 pt-3">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-800">
-                    Assign Labours / Workers ({formSelectedWorkerIds.length} Selected)
+                    Assign Labours & Individual Worker Tasks ({formSelectedWorkerIds.length} Selected)
                   </label>
                   <span className="text-[11px] font-semibold text-blue-600">
-                    Workers will receive bulleted WhatsApp task order
+                    Specify custom tasks per worker below
                   </span>
                 </div>
 
@@ -667,14 +776,15 @@ export default function TasksPage() {
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
-                    placeholder="Filter workers by name or code..."
+                    placeholder="Filter workers to assign..."
                     value={workerSearchTerm}
                     onChange={(e) => setWorkerSearchTerm(e.target.value)}
                     className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs"
                   />
                 </div>
 
-                <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/50">
+                {/* Worker Checkboxes */}
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50/50">
                   {modalFilteredWorkers.map((worker) => {
                     const isSelected = formSelectedWorkerIds.includes(worker.id);
                     return (
@@ -703,6 +813,49 @@ export default function TasksPage() {
                     );
                   })}
                 </div>
+
+                {/* Per-Worker Task Input Accordion / Cards */}
+                {formSelectedWorkerIds.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <label className="font-extrabold text-slate-800 text-xs block">
+                      📝 Per-Worker Individual Tasks Breakdown:
+                    </label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {formSelectedWorkerIds.map((wId) => {
+                        const worker = workers.find((w) => w.id === wId);
+                        const workerName = worker ? getWorkerDisplayName(worker) : wId;
+                        const isExpanded = expandedWorkerTasksId === wId;
+
+                        return (
+                          <div key={wId} className="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
+                            <div
+                              onClick={() => setExpandedWorkerTasksId(isExpanded ? null : wId)}
+                              className="flex items-center justify-between cursor-pointer font-bold text-xs text-slate-900"
+                            >
+                              <span>Task for: {workerName}</span>
+                              <button type="button" className="text-slate-400 hover:text-slate-600">
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </button>
+                            </div>
+
+                            <textarea
+                              rows={2}
+                              placeholder={`Individual tasks for ${workerName} (e.g. • Task 1: Column shuttering • Task 2: Rebar binding)`}
+                              value={formWorkerTasksMap[wId] !== undefined ? formWorkerTasksMap[wId] : formDescription}
+                              onChange={(e) =>
+                                setFormWorkerTasksMap({
+                                  ...formWorkerTasksMap,
+                                  [wId]: e.target.value,
+                                })
+                              }
+                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-normal text-slate-900 focus:outline-none focus:border-blue-600"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Query Contact Information */}

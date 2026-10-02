@@ -79,12 +79,14 @@ export class TasksService {
       supervisorName: data.supervisorName || '',
       supervisorPhone: data.supervisorPhone || '',
       supervisorTasks: (data.supervisorTasks || '').trim(),
+      workerDetails: data.workerDetails || [],
       assignedWorkerIds: data.assignedWorkerIds || [],
       assignedWorkerNames: data.assignedWorkerNames || [],
       assignedWorkerPhones: data.assignedWorkerPhones || [],
       contactPersonName: data.contactPersonName || '',
       contactPersonPhone: data.contactPersonPhone || '',
       status: data.status || 'draft',
+      supervisorNotified: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -119,15 +121,39 @@ export class TasksService {
   }
 
   /**
-   * Dispatches WhatsApp notification messages via server API route.
+   * Dispatches WhatsApp notification message to assigned worker(s) ONLY (without notifying supervisor).
    */
-  public static async notifyTaskViaWhatsApp(
+  public static async notifyWorkerViaWhatsApp(
+    taskId: string,
+    workerId: string = 'all',
+    orgId?: string
+  ): Promise<{ success: boolean; notifiedCount: number; errors: string[] }> {
+    const targetOrg = orgId || OrgContextService.getOrgId();
+    try {
+      const response = await fetch('/api/tasks/notify-worker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, workerId, orgId: targetOrg }),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (err: any) {
+      console.error('[TasksService] Error calling /api/tasks/notify-worker:', err);
+      return { success: false, notifiedCount: 0, errors: [err?.message || 'Network error'] };
+    }
+  }
+
+  /**
+   * Dispatches ONE single Master Summary WhatsApp message to the supervisor listing all team workers & their tasks.
+   */
+  public static async notifySupervisorViaWhatsApp(
     taskId: string,
     orgId?: string
   ): Promise<{ success: boolean; notifiedCount: number; errors: string[] }> {
     const targetOrg = orgId || OrgContextService.getOrgId();
     try {
-      const response = await fetch('/api/tasks/notify', {
+      const response = await fetch('/api/tasks/notify-supervisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, orgId: targetOrg }),
@@ -136,8 +162,25 @@ export class TasksService {
       const data = await response.json();
       return data;
     } catch (err: any) {
-      console.error('[TasksService] Error calling /api/tasks/notify:', err);
+      console.error('[TasksService] Error calling /api/tasks/notify-supervisor:', err);
       return { success: false, notifiedCount: 0, errors: [err?.message || 'Network error'] };
     }
+  }
+
+  /**
+   * Legacy wrapper for backward compatibility.
+   */
+  public static async notifyTaskViaWhatsApp(
+    taskId: string,
+    orgId?: string
+  ): Promise<{ success: boolean; notifiedCount: number; errors: string[] }> {
+    const workerRes = await this.notifyWorkerViaWhatsApp(taskId, 'all', orgId);
+    const supRes = await this.notifySupervisorViaWhatsApp(taskId, orgId);
+
+    return {
+      success: workerRes.success && supRes.success,
+      notifiedCount: workerRes.notifiedCount + supRes.notifiedCount,
+      errors: [...workerRes.errors, ...supRes.errors],
+    };
   }
 }
