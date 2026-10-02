@@ -66,20 +66,7 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const handleSeedData = async () => {
-    setSeeding(true);
-    setSeedMessage(null);
-    try {
-      const res = await SeedService.seedTestData();
-      setSeedMessage(`Seeded successfully! ${res.workersCreated} worker(s), ${res.sitesCreated} site(s) created.`);
-      await loadDashboardData();
-    } catch (err) {
-      console.error('Error seeding test data:', err);
-      setSeedMessage('Failed to seed test data.');
-    } finally {
-      setSeeding(false);
-    }
-  };
+
 
   const recommendedPills = [
     { label: 'Home', href: '/dashboard', icon: Briefcase, color: 'bg-blue-50 text-blue-600 border-blue-200' },
@@ -205,14 +192,7 @@ export default function DashboardPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-extrabold text-slate-900">Workforce Insights</h2>
-          <button
-            onClick={handleSeedData}
-            disabled={seeding}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-xs font-bold text-slate-700 shadow-sm transition-all"
-          >
-            <Database className="w-3.5 h-3.5 text-blue-600" />
-            <span>{seeding ? 'Seeding Data...' : 'Seed Test Data'}</span>
-          </button>
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -296,65 +276,7 @@ export default function DashboardPage() {
       {/* 4. Live WhatsApp Submissions Table & Active Sites */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
         {/* Left 2-Cols: Recent WhatsApp Submissions */}
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-emerald-600" />
-              <span>WhatsApp Attendance Submissions ({recentSessions.length})</span>
-            </h2>
-            <Link
-              href="/attendance"
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              <span>View All</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
 
-          {loading ? (
-            <div className="py-8 text-center text-xs text-slate-500">Loading activity feed...</div>
-          ) : recentSessions.length === 0 ? (
-            <div className="razorpay-card p-8 text-center text-xs text-slate-500">
-              No WhatsApp attendance submissions received today yet. Send a photo on WhatsApp to see live records!
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {recentSessions.slice(0, 5).map((session) => {
-                const site = sites.find((s) => s.id === session.siteId);
-                const supervisor = supervisors.find((s) => s.id === session.supervisorId);
-                const isWorkerQR = session.supervisorId === 'worker_qr_self';
-
-                return (
-                  <div
-                    key={session.id}
-                    className="razorpay-card p-4 flex items-center justify-between gap-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
-                        <Camera className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="font-bold text-sm text-slate-900 block">
-                          {isWorkerQR ? 'Worker QR Selfie Check-In' : 'Supervisor Group Attendance'}
-                        </span>
-                        <span className="text-xs text-slate-500 block mt-0.5">
-                          Site: <strong className="text-slate-700">{site?.name || 'Site Gate'}</strong> • Sender:{' '}
-                          {isWorkerQR
-                            ? session.whatsappSenderNumber || 'Worker'
-                            : supervisor?.name || session.whatsappSenderNumber || 'Supervisor'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <span className="px-3 py-1 rounded-full font-extrabold text-[11px] uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {session.status}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
         {/* Right 1-Col: Active Sites Breakdown */}
         <div className="space-y-3">

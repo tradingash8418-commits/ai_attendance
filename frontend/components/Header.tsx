@@ -58,8 +58,8 @@ export const Header: React.FC = () => {
   const userInitials = user?.displayName
     ? user.displayName.slice(0, 2).toUpperCase()
     : user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : 'CA';
+      ? user.email.slice(0, 2).toUpperCase()
+      : 'CA';
 
   return (
     <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md">
@@ -73,7 +73,7 @@ export const Header: React.FC = () => {
               </div>
               <div>
                 <span className="font-extrabold text-base tracking-tight text-white block leading-none">
-                  Contractor <span className="text-blue-400">AI</span>
+                  Averox <span className="text-blue-400">AI</span>
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase block mt-0.5">
                   Workforce OS
@@ -90,11 +90,10 @@ export const Header: React.FC = () => {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-                      isActive
-                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                    }`}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${isActive
+                      ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                      }`}
                   >
                     <Icon className="w-3.5 h-3.5" />
                     <span>{link.label}</span>
