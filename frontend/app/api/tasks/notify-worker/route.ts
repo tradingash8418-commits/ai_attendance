@@ -59,14 +59,15 @@ export async function POST(req: NextRequest) {
             .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
             .join('\n');
 
-          const completionTimeStr = task.completionTime ? `\n*Overall Deadline Time:* ⏰ ${task.completionTime}` : '';
+          const overallCompDate = task.completionDate || (task.completionTime && !task.completionTime.includes(':') ? task.completionTime : '');
+          const overallCompDateStr = overallCompDate ? `\n*Overall Completion Date:* 📅 ${overallCompDate}` : '';
 
           const workerMsg =
             `📋 *Daily Work Task Assigned!*\n\n` +
             `Hello *${wName}*,\n` +
             `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
             `*Site:* 🏗️ ${task.siteName}\n` +
-            `*Assignment Date:* 📅 ${task.date}${completionTimeStr}\n` +
+            `*Assignment Date:* 📅 ${task.date}${overallCompDateStr}\n` +
             `*Work:* 📌 *${task.title}*\n\n` +
             `📝 *Your Assigned Tasks:* \n${bulletedDescription}\n\n` +
             `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +
@@ -95,15 +96,16 @@ export async function POST(req: NextRequest) {
           .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
           .join('\n');
 
-        const completionTimeStr = task.completionTime ? `\n*Overall Deadline Time:* ⏰ ${task.completionTime}` : '';
-        const workerCompletionDateStr = target.completionDate ? `\n*Target Task Completion Date:* 📅 ${target.completionDate}` : `\n*Target Task Completion Date:* 📅 ${task.date}`;
+        const overallCompDate = task.completionDate || (task.completionTime && !task.completionTime.includes(':') ? task.completionTime : '');
+        const overallCompDateStr = overallCompDate ? `\n*Overall Completion Date:* 📅 ${overallCompDate}` : '';
+        const workerCompletionDateStr = target.completionDate ? `\n*Target Task Completion Date:* 📅 ${target.completionDate}` : '';
 
         const workerMsg =
           `📋 *Daily Work Task Assigned!*\n\n` +
           `Hello *${target.workerName}*,\n` +
           `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
           `*Site:* 🏗️ ${task.siteName}\n` +
-          `*Assignment Date:* 📅 ${task.date}${completionTimeStr}${workerCompletionDateStr}\n` +
+          `*Assignment Date:* 📅 ${task.date}${overallCompDateStr}${workerCompletionDateStr}\n` +
           `*Work:* 📌 *${task.title}*\n\n` +
           `📝 *Your Specific Tasks:* \n${bulletedTasks}\n\n` +
           `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +

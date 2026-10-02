@@ -19,8 +19,9 @@ export interface TaskAssignment {
   description: string;
   siteId: string;
   siteName: string;
-  date: string; // YYYY-MM-DD
-  completionTime?: string; // Overall task completion time / deadline (e.g. "06:00 PM" or "18:00")
+  date: string; // YYYY-MM-DD (Assignment Date)
+  completionDate?: string; // Overall Task Completion Date (YYYY-MM-DD)
+  completionTime?: string; // Kept for backward compatibility
   supervisorId: string;
   supervisorName: string;
   supervisorPhone: string;

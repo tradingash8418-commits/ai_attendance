@@ -15,7 +15,6 @@ import {
   Search,
   X,
   FileText,
-  Clock,
 } from 'lucide-react';
 import { TasksService } from '@/services/tasks.service';
 import { SitesService } from '@/services/sites.service';
@@ -50,7 +49,7 @@ export default function TasksPage() {
   const [formTitle, setFormTitle] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formDate, setFormDate] = useState<string>(todayStr);
-  const [formCompletionTime, setFormCompletionTime] = useState<string>('06:00 PM');
+  const [formOverallCompletionDate, setFormOverallCompletionDate] = useState<string>(todayStr);
   const [formSiteId, setFormSiteId] = useState<string>('');
   const [formSupervisorId, setFormSupervisorId] = useState<string>('');
   const [formSupervisorTasks, setFormSupervisorTasks] = useState<string>('');
@@ -108,7 +107,7 @@ export default function TasksPage() {
     setFormTitle('');
     setFormDescription('');
     setFormDate(selectedDate || todayStr);
-    setFormCompletionTime('06:00 PM');
+    setFormOverallCompletionDate(selectedDate || todayStr);
     setFormSiteId(sites[0]?.id || '');
     setFormSupervisorId(supervisors[0]?.id || '');
     setFormSupervisorTasks('');
@@ -126,7 +125,7 @@ export default function TasksPage() {
     setFormTitle(task.title);
     setFormDescription(task.description);
     setFormDate(task.date);
-    setFormCompletionTime(task.completionTime || '06:00 PM');
+    setFormOverallCompletionDate(task.completionDate || task.completionTime || task.date || selectedDate || todayStr);
     setFormSiteId(task.siteId);
     setFormSupervisorId(task.supervisorId);
     setFormSupervisorTasks(task.supervisorTasks || '');
@@ -194,7 +193,7 @@ export default function TasksPage() {
           workerName: w ? getWorkerDisplayName(w) : wId,
           workerPhone: w?.phone || '',
           tasks: (formWorkerTasksMap[wId] || formDescription || '').trim(),
-          completionDate: formWorkerCompletionDateMap[wId] || formDate,
+          completionDate: formWorkerCompletionDateMap[wId] || formOverallCompletionDate || formDate,
           notified: existingDetail?.notified || false,
           notifiedAt: existingDetail?.notifiedAt || null,
         };
@@ -206,7 +205,8 @@ export default function TasksPage() {
         siteId: formSiteId,
         siteName: selectedSite?.name || 'Site',
         date: formDate,
-        completionTime: formCompletionTime,
+        completionDate: formOverallCompletionDate,
+        completionTime: formOverallCompletionDate,
         supervisorId: formSupervisorId,
         supervisorName,
         supervisorPhone,
@@ -561,10 +561,10 @@ export default function TasksPage() {
                           <Building2 className="w-3.5 h-3.5 shrink-0 text-blue-600" />
                           <span className="truncate">{task.siteName}</span>
                         </div>
-                        {task.completionTime && (
+                        {(task.completionDate || task.completionTime) && (
                           <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
-                            <Clock className="w-3 h-3 text-indigo-600" />
-                            <span>Deadline: {task.completionTime}</span>
+                            <Calendar className="w-3 h-3 text-indigo-600" />
+                            <span>Target Completion: {task.completionDate || task.completionTime}</span>
                           </span>
                         )}
                       </div>
@@ -778,12 +778,12 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Overall Deadline Time</label>
+                  <label className="font-bold text-slate-700 block mb-1">Overall Completion Date *</label>
                   <input
-                    type="text"
-                    placeholder="e.g. 05:00 PM"
-                    value={formCompletionTime}
-                    onChange={(e) => setFormCompletionTime(e.target.value)}
+                    type="date"
+                    required
+                    value={formOverallCompletionDate}
+                    onChange={(e) => setFormOverallCompletionDate(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900 focus:outline-none focus:border-blue-600"
                   />
                 </div>

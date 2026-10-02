@@ -75,14 +75,15 @@ export async function POST(req: NextRequest) {
     }
 
     const supervisorDirectives = task.supervisorTasks || task.description;
-    const overallDeadlineStr = task.completionTime ? `\n*Overall Task Deadline Time:* ⏰ ${task.completionTime}` : '';
+    const overallCompDate = task.completionDate || (task.completionTime && !task.completionTime.includes(':') ? task.completionTime : '');
+    const overallCompDateStr = overallCompDate ? `\n*Overall Task Completion Date:* 📅 ${overallCompDate}` : '';
 
     const supervisorMsg =
       `📋 *Supervisor Master Team Deployment Order*\n\n` +
       `Hello *${task.supervisorName}*,\n` +
       `Aaj ki site deployment aur worker task breakdown:\n\n` +
       `*Site:* 🏗️ ${task.siteName}\n` +
-      `*Assignment Date:* 📅 ${task.date}${overallDeadlineStr}\n` +
+      `*Assignment Date:* 📅 ${task.date}${overallCompDateStr}\n` +
       `*Primary Work:* 📌 *${task.title}*\n\n` +
       `🎯 *Supervisor Directives:* \n${supervisorDirectives}\n\n` +
       `👥 *Team Allocations & Worker Tasks (${task.assignedWorkerNames.length || workerDetails.length} Workers):*\n\n` +

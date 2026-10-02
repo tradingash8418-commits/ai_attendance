@@ -64,7 +64,7 @@ export const Header: React.FC = () => {
       : 'CA';
 
   return (
-    <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md w-full max-w-full overflow-x-hidden">
+    <header className="bg-[#0b0f19] text-white border-b border-slate-800/80 sticky top-0 z-50 shadow-md w-full max-w-full">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Brand Logo & Title */}
@@ -134,36 +134,42 @@ export const Header: React.FC = () => {
               </button>
 
               {showProfileDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl space-y-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-2 border-b border-slate-800/80">
-                    <p className="font-extrabold text-white truncate">
-                      {userProfile?.displayName || user?.displayName || 'Contractor Admin'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">{user?.email || 'admin@contractor.ai'}</p>
-                    <div className="mt-1.5 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 inline-block text-[10px] font-bold text-blue-400 truncate max-w-full">
-                      🏢 {userProfile?.organizationName || 'Organization'}
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setShowProfileDropdown(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl space-y-1 text-xs z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-2 border-b border-slate-800/80">
+                      <p className="font-extrabold text-white truncate">
+                        {userProfile?.displayName || user?.displayName || 'Contractor Admin'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 truncate">{user?.email || 'admin@contractor.ai'}</p>
+                      <div className="mt-1.5 px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 inline-block text-[10px] font-bold text-blue-400 truncate max-w-full">
+                        🏢 {userProfile?.organizationName || 'Organization'}
+                      </div>
+                    </div>
+
+                    <div className="p-1 space-y-1">
+                      <Link
+                        href="/profile"
+                        onClick={() => setShowProfileDropdown(false)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white font-semibold transition-colors"
+                      >
+                        <User className="w-4 h-4 text-blue-400" />
+                        <span>My Registered Profile</span>
+                      </Link>
+
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-semibold transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="p-1 space-y-1">
-                    <Link
-                      href="/profile"
-                      onClick={() => setShowProfileDropdown(false)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white font-semibold transition-colors"
-                    >
-                      <User className="w-4 h-4 text-blue-400" />
-                      <span>My Registered Profile</span>
-                    </Link>
-
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-semibold transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sign Out</span>
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </div>
