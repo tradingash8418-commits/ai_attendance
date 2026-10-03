@@ -12,7 +12,6 @@ import {
   XCircle,
   Search,
   Cpu,
-  Sparkles,
   UserCheck,
   Edit2,
   Phone,
@@ -27,7 +26,6 @@ import {
 import { WorkersService } from '@/services/workers.service';
 import { OrgContextService } from '@/services/org-context.service';
 import { WorkerPhotosService } from '@/services/workerPhotos.service';
-import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
 import { AttendanceService } from '@/services/attendance.service';
 import { PaymentLedgerService, WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { getWorkerDisplayName, getTodayDateString, normalizeWorkerCode, compareWorkerCodes } from '@/lib/formatters';
@@ -263,17 +261,7 @@ export default function WorkersPage() {
       const uploaded = await WorkerPhotosService.uploadWorkerPhoto(selectedWorkerForPhoto.id, compressed);
       setWorkerPhotos((prev) => [uploaded, ...prev]);
 
-      try {
-        await WorkerEmbeddingsService.generateAndStoreEmbedding(
-          selectedWorkerForPhoto.workerCode || selectedWorkerForPhoto.id,
-          uploaded.id,
-          uploaded.photoUrl
-        );
-        setEmbeddingNotice('SFace reference neural embedding generated successfully!');
-      } catch (embErr) {
-        console.warn('Embedding generation notice:', embErr);
-        setEmbeddingNotice('Photo uploaded. Embedding generated cleanly.');
-      }
+      setEmbeddingNotice('Worker photo uploaded successfully!');
     } catch (err) {
       console.error('Failed to upload photo:', err);
       alert('Photo upload failed. Check file permissions.');
@@ -723,8 +711,8 @@ export default function WorkersPage() {
                   disabled={submitting}
                   className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-2"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  <span>{submitting ? 'Extracting AI Vectors...' : 'Enroll Worker'}</span>
+                  <UserCheck className="w-4 h-4" />
+                  <span>{submitting ? 'Enrolling Worker...' : 'Enroll Worker'}</span>
                 </button>
               </div>
             </form>
@@ -732,14 +720,14 @@ export default function WorkersPage() {
         </div>
       )}
 
-      {/* Worker Photos & ArcFace Embeddings Modal */}
+      {/* Worker Photos & ID Display Modal */}
       {selectedWorkerForPhoto && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-white rounded-2xl p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900">
-                  Reference Photos & SFace Embeddings
+                  Worker Photos &amp; ID Display
                 </h2>
                 <p className="text-xs font-bold text-blue-600">
                   {getWorkerDisplayName(selectedWorkerForPhoto)}
