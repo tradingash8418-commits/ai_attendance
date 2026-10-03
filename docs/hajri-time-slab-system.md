@@ -10,56 +10,58 @@ In construction site workforce management, **Hajri (Daily Work Shift Unit)** is 
 
 ### Key Rules Enforced:
 1. **Duration-Based Calculation**: Hajri is calculated directly from the elapsed duration between Check-In and Check-Out (`checkoutMs - checkInMs`).
-2. **Late Check-in Protection**: Workers checking in late (e.g., evening) and checking out after a short duration will NOT receive full Hajri based on wall-clock checkout time; they must complete the required minimum worked hours.
-3. **Minimum 8-Hour Requirement (Option B Rule)**: Any shift duration under **8.0 worked hours** yields **0.0 Hajri** (Short Shift).
+2. **Flexible 20-Minute Grace Buffer (`HAJRI_BUFFER_MINUTES = 20`)**: To accommodate practical construction site realities (e.g. workers clocking out a few minutes early after completing shift tasks, such as 9 hrs 55 mins worked), a **-20 minute grace buffer** is subtracted from every shift slab threshold.
+3. **Late Check-in Protection**: Workers checking in late (e.g., evening) and checking out after a short duration will NOT receive full Hajri based on wall-clock checkout time; they must complete the required minimum worked hours.
 4. **Timezone**: All timestamp conversions use **`Asia/Kolkata`** (UTC+05:30).
 5. **Overnight Shifts**: Overnight shift checkouts (e.g. 01:00 AM or 03:30 AM on the next calendar day following a 10:00 AM check-in) calculate exact worked hours across calendar day boundaries.
 
 ---
 
-## ⏰ 2. Complete Hajri Worked Hours Duration Table (Option B Rules)
+## ⏰ 2. Complete Hajri Worked Hours Duration Table (With 20-Min Grace Buffer)
 
-| Rule ID | Rule Name | Display Label | Hajri Value | Worked Duration Range | Minimum Mandatory Hours | Example Shift (Check-In 10:00 AM) |
+| Rule ID | Rule Name | Display Label | Hajri Value | Nominal Target Hours | Effective Min Required (with 20-Min Buffer) | Example Shift (Check-In 10:00 AM) |
 |---|---|---|---|---|---|---|
-| `rule_short_shift` | `Short Shift` | **0.0 Hajri (Short Shift - Min 8 hrs Required)** | **0.0** | `0.0 hrs` to `< 8.0 hrs` | None (< 8.0 hrs) | 10:00 AM $\rightarrow$ 12:00 PM (2 hrs) / 5:59 PM (7.98 hrs) |
-| `rule_normal` | `Normal` | **Normal (1.0 Hajri)** | **1.0** | `8.0 hrs` to `< 10.0 hrs` | **8.0 Hours** | 10:00 AM $\rightarrow$ 6:00 PM (8 hrs) / 7:00 PM (9 hrs) |
-| `rule_dedhi` | `Dedhi` | **Dedhi (1.5 Hajri)** | **1.5** | `10.0 hrs` to `< 12.0 hrs` | **10.0 Hours** | 10:00 AM $\rightarrow$ 8:00 PM (10 hrs) / 9:00 PM (11 hrs) |
-| `rule_double` | `Double` | **Double (2.0 Hajri)** | **2.0** | `12.0 hrs` to `< 15.0 hrs` | **12.0 Hours** | 10:00 AM $\rightarrow$ 10:00 PM (12 hrs) / 12:00 AM (14 hrs) |
-| `rule_dhai` | `Dhai` | **Dhai (2.5 Hajri)** | **2.5** | `15.0 hrs` to `< 17.5 hrs` | **15.0 Hours** | 10:00 AM $\rightarrow$ 1:00 AM Next Day (15 hrs) |
-| `rule_three` | `Three` | **Three (3.0 Hajri)** | **3.0** | `≥ 17.5 Worked Hours` | **17.5 Hours** | 10:00 AM $\rightarrow$ 3:30 AM Next Day (17.5 hrs) |
+| `rule_short_shift` | `Short Shift` | **0.0 Hajri (Short Shift - Min 7h 40m Required)** | **0.0** | `0.0 hrs` | `< 460 mins` (< 7h 40m) | 10:00 AM $\rightarrow$ 12:00 PM (2 hrs) / 5:30 PM (7h 30m) |
+| `rule_normal` | `Normal` | **Normal (1.0 Hajri)** | **1.0** | `8.0 hrs` | **460 mins (7h 40m)** | 10:00 AM $\rightarrow$ 5:45 PM (7h 45m) / 6:00 PM (8 hrs) |
+| `rule_dedhi` | `Dedhi` | **Dedhi (1.5 Hajri)** | **1.5** | `10.0 hrs` | **580 mins (9h 40m)** | 10:00 AM $\rightarrow$ 7:55 PM (**9h 55m**) / 8:00 PM (10 hrs) |
+| `rule_double` | `Double` | **Double (2.0 Hajri)** | **2.0** | `12.0 hrs` | **700 mins (11h 40m)** | 10:00 AM $\rightarrow$ 9:45 PM (11h 45m) / 10:00 PM (12 hrs) |
+| `rule_dhai` | `Dhai` | **Dhai (2.5 Hajri)** | **2.5** | `15.0 hrs` | **880 mins (14h 40m)** | 10:00 AM $\rightarrow$ 12:50 AM Next Day (14h 50m) |
+| `rule_three` | `Three` | **Three (3.0 Hajri)** | **3.0** | `17.5 hrs` | **1030 mins (17h 10m)** | 10:00 AM $\rightarrow$ 3:15 AM Next Day (17h 15m) |
 
 ---
 
-## ⏱️ 3. Worked Hours Time Slab Breakdown & Examples
+## ⏱️ 3. Worked Hours Time Slab Breakdown & 20-Min Buffer Examples
 
-### 1. Short Shift (< 8.0 Hours) $\rightarrow$ **0.0 Hajri**
-- **Condition**: Worked duration is less than 8.0 hours.
-- **Rule**: Option B strictly requires a minimum of 8.0 hours for 1.0 Hajri.
+### 1. Short Shift (< 7 Hours 40 Minutes) $\rightarrow$ **0.0 Hajri**
+- **Condition**: Worked duration is less than 460 minutes (7 hours 40 minutes).
+- **Rule**: Minimum 7h 40m required for 1.0 Hajri.
 - **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 12:00 PM (2.0 hrs worked) $\rightarrow$ **0.0 Hajri**.
-- **Example B (Late Check-in Protection)**: Check-In 6:00 PM $\rightarrow$ Check-Out 7:00 PM (1.0 hr worked) $\rightarrow$ **0.0 Hajri**.
+- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 5:30 PM (7.5 hrs / 450 mins worked) $\rightarrow$ **0.0 Hajri**.
 
-### 2. Normal Shift (8.0 to < 10.0 Hours) $\rightarrow$ **1.0 Hajri**
-- **Condition**: Worked duration is between 8.0 hours and 9.99 hours.
-- **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 6:00 PM (8.0 hrs worked) $\rightarrow$ **1.0 Hajri**.
-- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 7:00 PM (9.0 hrs worked) $\rightarrow$ **1.0 Hajri**.
+### 2. Normal Shift (7h 40m to < 9h 40m) $\rightarrow$ **1.0 Hajri**
+- **Condition**: Worked duration is between 460 minutes (7h 40m) and 579 minutes (9h 39m).
+- **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 5:45 PM (7h 45m / 465 mins worked) $\rightarrow$ **1.0 Hajri**.
+- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 6:00 PM (8.0 hrs / 480 mins worked) $\rightarrow$ **1.0 Hajri**.
 
-### 3. Dedhi Shift (10.0 to < 12.0 Hours) $\rightarrow$ **1.5 Hajri**
-- **Condition**: Worked duration is between 10.0 hours and 11.99 hours.
-- **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 8:00 PM (10.0 hrs worked) $\rightarrow$ **1.5 Hajri**.
-- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 9:00 PM (11.0 hrs worked) $\rightarrow$ **1.5 Hajri**.
+### 3. Dedhi Shift (9h 40m to < 11h 40m) $\rightarrow$ **1.5 Hajri** (Includes 9h 55m Workers!)
+- **Condition**: Worked duration is between 580 minutes (9h 40m) and 699 minutes (11h 39m).
+- **Real-World Case (9h 55m Worked)**: Check-In 10:00 AM $\rightarrow$ Check-Out 7:55 PM (9 hrs 55 mins = 595 mins worked).
+  - Nominal Dedhi threshold = 10 hrs (600 mins).
+  - With 20-min buffer: 600 - 20 = 580 mins (9h 40m).
+  - Since 595 mins $\ge$ 580 mins, worker qualifies for **1.5 Hajri (Dedhi)**!
 
-### 4. Double Shift (12.0 to < 15.0 Hours) $\rightarrow$ **2.0 Hajri**
-- **Condition**: Worked duration is between 12.0 hours and 14.99 hours.
-- **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 10:00 PM (12.0 hrs worked) $\rightarrow$ **2.0 Hajri**.
-- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 12:00 AM Midnight (14.0 hrs worked) $\rightarrow$ **2.0 Hajri**.
+### 4. Double Shift (11h 40m to < 14h 40m) $\rightarrow$ **2.0 Hajri**
+- **Condition**: Worked duration is between 700 minutes (11h 40m) and 879 minutes (14h 39m).
+- **Example A**: Check-In 10:00 AM $\rightarrow$ Check-Out 9:45 PM (11h 45m / 705 mins worked) $\rightarrow$ **2.0 Hajri**.
+- **Example B**: Check-In 10:00 AM $\rightarrow$ Check-Out 10:00 PM (12.0 hrs / 720 mins worked) $\rightarrow$ **2.0 Hajri**.
 
-### 5. Dhai Shift (15.0 to < 17.5 Hours) $\rightarrow$ **2.5 Hajri**
-- **Condition**: Worked duration is between 15.0 hours and 17.49 hours.
-- **Example**: Check-In 10:00 AM $\rightarrow$ Check-Out 1:00 AM Next Day (15.0 hrs worked) $\rightarrow$ **2.5 Hajri**.
+### 5. Dhai Shift (14h 40m to < 17h 10m) $\rightarrow$ **2.5 Hajri**
+- **Condition**: Worked duration is between 880 minutes (14h 40m) and 1029 minutes (17h 09m).
+- **Example**: Check-In 10:00 AM $\rightarrow$ Check-Out 12:50 AM Next Day (14h 50m / 890 mins worked) $\rightarrow$ **2.5 Hajri**.
 
-### 6. Three Hajri Shift ($\ge$ 17.5 Hours) $\rightarrow$ **3.0 Hajri**
-- **Condition**: Worked duration is 17.5 hours or more.
-- **Example**: Check-In 10:00 AM $\rightarrow$ Check-Out 3:30 AM Next Day (17.5 hrs worked) $\rightarrow$ **3.0 Hajri**.
+### 6. Three Hajri Shift ($\ge$ 17 Hours 10 Minutes) $\rightarrow$ **3.0 Hajri**
+- **Condition**: Worked duration is 1030 minutes (17h 10m) or more.
+- **Example**: Check-In 10:00 AM $\rightarrow$ Check-Out 3:15 AM Next Day (17h 15m / 1035 mins worked) $\rightarrow$ **3.0 Hajri**.
 
 ---
 

@@ -1,12 +1,19 @@
 export const TIMEZONE = 'Asia/Kolkata';
 
+/**
+ * Flexible Grace Buffer (in minutes) applied to all Hajri shift duration thresholds.
+ * A 20-minute buffer (±20 mins) allows workers who complete e.g. 9 hrs 55 mins (595 mins)
+ * to qualify for Dedhi (1.5 Hajri, threshold 10 hrs - 20 mins = 9 hrs 40 mins / 580 mins).
+ */
+export const HAJRI_BUFFER_MINUTES = 20;
+
 export interface HajriDurationRule {
   id: string;
   ruleName: string;
   label: string;
   hajriValue: number;
-  minHours: number; // Minimum worked hours required for this slab (inclusive)
-  maxHours: number | null; // Upper bound worked hours (exclusive, null if no upper limit)
+  minHours: number; // Nominal minimum worked hours required for this slab (inclusive)
+  maxHours: number | null; // Nominal upper bound worked hours (exclusive, null if no upper limit)
 }
 
 export const HAJRI_DURATION_RULES: HajriDurationRule[] = [

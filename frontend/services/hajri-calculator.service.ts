@@ -1,4 +1,4 @@
-import { HAJRI_DURATION_RULES, UNMATCHED_HAJRI_STATE } from '@/config/hajri-rules.config';
+import { HAJRI_DURATION_RULES, HAJRI_BUFFER_MINUTES, UNMATCHED_HAJRI_STATE } from '@/config/hajri-rules.config';
 
 export interface HajriCalculationResult {
   status: 'matched' | 'unmatched';
@@ -11,14 +11,16 @@ export interface HajriCalculationResult {
 
 export class HajriCalculatorService {
   /**
-   * Calculates Hajri value STRICTLY based on the total worked hours (duration) between Check-In and Check-Out.
-   * Option B:
-   *  - < 8.0 hrs: 0.0 Hajri (Short Shift - Min 8 hrs Required)
-   *  - 8.0 hrs to < 10.0 hrs: 1.0 Hajri (Normal)
-   *  - 10.0 hrs to < 12.0 hrs: 1.5 Hajri (Dedhi)
-   *  - 12.0 hrs to < 15.0 hrs: 2.0 Hajri (Double)
-   *  - 15.0 hrs to < 17.5 hrs: 2.5 Hajri (Dhai)
-   *  - >= 17.5 hrs: 3.0 Hajri (Three)
+   * Calculates Hajri value STRICTLY based on the total worked hours (duration) between Check-In and Check-Out,
+   * applying a flexible 20-minute (±20 mins) grace buffer to shift thresholds.
+   *
+   * Thresholds with 20-Min Grace Buffer (HAJRI_BUFFER_MINUTES = 20):
+   *  - < 7h 40m (< 460 mins): 0.0 Hajri (Short Shift)
+   *  - 7h 40m to < 9h 40m (460 to < 580 mins): 1.0 Hajri (Normal)
+   *  - 9h 40m to < 11h 40m (580 to < 700 mins): 1.5 Hajri (Dedhi) -> e.g. 9h 55m gives 1.5 Hajri!
+   *  - 11h 40m to < 14h 40m (700 to < 880 mins): 2.0 Hajri (Double)
+   *  - 14h 40m to < 17h 10m (880 to < 1030 mins): 2.5 Hajri (Dhai)
+   *  - >= 17h 10m (>= 1030 mins): 3.0 Hajri (Three)
    */
   public static calculateHajriFromCheckoutTimestamp(
     checkInDate: Date,
@@ -45,7 +47,6 @@ export class HajriCalculatorService {
 
     const durationMs = checkoutMs - checkInMs;
     const workedMinutes = Math.floor(durationMs / (1000 * 60));
-    const workedHoursDecimal = workedMinutes / 60;
     const hours = Math.floor(workedMinutes / 60);
     const mins = workedMinutes % 60;
     const workedHours = `${hours}h ${mins.toString().padStart(2, '0')}m`;
@@ -54,7 +55,10 @@ export class HajriCalculatorService {
     const sortedRules = HAJRI_DURATION_RULES.slice().sort((a, b) => b.minHours - a.minHours);
 
     for (const rule of sortedRules) {
-      if (workedHoursDecimal >= rule.minHours) {
+      const nominalMinMinutes = rule.minHours * 60;
+      const effectiveMinMinutes = Math.max(0, nominalMinMinutes - HAJRI_BUFFER_MINUTES);
+
+      if (workedMinutes >= effectiveMinMinutes) {
         return {
           status: 'matched',
           hajri: rule.hajriValue,
