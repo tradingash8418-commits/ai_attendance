@@ -107,11 +107,16 @@ export async function POST(req: NextRequest) {
     const overallCompDate = task.completionDate || (task.completionTime && !task.completionTime.includes(':') ? task.completionTime : '');
     const overallCompDateStr = overallCompDate ? `\n*Overall Task Completion Date:* 📅 ${overallCompDate}` : '';
 
+    const locationBlock =
+      (task.locationLandmark ? `🏢 *Landmark / Address:* ${task.locationLandmark}\n` : '') +
+      (task.mapLink ? `📍 *GPS Navigation Link:* ${task.mapLink}\n` : '');
+
     const supervisorMsg =
       `📋 *Supervisor Master Team Deployment Order*\n\n` +
       `Hello *${task.supervisorName}*,\n` +
       `Aaj ki site deployment aur worker task breakdown:\n\n` +
       `*Site:* 🏗️ ${task.siteName}\n` +
+      `${locationBlock}` +
       `*Assignment Date:* 📅 ${task.date}${overallCompDateStr}\n` +
       `*Primary Work:* 📌 *${task.title}*\n\n` +
       `🎯 *Supervisor Directives:* \n${supervisorDirectives}\n\n` +

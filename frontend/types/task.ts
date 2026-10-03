@@ -33,6 +33,8 @@ export interface TaskAssignment {
   contactPersonName: string;
   contactPersonPhone: string;
   status: TaskStatus;
+  locationLandmark?: string; // Manual address/landmark e.g. "Behind HDFC Bank, 3rd Floor"
+  mapLink?: string; // Google maps navigation link e.g. "https://maps.google.com/?q=26.8467,80.9462"
   supervisorNotified?: boolean;
   supervisorNotifiedAt?: Timestamp | string | null;
   notifiedAt?: Timestamp | string | null;

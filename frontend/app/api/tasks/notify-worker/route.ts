@@ -61,11 +61,16 @@ export async function POST(req: NextRequest) {
 
           const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${task.date}`;
 
+          const locationBlock =
+            (task.locationLandmark ? `🏢 *Landmark / Address:* ${task.locationLandmark}\n` : '') +
+            (task.mapLink ? `📍 *GPS Navigation Link:* ${task.mapLink}\n` : '');
+
           const workerMsg =
             `📋 *Daily Work Task Assigned!*\n\n` +
             `Hello *${wName}*,\n` +
             `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
             `*Site:* 🏗️ ${task.siteName}\n` +
+            `${locationBlock}` +
             `*Assignment Date:* 📅 ${task.date}${workerCompletionDateStr}\n` +
             `*Work:* 📌 *${task.title}*\n\n` +
             `📝 *Your Assigned Tasks:* \n${bulletedDescription}\n\n` +
@@ -97,11 +102,16 @@ export async function POST(req: NextRequest) {
 
         const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${target.completionDate || task.date}`;
 
+        const locationBlock =
+          (task.locationLandmark ? `🏢 *Landmark / Address:* ${task.locationLandmark}\n` : '') +
+          (task.mapLink ? `📍 *GPS Navigation Link:* ${task.mapLink}\n` : '');
+
         const workerMsg =
           `📋 *Daily Work Task Assigned!*\n\n` +
           `Hello *${target.workerName}*,\n` +
           `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
           `*Site:* 🏗️ ${task.siteName}\n` +
+          `${locationBlock}` +
           `*Assignment Date:* 📅 ${task.date}${workerCompletionDateStr}\n` +
           `*Work:* 📌 *${task.title}*\n\n` +
           `📝 *Your Specific Tasks:* \n${bulletedTasks}\n\n` +

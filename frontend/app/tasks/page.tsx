@@ -15,6 +15,8 @@ import {
   Search,
   X,
   FileText,
+  MapPin,
+  ExternalLink,
 } from 'lucide-react';
 import { TasksService } from '@/services/tasks.service';
 import { SitesService } from '@/services/sites.service';
@@ -58,6 +60,8 @@ export default function TasksPage() {
   const [formWorkerCompletionDateMap, setFormWorkerCompletionDateMap] = useState<Record<string, string>>({});
   const [formContactName, setFormContactName] = useState<string>('Contractor Admin');
   const [formContactPhone, setFormContactPhone] = useState<string>('');
+  const [formMapLink, setFormMapLink] = useState<string>('');
+  const [formLocationLandmark, setFormLocationLandmark] = useState<string>('');
   const [workerSearchTerm, setWorkerSearchTerm] = useState<string>('');
 
   // Processing Action States
@@ -116,6 +120,8 @@ export default function TasksPage() {
     setFormWorkerCompletionDateMap({});
     setFormContactName('Contractor Admin');
     setFormContactPhone('');
+    setFormMapLink('');
+    setFormLocationLandmark('');
     setWorkerSearchTerm('');
   };
 
@@ -145,6 +151,8 @@ export default function TasksPage() {
 
     setFormContactName(task.contactPersonName || 'Contractor Admin');
     setFormContactPhone(task.contactPersonPhone || '');
+    setFormMapLink(task.mapLink || '');
+    setFormLocationLandmark(task.locationLandmark || '');
     setShowTaskModal(true);
   };
 
@@ -217,6 +225,8 @@ export default function TasksPage() {
         assignedWorkerPhones,
         contactPersonName: formContactName,
         contactPersonPhone: formContactPhone,
+        mapLink: formMapLink.trim(),
+        locationLandmark: formLocationLandmark.trim(),
         status: editingTask ? editingTask.status : ('draft' as TaskStatus),
       };
 
@@ -632,6 +642,24 @@ export default function TasksPage() {
                           <span>Target Completion: {task.completionDate || task.completionTime}</span>
                         </span>
                       )}
+                      {task.locationLandmark && (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
+                          <Building2 className="w-3 h-3 text-amber-600" />
+                          <span>Landmark: {task.locationLandmark}</span>
+                        </span>
+                      )}
+                      {task.mapLink && (
+                        <a
+                          href={task.mapLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0 transition-all shadow-2xs"
+                        >
+                          <MapPin className="w-3 h-3 text-emerald-600" />
+                          <span>📍 Navigate via Google Maps</span>
+                          <ExternalLink className="w-2.5 h-2.5 text-emerald-500" />
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -946,7 +974,19 @@ export default function TasksPage() {
                   <label className="font-bold text-slate-700 block mb-1">Construction Site *</label>
                   <select
                     value={formSiteId}
-                    onChange={(e) => setFormSiteId(e.target.value)}
+                    onChange={(e) => {
+                      const newSiteId = e.target.value;
+                      setFormSiteId(newSiteId);
+                      const site = sites.find((s) => s.id === newSiteId);
+                      if (site) {
+                        if (site.address && !formLocationLandmark) {
+                          setFormLocationLandmark(site.address);
+                        }
+                        if (site.latitude && site.longitude && !formMapLink) {
+                          setFormMapLink(`https://maps.google.com/?q=${site.latitude},${site.longitude}`);
+                        }
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-semibold text-slate-900 focus:outline-none focus:border-blue-600"
                   >
                     {sites.map((s) => (
@@ -979,6 +1019,37 @@ export default function TasksPage() {
                       ))}
                     </optgroup>
                   </select>
+                </div>
+              </div>
+
+              {/* Site Location & Google Maps Navigation Link */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-xl bg-blue-50/50 border border-blue-100">
+                <div>
+                  <label className="font-bold text-slate-800 flex items-center gap-1.5 mb-1">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Google Maps GPS Link (Clickable Navigation)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. https://maps.google.com/?q=26.8467,80.9462"
+                    value={formMapLink}
+                    onChange={(e) => setFormMapLink(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-800 flex items-center gap-1.5 mb-1">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Landmark / Address (Manual Instructions)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Behind HDFC Bank, 3rd Floor, Plot #42, Near Station"
+                    value={formLocationLandmark}
+                    onChange={(e) => setFormLocationLandmark(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 font-medium text-slate-900 focus:outline-none focus:border-blue-600 placeholder:text-slate-400"
+                  />
                 </div>
               </div>
 
