@@ -39,11 +39,18 @@ export async function POST(req: NextRequest) {
     // Fallback: If supervisorPhone is missing on task, lookup from supervisors or workers collection
     if (!supervisorPhone && task.supervisorId) {
       try {
-        const supDoc = await OrgContextService.getDocWithFallback('supervisors', task.supervisorId, targetOrg);
-        if (supDoc.data?.phone || supDoc.data?.whatsappNumber) {
-          supervisorPhone = (supDoc.data.phone || supDoc.data.whatsappNumber).trim();
+        let supDoc = await OrgContextService.getDocWithFallback('supervisors', task.supervisorId, targetOrg);
+        if (!supDoc.data && targetOrg !== 'org_primary') {
+          supDoc = await OrgContextService.getDocWithFallback('supervisors', task.supervisorId, 'org_primary');
+        }
+
+        if (supDoc.data?.whatsappNumber || supDoc.data?.phone) {
+          supervisorPhone = (supDoc.data.whatsappNumber || supDoc.data.phone).trim();
         } else {
-          const wrkDoc = await OrgContextService.getDocWithFallback('workers', task.supervisorId, targetOrg);
+          let wrkDoc = await OrgContextService.getDocWithFallback('workers', task.supervisorId, targetOrg);
+          if (!wrkDoc.data && targetOrg !== 'org_primary') {
+            wrkDoc = await OrgContextService.getDocWithFallback('workers', task.supervisorId, 'org_primary');
+          }
           if (wrkDoc.data?.phone) {
             supervisorPhone = wrkDoc.data.phone.trim();
           }

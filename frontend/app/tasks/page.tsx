@@ -172,7 +172,7 @@ export default function TasksPage() {
           ? getWorkerDisplayName(foundWorkerSup)
           : 'Supervisor';
 
-      const supervisorPhone = foundSupervisor?.phone || foundWorkerSup?.phone || '';
+      const supervisorPhone = foundSupervisor?.phone || foundSupervisor?.whatsappNumber || foundWorkerSup?.phone || '';
 
       const assignedWorkerNames = formSelectedWorkerIds.map((id) => {
         const w = workers.find((wrk) => wrk.id === id);
