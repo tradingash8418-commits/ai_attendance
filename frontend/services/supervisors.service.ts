@@ -18,32 +18,25 @@ const COLLECTION_NAME = 'supervisors';
 export class SupervisorsService {
   public static async getSupervisors(orgId?: string): Promise<Supervisor[]> {
     const targetOrg = orgId || OrgContextService.getOrgId();
-    const docs = await OrgContextService.getDocsWithFallback(
-      COLLECTION_NAME,
-      [orderBy('createdAt', 'desc')],
-      targetOrg
-    );
+    let docs: any[] = [];
+    try {
+      docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [orderBy('createdAt', 'desc')],
+        targetOrg
+      );
+    } catch (e) {
+      docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [],
+        targetOrg
+      );
+    }
 
     const result = docs.map((d) => ({
       id: d.id,
       ...d,
     })) as Supervisor[];
-
-    if (targetOrg !== 'org_primary') {
-      try {
-        const primaryDocs = await OrgContextService.getDocsWithFallback(
-          COLLECTION_NAME,
-          [orderBy('createdAt', 'desc')],
-          'org_primary'
-        );
-        const existingIds = new Set(result.map((s) => s.id));
-        for (const pd of primaryDocs) {
-          if (!existingIds.has(pd.id)) {
-            result.push({ id: pd.id, ...pd } as Supervisor);
-          }
-        }
-      } catch (e) {}
-    }
 
     return result;
   }

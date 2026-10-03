@@ -86,11 +86,20 @@ export class WorkersService {
   }
   public static async getWorkers(orgId?: string): Promise<Worker[]> {
     const targetOrg = orgId || OrgContextService.getOrgId();
-    const docs = await OrgContextService.getDocsWithFallback(
-      COLLECTION_NAME,
-      [orderBy('createdAt', 'desc')],
-      targetOrg
-    );
+    let docs: any[] = [];
+    try {
+      docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [orderBy('createdAt', 'desc')],
+        targetOrg
+      );
+    } catch (e) {
+      docs = await OrgContextService.getDocsWithFallback(
+        COLLECTION_NAME,
+        [],
+        targetOrg
+      );
+    }
 
     const result = docs.map((d) => ({
       id: d.id,

@@ -25,6 +25,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { WorkersService } from '@/services/workers.service';
+import { OrgContextService } from '@/services/org-context.service';
 import { WorkerPhotosService } from '@/services/workerPhotos.service';
 import { WorkerEmbeddingsService } from '@/services/workerEmbeddings.service';
 import { AttendanceService } from '@/services/attendance.service';
@@ -129,6 +130,7 @@ export default function WorkersPage() {
       formData.append('phone', phone);
       formData.append('role', role || 'General Worker');
       formData.append('dailyRate', dailyRate || '0');
+      formData.append('orgId', OrgContextService.getOrgId());
       
       if (selectedPhotoFile) {
         // Automatically compress camera image before sending to avoid Vercel 413 Payload limit
@@ -153,7 +155,7 @@ export default function WorkersPage() {
       }
 
       if (res.ok && data.success) {
-        setSuccessNotice(`Worker ${name} (${nextCode}) enrolled successfully with SFace AI Neural Face Vector!`);
+        setSuccessNotice(`Worker ${name} (${nextCode}) enrolled successfully!`);
         setName('');
         setWorkerCode('');
         setPhone('');
@@ -592,9 +594,9 @@ export default function WorkersPage() {
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
                   <UserCheck className="w-5 h-5 text-blue-600" />
-                  <span>Enroll Worker with AI Face</span>
+                  <span>Enroll New Worker</span>
                 </h2>
-                <p className="text-xs text-slate-500">Upload face photo for instant SFace AI vector enrollment</p>
+                <p className="text-xs text-slate-500">Upload profile photo and enter details for registration</p>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -680,18 +682,18 @@ export default function WorkersPage() {
                 </div>
               </div>
 
-              {/* Reference Face Photo Uploader */}
+              {/* Reference Profile Photo Uploader */}
               <div className="pt-1">
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Worker Reference Face Photo (For AI Recognition)
+                  Worker Profile Photo (For ID &amp; Directory Display)
                 </label>
 
                 <label className="block p-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/50 hover:bg-blue-50 cursor-pointer text-center transition-all">
                   <Upload className="w-5 h-5 text-blue-600 mx-auto mb-1.5" />
                   <span className="text-xs font-bold text-blue-900 block">
-                    {selectedPhotoFile ? selectedPhotoFile.name : 'Select Worker Face Photo'}
+                    {selectedPhotoFile ? selectedPhotoFile.name : 'Select Worker Profile Photo'}
                   </span>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">Clear front-facing photo</span>
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Clear front-facing photo for ID card</span>
                   <input
                     type="file"
                     accept="image/*"
