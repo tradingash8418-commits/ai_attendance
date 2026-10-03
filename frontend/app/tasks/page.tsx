@@ -88,18 +88,14 @@ export default function TasksPage() {
       setWorkers(workersData);
 
       // Pre-fill default site and supervisor if creating first time
-      if (sitesData.length > 0 && !formSiteId && sitesData[0]) {
-        setFormSiteId(sitesData[0].id);
-      }
-      if (supervisorsData.length > 0 && !formSupervisorId && supervisorsData[0]) {
-        setFormSupervisorId(supervisorsData[0].id);
-      }
+      setFormSiteId((prev) => prev || (sitesData[0] ? sitesData[0].id : ''));
+      setFormSupervisorId((prev) => prev || (supervisorsData[0] ? supervisorsData[0].id : ''));
     } catch (err) {
       console.error('Failed to load tasks data:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, formSiteId, formSupervisorId]);
+  }, [selectedDate]);
 
   useEffect(() => {
     loadData();
@@ -642,24 +638,6 @@ export default function TasksPage() {
                           <span>Target Completion: {task.completionDate || task.completionTime}</span>
                         </span>
                       )}
-                      {task.locationLandmark && (
-                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0">
-                          <Building2 className="w-3 h-3 text-amber-600" />
-                          <span>Landmark: {task.locationLandmark}</span>
-                        </span>
-                      )}
-                      {task.mapLink && (
-                        <a
-                          href={task.mapLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 shrink-0 transition-all shadow-2xs"
-                        >
-                          <MapPin className="w-3 h-3 text-emerald-600" />
-                          <span>📍 Navigate via Google Maps</span>
-                          <ExternalLink className="w-2.5 h-2.5 text-emerald-500" />
-                        </a>
-                      )}
                     </div>
                   </div>
 
@@ -669,6 +647,32 @@ export default function TasksPage() {
                     {scope.label}
                   </span>
                 </div>
+
+                {/* Location Landmark & Google Maps Navigation Banner (if provided) */}
+                {(task.locationLandmark || task.mapLink) && (
+                  <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs space-y-1.5 min-w-0">
+                    {task.locationLandmark && (
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-800 break-words min-w-0">
+                        <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span><strong>Landmark / Address:</strong> {task.locationLandmark}</span>
+                      </div>
+                    )}
+                    {task.mapLink && (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <a
+                          href={task.mapLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-bold text-blue-600 hover:text-blue-800 hover:underline text-[11px] truncate flex items-center gap-1"
+                        >
+                          <span>📍 Open Site GPS Location on Google Maps</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Overview Description */}
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700 leading-relaxed font-normal whitespace-pre-line max-h-28 overflow-y-auto break-words min-w-0">

@@ -87,6 +87,8 @@ export class TasksService {
       assignedWorkerPhones: data.assignedWorkerPhones || [],
       contactPersonName: data.contactPersonName || '',
       contactPersonPhone: data.contactPersonPhone || '',
+      locationLandmark: (data.locationLandmark || '').trim(),
+      mapLink: (data.mapLink || '').trim(),
       status: data.status || 'draft',
       supervisorNotified: false,
       createdAt: now,
