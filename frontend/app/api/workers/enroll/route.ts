@@ -20,15 +20,14 @@ export async function POST(request: Request) {
     }
 
     const allWorkers = await WorkersService.getWorkers();
-    const workerCode = rawWorkerCode
+    let workerCode = rawWorkerCode
       ? normalizeWorkerCode(rawWorkerCode)
       : WorkersService.generateNextWorkerCode(allWorkers);
 
+    // If the workerCode is already taken in Firestore, auto-increment to the next guaranteed unique code
     if (WorkersService.isWorkerCodeTaken(workerCode, allWorkers)) {
-      return NextResponse.json(
-        { error: `Worker Code "${workerCode}" is already in use. Please choose a unique Worker Code.` },
-        { status: 400 }
-      );
+      workerCode = WorkersService.generateNextWorkerCode(allWorkers);
+      console.log(`[Worker Enroll API] Worker code was taken; auto-incremented to guaranteed unique code: ${workerCode}`);
     }
 
     let photoUrl = '';

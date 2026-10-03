@@ -34,8 +34,30 @@ export async function POST(req: NextRequest) {
     const task = { id: taskId, ...docRes.data } as TaskAssignment;
     const errors: string[] = [];
 
-    if (!task.supervisorPhone) {
-      return NextResponse.json({ success: false, notifiedCount: 0, errors: ['Missing supervisor phone number'] }, { status: 400 });
+    let supervisorPhone = task.supervisorPhone?.trim() || '';
+
+    // Fallback: If supervisorPhone is missing on task, lookup from supervisors or workers collection
+    if (!supervisorPhone && task.supervisorId) {
+      try {
+        const supDoc = await OrgContextService.getDocWithFallback('supervisors', task.supervisorId, targetOrg);
+        if (supDoc.data?.phone || supDoc.data?.whatsappNumber) {
+          supervisorPhone = (supDoc.data.phone || supDoc.data.whatsappNumber).trim();
+        } else {
+          const wrkDoc = await OrgContextService.getDocWithFallback('workers', task.supervisorId, targetOrg);
+          if (wrkDoc.data?.phone) {
+            supervisorPhone = wrkDoc.data.phone.trim();
+          }
+        }
+      } catch (e) {
+        console.warn(`[notify-supervisor] Error looking up supervisor phone for ID ${task.supervisorId}:`, e);
+      }
+    }
+
+    if (!supervisorPhone) {
+      return NextResponse.json(
+        { success: false, notifiedCount: 0, errors: [`Missing phone number for supervisor "${task.supervisorName || 'Duty Lead'}"`] },
+        { status: 400 }
+      );
     }
 
     // Build consolidated list of workers and their individual tasks
@@ -93,23 +115,26 @@ export async function POST(req: NextRequest) {
 
     let notifiedCount = 0;
     try {
-      const res = await WhatsAppService.sendMessage(task.supervisorPhone, supervisorMsg);
+      const res = await WhatsAppService.sendMessage(supervisorPhone, supervisorMsg);
       if (res.success) {
         notifiedCount = 1;
       } else {
-        errors.push(`Failed supervisor ${task.supervisorName} (${task.supervisorPhone}): ${res.error}`);
+        errors.push(`Failed supervisor ${task.supervisorName} (${supervisorPhone}): ${res.error}`);
       }
     } catch (err: any) {
       errors.push(`Error notifying supervisor ${task.supervisorName}: ${err?.message}`);
     }
 
-    // Update task status and supervisor notification flag in Firestore
-    await updateDoc(docRes.ref, {
-      status: 'notified',
-      supervisorNotified: true,
-      supervisorNotifiedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    // Update task status and supervisor notification flag in Firestore ONLY if message sending succeeded!
+    if (notifiedCount > 0) {
+      await updateDoc(docRes.ref, {
+        status: 'notified',
+        supervisorNotified: true,
+        supervisorPhone: supervisorPhone,
+        supervisorNotifiedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     return NextResponse.json({
       success: errors.length === 0,

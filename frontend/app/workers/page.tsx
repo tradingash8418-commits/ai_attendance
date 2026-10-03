@@ -111,13 +111,12 @@ export default function WorkersPage() {
       return;
     }
 
-    const nextCode = workerCode.trim()
+    let nextCode = workerCode.trim()
       ? normalizeWorkerCode(workerCode.trim())
       : WorkersService.generateNextWorkerCode(workers);
 
     if (WorkersService.isWorkerCodeTaken(nextCode, workers)) {
-      setErrorMsg(`Worker Code "${nextCode}" is already in use by another worker. Please choose a unique Worker Code.`);
-      return;
+      nextCode = WorkersService.generateNextWorkerCode(workers);
     }
 
     setSubmitting(true);
