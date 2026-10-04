@@ -222,12 +222,15 @@ export class WhatsAppService {
     toWhatsAppNumber: string,
     templateName: string,
     parameters: string[],
+    headerImageUrl?: string,
     languageCode: string = 'en'
   ): Promise<{ success: boolean; messageId: string; error?: string }> {
     const normalized = normalizeWhatsAppNumber(toWhatsAppNumber);
     const cleanNumber = normalized.replace(/\+/g, '');
 
     let accessToken = process.env.WHATSAPP_ACCESS_TOKEN || '';
+    let envHeaderImage = process.env.WHATSAPP_HEADER_IMAGE_URL || '';
+
     try {
       const pathsToTry = [
         path.resolve(process.cwd(), '.env.local'),
@@ -236,10 +239,13 @@ export class WhatsAppService {
       for (const p of pathsToTry) {
         if (fs.existsSync(p)) {
           const envContent = fs.readFileSync(p, 'utf-8');
-          const match = envContent.match(/WHATSAPP_ACCESS_TOKEN=(.+)/);
-          if (match && match[1]) {
-            accessToken = match[1].trim().replace(/^["']|["']$/g, '');
-            if (accessToken) break;
+          const matchToken = envContent.match(/WHATSAPP_ACCESS_TOKEN=(.+)/);
+          if (matchToken && matchToken[1] && !accessToken) {
+            accessToken = matchToken[1].trim().replace(/^["']|["']$/g, '');
+          }
+          const matchImg = envContent.match(/WHATSAPP_HEADER_IMAGE_URL=(.+)/);
+          if (matchImg && matchImg[1] && !envHeaderImage) {
+            envHeaderImage = matchImg[1].trim().replace(/^["']|["']$/g, '');
           }
         }
       }
@@ -272,6 +278,44 @@ export class WhatsAppService {
       };
     });
 
+    let finalHeaderImageUrl = headerImageUrl;
+
+    if (!finalHeaderImageUrl) {
+      try {
+        const settingsDoc = await OrgContextService.getDocWithFallback('settings', 'whatsapp');
+        if (settingsDoc.data?.headerImageUrl) {
+          finalHeaderImageUrl = settingsDoc.data.headerImageUrl;
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+
+    if (!finalHeaderImageUrl) {
+      finalHeaderImageUrl = envHeaderImage || 'https://ai-attendance-flax.vercel.app/icon.png';
+    }
+
+    const components: any[] = [];
+
+    if (finalHeaderImageUrl) {
+      components.push({
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: {
+              link: finalHeaderImageUrl,
+            },
+          },
+        ],
+      });
+    }
+
+    components.push({
+      type: 'body',
+      parameters: formattedParameters,
+    });
+
     try {
       const res = await fetch(graphApiUrl, {
         method: 'POST',
@@ -289,12 +333,7 @@ export class WhatsAppService {
             language: {
               code: languageCode,
             },
-            components: [
-              {
-                type: 'body',
-                parameters: formattedParameters,
-              },
-            ],
+            components,
           },
         }),
       });
