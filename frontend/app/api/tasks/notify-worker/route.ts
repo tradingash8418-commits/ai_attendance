@@ -141,8 +141,8 @@ export async function POST(req: NextRequest) {
 
         const siteWithLocation =
           task.siteName +
-          (task.locationLandmark ? `\n🏢 Landmark: ${task.locationLandmark}` : '') +
-          (task.mapLink ? `\n📍 Map Link: ${task.mapLink}` : '');
+          (task.locationLandmark ? ` | Landmark: ${task.locationLandmark}` : '') +
+          (task.mapLink ? ` | Map: ${task.mapLink}` : '');
 
         const tplParams = [
           target.workerName,
