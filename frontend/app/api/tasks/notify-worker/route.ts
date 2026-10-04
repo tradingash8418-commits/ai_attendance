@@ -56,7 +56,10 @@ export async function POST(req: NextRequest) {
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
-            .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
+            .map((line, idx) => {
+              const clean = line.replace(/^[•\-\*\d+\.]+\s*/, '');
+              return `${idx + 1}. ${clean}`;
+            })
             .join('\n');
 
           const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${task.date}`;
@@ -117,7 +120,10 @@ export async function POST(req: NextRequest) {
           .split('\n')
           .map((line) => line.trim())
           .filter((line) => line.length > 0)
-          .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? line : `• ${line}`))
+          .map((line, idx) => {
+            const clean = line.replace(/^[•\-\*\d+\.]+\s*/, '');
+            return `${idx + 1}. ${clean}`;
+          })
           .join('\n');
 
         const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${target.completionDate || task.date}`;

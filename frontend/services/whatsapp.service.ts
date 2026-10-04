@@ -267,10 +267,10 @@ export class WhatsAppService {
 
     const formattedParameters = parameters.map((val) => {
       let cleanVal = (val || 'N/A').toString();
-      // Meta API Rule: Param text cannot have new-line/tab characters or more than 4 consecutive spaces
-      cleanVal = cleanVal.replace(/[\r\n]+/g, ' | ');
+      // Meta API Rule: Normalize line breaks to Unix \n, remove tabs, collapse 4+ spaces to 3 spaces
+      cleanVal = cleanVal.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       cleanVal = cleanVal.replace(/\t/g, ' ');
-      cleanVal = cleanVal.replace(/ {4,}/g, ' ');
+      cleanVal = cleanVal.replace(/ {4,}/g, '   ');
       cleanVal = cleanVal.trim();
       return {
         type: 'text',

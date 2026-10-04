@@ -78,32 +78,45 @@ export async function POST(req: NextRequest) {
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
-            .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? `   ${line}` : `   • ${line}`))
+            .map((line, tIdx) => {
+              const clean = line.replace(/^[•\-\*\d+\.]+\s*/, '');
+              return `   • ${tIdx + 1}. ${clean}`;
+            })
             .join('\n');
 
-          const compDateText = w.completionDate ? ` (Target Completion: 📅 ${w.completionDate})` : ` (Target Completion: 📅 ${task.date})`;
-          return `${idx + 1}. *${w.workerName}* (${w.workerPhone || 'No phone'})${compDateText}\n${formattedTasks}`;
+          const compDateText = w.completionDate ? ` (📅 ${w.completionDate})` : ` (📅 ${task.date})`;
+          return `${idx + 1}. ${w.workerName}${compDateText}:\n${formattedTasks}`;
         })
         .join('\n\n');
     } else if (task.assignedWorkerNames && task.assignedWorkerNames.length > 0) {
       teamAllocationsText = task.assignedWorkerNames
         .map((wName, idx) => {
-          const wPhone = task.assignedWorkerPhones?.[idx] ? ` (${task.assignedWorkerPhones[idx]})` : '';
           const defaultTasks = task.description
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
-            .map((line) => (line.startsWith('•') || line.startsWith('-') || line.match(/^\d+\./) ? `   ${line}` : `   • ${line}`))
+            .map((line, tIdx) => {
+              const clean = line.replace(/^[•\-\*\d+\.]+\s*/, '');
+              return `   • ${tIdx + 1}. ${clean}`;
+            })
             .join('\n');
 
-          return `${idx + 1}. *${wName}*${wPhone} (Target Completion: 📅 ${task.date})\n${defaultTasks}`;
+          return `${idx + 1}. ${wName}:\n${defaultTasks}`;
         })
         .join('\n\n');
     } else {
       teamAllocationsText = 'No specific labours listed for this deployment.';
     }
 
-    const supervisorDirectives = task.supervisorTasks || task.description;
+    const supervisorDirectives = (task.supervisorTasks || task.description)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line, idx) => {
+        const clean = line.replace(/^[•\-\*\d+\.]+\s*/, '');
+        return `${idx + 1}. ${clean}`;
+      })
+      .join('\n');
     const overallCompDate = task.completionDate || (task.completionTime && !task.completionTime.includes(':') ? task.completionTime : '');
     const overallCompDateStr = overallCompDate ? `\n*Overall Task Completion Date:* 📅 ${overallCompDate}` : '';
 
