@@ -29,6 +29,35 @@ export interface WorkerKhataSummary {
   recentPayments: PaymentLedgerEntry[];
 }
 
+/**
+ * Helper function to sort PaymentLedgerEntry arrays strictly latest entry first (descending).
+ * Sorts by paymentDate descending -> paymentTime descending -> createdAt timestamp descending.
+ */
+export const sortPaymentsLatestFirst = (list: PaymentLedgerEntry[]): PaymentLedgerEntry[] => {
+  return [...list].sort((a, b) => {
+    const dateA = a.paymentDate || '';
+    const dateB = b.paymentDate || '';
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA);
+    }
+    const timeA = a.paymentTime || '';
+    const timeB = b.paymentTime || '';
+    if (timeA && timeB && timeA !== timeB) {
+      return timeB.localeCompare(timeA);
+    }
+    const getTime = (val: any) => {
+      if (!val) return 0;
+      if (typeof val === 'object') {
+        if ('seconds' in val) return val.seconds * 1000;
+        if ('toDate' in val && typeof val.toDate === 'function') return val.toDate().getTime();
+      }
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+    return getTime(b.createdAt) - getTime(a.createdAt);
+  });
+};
+
 export class PaymentLedgerService {
   /**
    * Records a new payment / advance entry into the Khata Ledger.
@@ -129,7 +158,7 @@ export class PaymentLedgerService {
       paidTo: d.paidTo || d.workerName || 'Recipient',
     })) as PaymentLedgerEntry[];
 
-    return entries;
+    return sortPaymentsLatestFirst(entries);
   }
 
   /**
@@ -158,12 +187,14 @@ export class PaymentLedgerService {
       return true;
     });
 
-    const payments = allPayments.filter((p) => {
-      if (!dateRange?.startDate && !dateRange?.endDate) return true;
-      if (dateRange.startDate && p.paymentDate < dateRange.startDate) return false;
-      if (dateRange.endDate && p.paymentDate > dateRange.endDate) return false;
-      return true;
-    });
+    const payments = sortPaymentsLatestFirst(
+      allPayments.filter((p) => {
+        if (!dateRange?.startDate && !dateRange?.endDate) return true;
+        if (dateRange.startDate && p.paymentDate < dateRange.startDate) return false;
+        if (dateRange.endDate && p.paymentDate > dateRange.endDate) return false;
+        return true;
+      })
+    );
 
     let totalAdvancesPaidAll = 0;
     let totalHajriAll = 0;
@@ -177,9 +208,10 @@ export class PaymentLedgerService {
         return sum + h;
       }, 0);
 
-
-      const workerPayments = payments.filter(
-        (p) => p.workerId === worker.id || (worker.workerCode && p.workerCode === worker.workerCode)
+      const workerPayments = sortPaymentsLatestFirst(
+        payments.filter(
+          (p) => p.workerId === worker.id || (worker.workerCode && p.workerCode === worker.workerCode)
+        )
       );
 
       const totalAdvancesPaid = workerPayments

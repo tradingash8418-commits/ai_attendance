@@ -53,49 +53,38 @@ export const cleanWorkerCodeForComparison = (code?: string): string => {
 };
 
 /**
- * Compares two workers or objects containing workerCode (or strings) in ascending numerical/natural order.
- * e.g. "WRK-001" < "WRK-002" < "WRK-0010" < "WRK-0027" < "WRK-0035" < "WRK-0038".
- * Items with valid codes are listed first in numerical order, followed by items without codes sorted by name.
+ * Compares two workers or objects containing worker name in strict alphabetical order (A to Z, 'a' at top).
+ * If names are identical, falls back to workerCode.
  */
-export const compareWorkerCodes = (
+export const compareWorkerNames = (
   a?: { workerCode?: string; name?: string; workerName?: string } | string | null,
   b?: { workerCode?: string; name?: string; workerName?: string } | string | null
 ): number => {
-  const getCode = (item: any): string => {
-    if (!item) return '';
-    if (typeof item === 'string') return item.trim();
-    return (item.workerCode || '').trim();
-  };
-
   const getName = (item: any): string => {
-    if (!item || typeof item === 'string') return '';
+    if (!item) return '';
+    if (typeof item === 'string') return item.trim().toLowerCase();
     return (item.name || item.workerName || '').trim().toLowerCase();
   };
 
-  const codeA = getCode(a);
-  const codeB = getCode(b);
+  const nameA = getName(a);
+  const nameB = getName(b);
 
-  if (codeA && codeB) {
-    const numMatchA = codeA.match(/(\d+)/);
-    const numMatchB = codeB.match(/(\d+)/);
+  if (!nameA && !nameB) return 0;
+  if (!nameA) return 1;
+  if (!nameB) return -1;
 
-    if (numMatchA && numMatchA[1] && numMatchB && numMatchB[1]) {
-      const numA = parseInt(numMatchA[1], 10);
-      const numB = parseInt(numMatchB[1], 10);
-      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
-        return numA - numB;
-      }
-    }
-    const codeCmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
-    if (codeCmp !== 0) return codeCmp;
-  } else if (codeA && !codeB) {
-    return -1;
-  } else if (!codeA && codeB) {
-    return 1;
-  }
+  const nameCmp = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+  if (nameCmp !== 0) return nameCmp;
 
-  return getName(a).localeCompare(getName(b));
+  const codeA = (typeof a === 'object' && a?.workerCode) ? a.workerCode : '';
+  const codeB = (typeof b === 'object' && b?.workerCode) ? b.workerCode : '';
+  return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
 };
+
+/**
+ * Alias for worker sorting: sorts workers alphabetically by name (A to Z).
+ */
+export const compareWorkerCodes = compareWorkerNames;
 
 /**
  * Generates a unambiguous display name for a worker to handle duplicate/same names.

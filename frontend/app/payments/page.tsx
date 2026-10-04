@@ -27,7 +27,7 @@ import {
   Pencil,
   ExternalLink,
 } from 'lucide-react';
-import { PaymentLedgerService, type WorkerKhataSummary } from '@/services/payment-ledger.service';
+import { PaymentLedgerService, sortPaymentsLatestFirst, type WorkerKhataSummary } from '@/services/payment-ledger.service';
 import { PaymentOcrService } from '@/services/payment-ocr.service';
 import { WorkersService } from '@/services/workers.service';
 import { SitesService } from '@/services/sites.service';
@@ -639,26 +639,32 @@ export default function PaymentsPage() {
   }).sort(compareWorkerCodes);
 
   // 2. Worker Payments Done (All advance and wage payments processed for workers via WhatsApp/OCR/Manual)
-  const workerPayments = payments.filter(
-    (p) => p.category === 'advance' || p.category === 'kharcha' || p.category === 'wage'
+  const workerPayments = sortPaymentsLatestFirst(
+    payments.filter(
+      (p) => p.category === 'advance' || p.category === 'kharcha' || p.category === 'wage'
+    )
   );
   const totalWorkerPaymentsDone = workerPayments.reduce((sum, p) => sum + p.amount, 0);
 
-  const filteredWorkerPayments = workerPayments.filter((p) => {
-    const q = searchQuery.toLowerCase();
-    const name = (p.workerName || p.paidTo || '').toLowerCase();
-    const notes = (p.notes || '').toLowerCase();
-    const upi = (p.upiId || '').toLowerCase();
-    return !searchQuery || name.includes(q) || notes.includes(q) || upi.includes(q);
-  });
+  const filteredWorkerPayments = sortPaymentsLatestFirst(
+    workerPayments.filter((p) => {
+      const q = searchQuery.toLowerCase();
+      const name = (p.workerName || p.paidTo || '').toLowerCase();
+      const notes = (p.notes || '').toLowerCase();
+      const upi = (p.upiId || '').toLowerCase();
+      return !searchQuery || name.includes(q) || notes.includes(q) || upi.includes(q);
+    })
+  );
 
   // 3. Vendor Summaries (Grouped by Vendor/Supplier Name - STRICTLY non-labour categories)
-  const vendorPayments = payments.filter(
-    (p) =>
-      p.category === 'vendor' ||
-      p.category === 'material' ||
-      p.category === 'equipment' ||
-      p.category === 'other'
+  const vendorPayments = sortPaymentsLatestFirst(
+    payments.filter(
+      (p) =>
+        p.category === 'vendor' ||
+        p.category === 'material' ||
+        p.category === 'equipment' ||
+        p.category === 'other'
+    )
   );
   const totalVendorExpense = vendorPayments.reduce((sum, p) => sum + p.amount, 0);
 
@@ -710,21 +716,28 @@ export default function PaymentsPage() {
     item.payments.push(p);
   });
 
-  const vendorList = Array.from(vendorMap.values()).filter((v) => {
-    if (!searchQuery) return true;
-    return v.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  const vendorList = Array.from(vendorMap.values())
+    .map((v) => ({
+      ...v,
+      payments: sortPaymentsLatestFirst(v.payments),
+    }))
+    .filter((v) => {
+      if (!searchQuery) return true;
+      return v.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
   // 4. All Payments (Chronological timeline)
-  const filteredPayments = payments.filter((p) => {
-    const target = (p.paidTo || p.workerName || '').toLowerCase();
-    const notes = (p.notes || '').toLowerCase();
-    const upi = (p.upiId || '').toLowerCase();
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = !searchQuery || target.includes(q) || notes.includes(q) || upi.includes(q);
-    const matchesCat = categoryFilter === 'all' || p.category === categoryFilter;
-    return matchesSearch && matchesCat;
-  });
+  const filteredPayments = sortPaymentsLatestFirst(
+    payments.filter((p) => {
+      const target = (p.paidTo || p.workerName || '').toLowerCase();
+      const notes = (p.notes || '').toLowerCase();
+      const upi = (p.upiId || '').toLowerCase();
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || target.includes(q) || notes.includes(q) || upi.includes(q);
+      const matchesCat = categoryFilter === 'all' || p.category === categoryFilter;
+      return matchesSearch && matchesCat;
+    })
+  );
 
   const totalCalculatedWages = summaries.reduce((sum, s) => sum + s.totalEarnedAmount, 0);
   const totalNetBalance = totalCalculatedWages - totalAdvances;
