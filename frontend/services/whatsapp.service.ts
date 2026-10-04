@@ -215,6 +215,112 @@ export class WhatsAppService {
   }
 
   /**
+   * Dispatches an HTTP POST request to Meta Graph API using an approved Template Message.
+   * Enables sending business-initiated messages to ANY phone number 24/7 without 24-hour window restrictions.
+   */
+  public static async sendTemplateMessage(
+    toWhatsAppNumber: string,
+    templateName: string,
+    parameters: string[],
+    languageCode: string = 'en'
+  ): Promise<{ success: boolean; messageId: string; error?: string }> {
+    const normalized = normalizeWhatsAppNumber(toWhatsAppNumber);
+    const cleanNumber = normalized.replace(/\+/g, '');
+
+    let accessToken = process.env.WHATSAPP_ACCESS_TOKEN || '';
+    try {
+      const pathsToTry = [
+        path.resolve(process.cwd(), '.env.local'),
+        path.resolve(process.cwd(), 'frontend', '.env.local'),
+      ];
+      for (const p of pathsToTry) {
+        if (fs.existsSync(p)) {
+          const envContent = fs.readFileSync(p, 'utf-8');
+          const match = envContent.match(/WHATSAPP_ACCESS_TOKEN=(.+)/);
+          if (match && match[1]) {
+            accessToken = match[1].trim().replace(/^["']|["']$/g, '');
+            if (accessToken) break;
+          }
+        }
+      }
+    } catch (e) {
+      // fallback
+    }
+
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '1330066433517275';
+    const apiVersion = process.env.WHATSAPP_API_VERSION || 'v20.0';
+
+    if (!accessToken || accessToken.startsWith('EAAG_dummy')) {
+      console.warn(`[WhatsAppService] Missing valid WHATSAPP_ACCESS_TOKEN. Cannot dispatch template ${templateName} to ${cleanNumber}`);
+      return { success: false, messageId: '', error: 'Unconfigured Meta Access Token' };
+    }
+
+    const graphApiUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+
+    console.log(`[WhatsAppService] Dispatching Meta Template "${templateName}" to ${cleanNumber}...`);
+
+    const formattedParameters = parameters.map((val) => ({
+      type: 'text',
+      text: (val || 'N/A').toString(),
+    }));
+
+    try {
+      const res = await fetch(graphApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanNumber,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: languageCode,
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: formattedParameters,
+              },
+            ],
+          },
+        }),
+      });
+
+      const data = await res.json();
+      console.log(`[WhatsAppService Outbound Meta Template Response] Status: ${res.status}`, JSON.stringify(data, null, 2));
+
+      if (!res.ok) {
+        console.error('[WhatsAppService] Meta API Template Error Response:', data);
+        return {
+          success: false,
+          messageId: '',
+          error: data?.error?.message || `Meta API HTTP ${res.status}`,
+        };
+      }
+
+      const outMessageId = data?.messages?.[0]?.id || `meta_tpl_${Date.now()}`;
+      console.log(`[WhatsAppService] Template message sent successfully! Meta Message ID: ${outMessageId}`);
+
+      return {
+        success: true,
+        messageId: outMessageId,
+      };
+    } catch (err: any) {
+      console.error('[WhatsAppService] Error dispatching Meta WhatsApp template:', err);
+      return {
+        success: false,
+        messageId: '',
+        error: err?.message || 'Network request failed',
+      };
+    }
+  }
+
+  /**
    * Sends attendance submission confirmation to supervisor.
    */
   public static async sendAttendanceConfirmation(

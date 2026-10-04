@@ -125,9 +125,29 @@ export async function POST(req: NextRequest) {
       `📞 *Admin / Emergency Contact:* ${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})\n\n` +
       `Kripya har worker ke tasks check karke site supervision aur safety monitor karein! 🚀`;
 
+    const siteWithLocation =
+      task.siteName +
+      (task.locationLandmark ? `\n🏢 Landmark: ${task.locationLandmark}` : '') +
+      (task.mapLink ? `\n📍 Map Link: ${task.mapLink}` : '');
+
+    const tplParams = [
+      task.supervisorName,
+      siteWithLocation,
+      task.date,
+      overallCompDate || task.date,
+      task.title,
+      supervisorDirectives,
+      teamAllocationsText,
+      `${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})`,
+    ];
+
     let notifiedCount = 0;
     try {
-      const res = await WhatsAppService.sendMessage(supervisorPhone, supervisorMsg);
+      let res = await WhatsAppService.sendTemplateMessage(supervisorPhone, 'supervisor_deployment', tplParams);
+      if (!res.success) {
+        // Fallback to custom text message if template fails
+        res = await WhatsAppService.sendMessage(supervisorPhone, supervisorMsg);
+      }
       if (res.success) {
         notifiedCount = 1;
       } else {

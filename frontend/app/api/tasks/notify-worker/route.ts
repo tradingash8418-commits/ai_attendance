@@ -78,8 +78,28 @@ export async function POST(req: NextRequest) {
             `📞 *Help / Query Contact:* ${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})\n\n` +
             `*Safety Note:* Kripya site par samay se pahunchein aur safety helmets pehnein! ⛑️`;
 
+          const siteWithLocation =
+            task.siteName +
+            (task.locationLandmark ? `\n🏢 Landmark: ${task.locationLandmark}` : '') +
+            (task.mapLink ? `\n📍 Map Link: ${task.mapLink}` : '');
+
+          const tplParams = [
+            wName,
+            siteWithLocation,
+            task.date,
+            task.date,
+            task.title,
+            bulletedDescription,
+            `${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})`,
+            `${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})`,
+          ];
+
           try {
-            const res = await WhatsAppService.sendMessage(wPhone, workerMsg);
+            let res = await WhatsAppService.sendTemplateMessage(wPhone, 'task_assignment', tplParams);
+            if (!res.success) {
+              // Fallback to custom text message if template fails
+              res = await WhatsAppService.sendMessage(wPhone, workerMsg);
+            }
             if (res.success) notifiedCount++;
             else errors.push(`Failed worker ${wName} (${wPhone}): ${res.error}`);
           } catch (err: any) {
@@ -119,8 +139,28 @@ export async function POST(req: NextRequest) {
           `📞 *Help / Query Contact:* ${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})\n\n` +
           `*Safety Note:* Kripya site par samay se pahunchein aur safety helmets pehnein! ⛑️`;
 
+        const siteWithLocation =
+          task.siteName +
+          (task.locationLandmark ? `\n🏢 Landmark: ${task.locationLandmark}` : '') +
+          (task.mapLink ? `\n📍 Map Link: ${task.mapLink}` : '');
+
+        const tplParams = [
+          target.workerName,
+          siteWithLocation,
+          task.date,
+          target.completionDate || task.date,
+          task.title,
+          bulletedTasks,
+          `${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})`,
+          `${task.contactPersonName} (${task.contactPersonPhone || 'Admin'})`,
+        ];
+
         try {
-          const res = await WhatsAppService.sendMessage(target.workerPhone, workerMsg);
+          let res = await WhatsAppService.sendTemplateMessage(target.workerPhone, 'task_assignment', tplParams);
+          if (!res.success) {
+            // Fallback to custom text message if template fails
+            res = await WhatsAppService.sendMessage(target.workerPhone, workerMsg);
+          }
           if (res.success) {
             notifiedCount++;
             target.notified = true;
