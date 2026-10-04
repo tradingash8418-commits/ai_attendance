@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
             })
             .join('   ');
 
-          const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${task.date}`;
+          const workerCompletionDateStr = `\n*Target Task Completion Date:*  ${task.date}`;
 
           const locationBlock =
             (task.locationLandmark ? `🏢 *Landmark / Address:* ${task.locationLandmark}\n` : '') +
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
             `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
             `*Site:* 🏗️ ${task.siteName}\n` +
             `${locationBlock}` +
-            `*Assignment Date:* 📅 ${task.date}${workerCompletionDateStr}\n` +
+            `*Assignment Date:*  ${task.date}${workerCompletionDateStr}\n` +
             `*Work:* 📌 *${task.title}*\n\n` +
             `📝 *Your Assigned Tasks:* \n${bulletedDescription}\n\n` +
             `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           })
           .join('   ');
 
-        const workerCompletionDateStr = `\n*Target Task Completion Date:* 📅 ${target.completionDate || task.date}`;
+        const workerCompletionDateStr = `\n*Target Task Completion Date:*  ${target.completionDate || task.date}`;
 
         const locationBlock =
           (task.locationLandmark ? `🏢 *Landmark / Address:* ${task.locationLandmark}\n` : '') +
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
           `Aapko aaj ke kaam ki list neeche di gayi hai:\n\n` +
           `*Site:* 🏗️ ${task.siteName}\n` +
           `${locationBlock}` +
-          `*Assignment Date:* 📅 ${task.date}${workerCompletionDateStr}\n` +
+          `*Assignment Date:*  ${task.date}${workerCompletionDateStr}\n` +
           `*Work:* 📌 *${task.title}*\n\n` +
           `📝 *Your Specific Tasks:* \n${bulletedTasks}\n\n` +
           `👷 *Supervisor on Duty:* ${task.supervisorName} (${task.supervisorPhone || 'Site Supervisor'})\n` +
