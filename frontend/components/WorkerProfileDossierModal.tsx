@@ -43,6 +43,7 @@ interface WorkerProfileDossierModalProps {
   onClose?: () => void;
   onWorkerUpdated?: () => void;
   isFullPage?: boolean;
+  defaultTab?: 'overview' | 'payments' | 'attendance' | 'photos';
 }
 
 export default function WorkerProfileDossierModal({
@@ -50,8 +51,9 @@ export default function WorkerProfileDossierModal({
   onClose,
   onWorkerUpdated,
   isFullPage = false,
+  defaultTab,
 }: WorkerProfileDossierModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'attendance' | 'photos'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'attendance' | 'photos'>(defaultTab || 'overview');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | 'last_month' | 'this_week'>('all');
   
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -152,7 +154,7 @@ export default function WorkerProfileDossierModal({
     } finally {
       setLoading(false);
     }
-  }, [worker]);
+  }, [worker?.id, worker?.workerCode, worker?.name]);
 
   useEffect(() => {
     loadData();
@@ -170,6 +172,35 @@ export default function WorkerProfileDossierModal({
     if (!selectedCalendarDate) return [];
     return payments.filter((p) => p.paymentDate === selectedCalendarDate);
   }, [payments, selectedCalendarDate]);
+
+  const [quickCustomHajri, setQuickCustomHajri] = useState<string>('');
+
+  const handleQuickSaveHajri = async (hajriValue: number) => {
+    if (!selectedCalendarDate || isNaN(hajriValue)) return;
+    setSavingAttendance(true);
+    try {
+      const siteToUse = editSiteId || (selectedDateDetails?.records?.[0]?.siteId) || (sites[0]?.id || '');
+      await AttendanceService.saveManualAttendanceRecord({
+        workerId: worker.id,
+        siteId: siteToUse,
+        date: selectedCalendarDate,
+        hajri: hajriValue,
+        checkInTime: '09:00 AM',
+        checkOutTime: hajriValue > 0 ? '06:00 PM' : undefined,
+        notes: `Quick 1-Click (${hajriValue} Hajri) via Admin Calendar`,
+        submittedBy: 'Contractor Admin',
+      });
+
+      await loadData();
+      if (onWorkerUpdated) onWorkerUpdated();
+      setQuickCustomHajri('');
+    } catch (err) {
+      console.error('Failed to quick save hajri:', err);
+      alert('Error registering hajri on calendar date.');
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
 
   const handleSaveCalendarAttendance = async () => {
     if (!selectedCalendarDate) return;
@@ -1211,31 +1242,154 @@ export default function WorkerProfileDossierModal({
                       </button>
                     </div>
 
-                    {selectedDateDetails.records.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/10 text-xs">
-                        {selectedDateDetails.records.map((rec, i) => (
-                          <div key={rec.id || i} className="p-2.5 rounded-xl bg-white/10 space-y-1">
-                            <div className="flex items-center justify-between font-bold">
-                              <span className="text-emerald-300 flex items-center gap-1">
-                                <MapPin className="w-3.5 h-3.5" />
-                                <span>{siteMap.get(rec.siteId) || 'Site'}</span>
-                              </span>
-                              <span className="px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 text-[10px] font-mono">
-                                {rec.hajri || 1} Hajri ({rec.hajriLabel || 'Shift'})
-                              </span>
+                    {/* Middle Section: Site Log + Quick Hajri Action Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-2 border-t border-white/10 text-xs">
+                      {/* Left Side: Attendance Details Log */}
+                      <div className="lg:col-span-5 space-y-1.5">
+                        {selectedDateDetails.records.length > 0 ? (
+                          selectedDateDetails.records.map((rec, i) => (
+                            <div key={rec.id || i} className="p-2.5 rounded-xl bg-white/10 space-y-1 h-full flex flex-col justify-between">
+                              <div className="flex items-center justify-between font-bold">
+                                <span className="text-emerald-300 flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  <span>{siteMap.get(rec.siteId) || 'Site'}</span>
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 text-[10px] font-mono">
+                                  {rec.hajri || 1} Hajri ({rec.hajriLabel || 'Shift'})
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-300 flex items-center gap-3">
+                                <span>Check-In: <strong>{formatTime(rec.checkInTime, '09:00 AM')}</strong></span>
+                                <span>Check-Out: <strong>{formatTime(rec.checkOutTime, '—')}</strong></span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Method: {rec.method === 'face_recognition' ? 'AI Face Match' : (rec.method === 'worker_qr_whatsapp' ? '1-Tap QR' : (rec.method || 'Manual Admin'))}
+                              </div>
                             </div>
-                            <div className="text-[11px] text-slate-300 flex items-center gap-3">
-                              <span>Check-In: <strong>{formatTime(rec.checkInTime, '10:00 AM')}</strong></span>
-                              <span>Check-Out: <strong>{formatTime(rec.checkOutTime, '—')}</strong></span>
-                              {rec.workedHours && <span>({rec.workedHours} hrs)</span>}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              Method: {rec.method === 'face_recognition' ? 'AI Neural Face Match' : (rec.method === 'worker_qr_whatsapp' ? '1-Tap QR Checkin' : (rec.method || 'Manual Checkin'))}
-                            </div>
+                          ))
+                        ) : (
+                          <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs flex items-center justify-center h-full min-h-[90px] text-center italic">
+                            No attendance log recorded for this date yet.
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
+
+                      {/* Right Side: Quick Hajri Action Grid (Matches Yellow Rectangles Area) */}
+                      <div className="lg:col-span-7 p-2.5 rounded-xl bg-white/10 space-y-2">
+                        <div className="flex items-center justify-between font-extrabold text-[11px] text-amber-300">
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>1-Click Register / Overwrite Hajri:</span>
+                          </span>
+                          {savingAttendance && <span className="text-amber-300 animate-pulse font-mono">Saving...</span>}
+                        </div>
+
+                        {/* 2-Row Grid of Transparent Grey Hajri Buttons (0.5 to 3 + 0 + Manual Box) */}
+                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 text-xs font-black">
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(0.5)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="0.5 Hajri (Half Day)"
+                          >
+                            0.5 H
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(1.0)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="1.0 Hajri (Full Day)"
+                          >
+                            1 Hajri
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(1.5)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="1.5 Hajri (Dedhi / OT)"
+                          >
+                            1.5 H
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(2.0)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="2.0 Hajri (Double Shift)"
+                          >
+                            2 Hajri
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(2.5)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="2.5 Hajri (Dhai Shift)"
+                          >
+                            2.5 H
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(3.0)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="3.0 Hajri (Triple Shift)"
+                          >
+                            3 Hajri
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingAttendance}
+                            onClick={() => handleQuickSaveHajri(0.0)}
+                            className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
+                            title="0 Hajri (Absent)"
+                          >
+                            0 (Abs)
+                          </button>
+
+                          {/* Manual Entry Box for Hajri */}
+                          <div className="col-span-2 sm:col-span-3 flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="5"
+                              placeholder="Manual Hajri"
+                              value={quickCustomHajri}
+                              onChange={(e) => setQuickCustomHajri(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const val = parseFloat(quickCustomHajri);
+                                  if (!isNaN(val)) handleQuickSaveHajri(val);
+                                }
+                              }}
+                              className="w-full px-2 py-1 rounded-lg bg-slate-900/90 border border-slate-700 text-white font-extrabold text-xs focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
+                            />
+                            <button
+                              type="button"
+                              disabled={savingAttendance || !quickCustomHajri}
+                              onClick={() => {
+                                const val = parseFloat(quickCustomHajri);
+                                if (!isNaN(val)) handleQuickSaveHajri(val);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 border border-white/20 active:scale-95 text-white font-black text-xs shadow-xs transition-all disabled:opacity-40 cursor-pointer whitespace-nowrap"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
                     {/* Existing Payments on Date */}
                     {datePayments.length > 0 && (
@@ -1272,7 +1426,7 @@ export default function WorkerProfileDossierModal({
                         className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
                       >
                         <Pencil className="w-3.5 h-3.5 text-blue-200" />
-                        <span>{editAttendanceMode ? 'Close Edit Form' : selectedDateDetails.isPresent ? '✏️ Overwrite / Edit Attendance' : '+ Add Attendance'}</span>
+                        <span>{editAttendanceMode ? 'Close Edit Form' : selectedDateDetails.isPresent ? '✏️ Detailed Overwrite Form' : '+ Add Attendance Form'}</span>
                       </button>
 
                       <button

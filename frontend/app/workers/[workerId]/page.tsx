@@ -15,21 +15,21 @@ export default function WorkerDetailPage() {
   const [worker, setWorker] = useState<Worker | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const loadWorker = useCallback(async () => {
+  const loadWorker = useCallback(async (isSilent = false) => {
     if (!workerId) return;
-    setLoading(true);
+    if (!isSilent) setLoading(true);
     try {
       const workerData = await WorkersService.getWorkerById(workerId);
       setWorker(workerData);
     } catch (err) {
       console.error('Failed to load worker profile:', err);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   }, [workerId]);
 
   useEffect(() => {
-    loadWorker();
+    loadWorker(false);
   }, [loadWorker]);
 
   return (
@@ -68,7 +68,7 @@ export default function WorkerDetailPage() {
           <WorkerProfileDossierModal
             worker={worker}
             isFullPage={true}
-            onWorkerUpdated={loadWorker}
+            onWorkerUpdated={() => loadWorker(true)}
           />
         </div>
       )}

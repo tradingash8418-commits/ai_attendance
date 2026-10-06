@@ -9,8 +9,6 @@ import {
   Mail,
   ShieldCheck,
   Key,
-  Copy,
-  Check,
   Save,
   Sparkles,
   RefreshCw,
@@ -35,8 +33,6 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState<string>('');
 
   // UI Feedback States
-  const [copiedOrgId, setCopiedOrgId] = useState<boolean>(false);
-  const [copiedUid, setCopiedUid] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -105,17 +101,6 @@ export default function ProfilePage() {
     }
   };
 
-  const copyToClipboard = (text: string, type: 'orgId' | 'uid') => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    if (type === 'orgId') {
-      setCopiedOrgId(true);
-      setTimeout(() => setCopiedOrgId(false), 2000);
-    } else {
-      setCopiedUid(true);
-      setTimeout(() => setCopiedUid(false), 2000);
-    }
-  };
 
   if (authLoading) {
     return (
@@ -129,8 +114,8 @@ export default function ProfilePage() {
   const initials = displayName
     ? displayName.slice(0, 2).toUpperCase()
     : user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : 'CA';
+      ? user.email.slice(0, 2).toUpperCase()
+      : 'CA';
 
   return (
     <div className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -329,45 +314,7 @@ export default function ProfilePage() {
               <span>Tenant Credentials</span>
             </h3>
 
-            {/* Organization ID */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Organization Context ID
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 rounded-xl bg-slate-900 text-blue-300 font-mono text-[11px] font-bold truncate">
-                  {profile?.organizationId || 'org_primary'}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(profile?.organizationId || 'org_primary', 'orgId')}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                  title="Copy Org ID"
-                >
-                  {copiedOrgId ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
 
-            {/* User Auth UID */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                User Authentication UID
-              </label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-mono text-[11px] font-bold truncate">
-                  {user?.uid || profile?.uid || '-'}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(user?.uid || '', 'uid')}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                  title="Copy User UID"
-                >
-                  {copiedUid ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
 
             {/* Primary Supervisor Mapping Status */}
             <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-100 space-y-1.5">
