@@ -243,5 +243,84 @@ export class AttendanceService {
       updatedAt: now,
     });
   }
+
+  /**
+   * Overwrites or creates a manual attendance record for a specific worker and date from calendar/admin interface.
+   */
+  public static async saveManualAttendanceRecord(
+    data: {
+      workerId: string;
+      siteId: string;
+      date: string; // YYYY-MM-DD
+      hajri: number;
+      hajriLabel?: string;
+      checkInTime?: string;
+      checkOutTime?: string;
+      notes?: string;
+      submittedBy?: string;
+    },
+    orgId?: string
+  ): Promise<string> {
+    const targetOrg = orgId || OrgContextService.getOrgId();
+    const existing = await this.getAttendanceRecords({ workerId: data.workerId, date: data.date }, targetOrg);
+    const now = serverTimestamp();
+    const colRef = OrgContextService.getCollection(COLLECTION_NAME, targetOrg);
+
+    const checkInIso = data.checkInTime || `${data.date}T09:00:00.000Z`;
+    const checkOutIso = data.checkOutTime || `${data.date}T18:00:00.000Z`;
+
+    let label = data.hajriLabel;
+    if (!label) {
+      if (data.hajri === 0) label = '0.0 Hajri (Absent / Short)';
+      else if (data.hajri === 0.5) label = '0.5 Hajri (Half Day)';
+      else if (data.hajri === 1.0) label = '1.0 Hajri (Full Day)';
+      else if (data.hajri === 1.5) label = '1.5 Hajri (Dedhi)';
+      else if (data.hajri === 2.0) label = '2.0 Hajri (Double)';
+      else if (data.hajri === 2.5) label = '2.5 Hajri (Dhai)';
+      else if (data.hajri === 3.0) label = '3.0 Hajri (Three)';
+      else label = `${data.hajri} Hajri`;
+    }
+
+    if (existing.length > 0 && existing[0]) {
+      const existingId = existing[0].id;
+      const docRes = await OrgContextService.getDocWithFallback(COLLECTION_NAME, existingId, targetOrg);
+      await updateDoc(docRes.ref, {
+        siteId: data.siteId,
+        hajri: data.hajri,
+        hajriLabel: label,
+        status: data.hajri > 0 ? 'present' : 'absent',
+        checkInTime: checkInIso,
+        checkOutTime: data.hajri > 0 ? checkOutIso : null,
+        verificationStatus: 'verified',
+        method: 'manual_admin_calendar',
+        isOverwrittenByContractor: true,
+        overwriteReason: data.notes || 'Manual Admin Calendar Update',
+        updatedAt: now,
+      });
+      return existingId;
+    } else {
+      const newDoc = await addDoc(colRef, {
+        organizationId: targetOrg,
+        workerId: data.workerId,
+        siteId: data.siteId,
+        date: data.date,
+        checkInTime: checkInIso,
+        checkOutTime: data.hajri > 0 ? checkOutIso : null,
+        status: data.hajri > 0 ? 'present' : 'absent',
+        method: 'manual_admin_calendar',
+        confidence: 1.0,
+        verificationStatus: 'verified',
+        submittedBy: data.submittedBy || 'Contractor Admin',
+        hajri: data.hajri,
+        hajriLabel: label,
+        ruleName: 'Manual Admin Calendar Entry',
+        isOverwrittenByContractor: true,
+        overwriteReason: data.notes || 'Manual Admin Calendar Entry',
+        createdAt: now,
+        updatedAt: now,
+      });
+      return newDoc.id;
+    }
+  }
 }
 

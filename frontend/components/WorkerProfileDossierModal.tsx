@@ -26,6 +26,7 @@ import {
   ChevronRight,
   CalendarDays,
   MapPin,
+  Pencil,
 } from 'lucide-react';
 import { AttendanceService } from '@/services/attendance.service';
 import { PaymentLedgerService } from '@/services/payment-ledger.service';
@@ -82,6 +83,20 @@ export default function WorkerProfileDossierModal({
     return (parseInt(todayParts[1] || '9', 10) || (new Date().getMonth() + 1)) - 1; // 0-indexed
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
+  // Dynamic Calendar On-The-Spot Edit/Add Attendance & Payment State
+  const [editAttendanceMode, setEditAttendanceMode] = useState<boolean>(false);
+  const [editSiteId, setEditSiteId] = useState<string>('');
+  const [editHajri, setEditHajri] = useState<number>(1.0);
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [savingAttendance, setSavingAttendance] = useState<boolean>(false);
+
+  const [addPaymentDateMode, setAddPaymentDateMode] = useState<boolean>(false);
+  const [datePayAmount, setDatePayAmount] = useState<string>('');
+  const [datePayCategory, setDatePayCategory] = useState<'advance' | 'wage' | 'kharcha'>('advance');
+  const [datePayMethod, setDatePayMethod] = useState<'gpay' | 'phonepe' | 'paytm' | 'cash' | 'bank_transfer'>('gpay');
+  const [datePayNotes, setDatePayNotes] = useState<string>('');
+  const [savingDatePayment, setSavingDatePayment] = useState<boolean>(false);
 
   const handlePrevMonth = () => {
     if (calendarMonth === 0) {
@@ -149,6 +164,80 @@ export default function WorkerProfileDossierModal({
     sites.forEach((s) => map.set(s.id, s.name));
     return map;
   }, [sites]);
+
+  // Payments on selected calendar date
+  const datePayments = useMemo(() => {
+    if (!selectedCalendarDate) return [];
+    return payments.filter((p) => p.paymentDate === selectedCalendarDate);
+  }, [payments, selectedCalendarDate]);
+
+  const handleSaveCalendarAttendance = async () => {
+    if (!selectedCalendarDate) return;
+    setSavingAttendance(true);
+    try {
+      const siteToUse = editSiteId || (sites[0]?.id || '');
+      await AttendanceService.saveManualAttendanceRecord({
+        workerId: worker.id,
+        siteId: siteToUse,
+        date: selectedCalendarDate,
+        hajri: editHajri,
+        checkInTime: '09:00 AM',
+        checkOutTime: editHajri > 0 ? '06:00 PM' : undefined,
+        notes: editNotes || 'Manual Admin Calendar Overwrite',
+        submittedBy: 'Contractor Admin',
+      });
+
+      await loadData();
+      if (onWorkerUpdated) onWorkerUpdated();
+      setEditAttendanceMode(false);
+    } catch (err) {
+      console.error('Failed to save calendar attendance record:', err);
+      alert('Error updating attendance on calendar.');
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+
+  const handleSaveCalendarPayment = async () => {
+    if (!selectedCalendarDate) return;
+    const amountNum = parseFloat(datePayAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    setSavingDatePayment(true);
+    try {
+      const siteToUse = editSiteId || (sites[0]?.id || '');
+      const siteName = siteMap.get(siteToUse) || '';
+      await PaymentLedgerService.recordPayment({
+        paidTo: worker.name,
+        workerId: worker.id,
+        workerName: worker.name,
+        workerCode: worker.workerCode,
+        workerPhone: worker.phone,
+        siteId: siteToUse,
+        siteName: siteName,
+        amount: amountNum,
+        category: datePayCategory,
+        paymentMethod: datePayMethod,
+        paymentDate: selectedCalendarDate,
+        notes: datePayNotes || `Advance recorded on ${selectedCalendarDate}`,
+        recordedBy: 'Contractor Admin (Calendar)',
+      });
+
+      await loadData();
+      if (onWorkerUpdated) onWorkerUpdated();
+      setDatePayAmount('');
+      setDatePayNotes('');
+      setAddPaymentDateMode(false);
+    } catch (err) {
+      console.error('Failed to save calendar payment record:', err);
+      alert('Error saving payment record for date.');
+    } finally {
+      setSavingDatePayment(false);
+    }
+  };
 
   // Today's Attendance Status
   const todayRecord = useMemo(() => {
@@ -1132,7 +1221,7 @@ export default function WorkerProfileDossierModal({
                                 <span>{siteMap.get(rec.siteId) || 'Site'}</span>
                               </span>
                               <span className="px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 text-[10px] font-mono">
-                                {rec.hajri || 1} Hajri
+                                {rec.hajri || 1} Hajri ({rec.hajriLabel || 'Shift'})
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-300 flex items-center gap-3">
@@ -1145,6 +1234,212 @@ export default function WorkerProfileDossierModal({
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Existing Payments on Date */}
+                    {datePayments.length > 0 && (
+                      <div className="pt-2 border-t border-white/10 space-y-1.5">
+                        <span className="text-[11px] font-extrabold text-amber-300 block">💵 Payments Logged on {selectedDateDetails.date}:</span>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {datePayments.map((p) => (
+                            <div key={p.id} className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-200 border border-amber-400/30 flex items-center gap-2">
+                              <span className="font-extrabold">₹{p.amount.toLocaleString('en-IN')}</span>
+                              <span className="text-[10px] font-bold uppercase opacity-80">({p.category})</span>
+                              {p.notes && <span className="text-[10px] italic text-amber-100/70">&quot;{p.notes}&quot;</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Action Buttons */}
+                    <div className="pt-3 border-t border-white/10 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditAttendanceMode((prev) => !prev);
+                          setAddPaymentDateMode(false);
+                          const firstRec = selectedDateDetails.records[0];
+                          if (firstRec) {
+                            setEditSiteId(firstRec.siteId || sites[0]?.id || '');
+                            setEditHajri(typeof firstRec.hajri === 'number' ? firstRec.hajri : 1.0);
+                          } else {
+                            setEditSiteId(sites[0]?.id || '');
+                            setEditHajri(1.0);
+                          }
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-blue-200" />
+                        <span>{editAttendanceMode ? 'Close Edit Form' : selectedDateDetails.isPresent ? '✏️ Overwrite / Edit Attendance' : '+ Add Attendance'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddPaymentDateMode((prev) => !prev);
+                          setEditAttendanceMode(false);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-emerald-200" />
+                        <span>{addPaymentDateMode ? 'Close Payment Form' : '+ Record Payment for Date'}</span>
+                      </button>
+                    </div>
+
+                    {/* Inline Edit Attendance Form */}
+                    {editAttendanceMode && (
+                      <div className="p-3.5 rounded-xl bg-white text-slate-900 border border-blue-200 shadow-md space-y-3 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between font-extrabold text-xs text-blue-950 border-b border-slate-100 pb-2">
+                          <span>✏️ {selectedDateDetails.isPresent ? 'Overwrite Existing Attendance' : 'Add New Attendance'} on {selectedDateDetails.date}</span>
+                          <button type="button" onClick={() => setEditAttendanceMode(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Select Work Site</label>
+                            <select
+                              value={editSiteId}
+                              onChange={(e) => setEditSiteId(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-medium text-slate-900 bg-slate-50 focus:outline-none focus:border-blue-600"
+                            >
+                              {sites.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Select Hajri / Shift Status</label>
+                            <select
+                              value={editHajri}
+                              onChange={(e) => setEditHajri(parseFloat(e.target.value))}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-extrabold text-slate-900 bg-slate-50 focus:outline-none focus:border-blue-600"
+                            >
+                              <option value={0}>0.0 Hajri (Absent / Short Shift)</option>
+                              <option value={0.5}>0.5 Hajri (Half Day / 4 Hours)</option>
+                              <option value={1.0}>1.0 Hajri (Full Day / Normal Shift)</option>
+                              <option value={1.5}>1.5 Hajri (Dedhi / Overtime)</option>
+                              <option value={2.0}>2.0 Hajri (Double Shift)</option>
+                              <option value={2.5}>2.5 Hajri (Dhai Shift)</option>
+                              <option value={3.0}>3.0 Hajri (Triple Shift)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Notes / Admin Overwrite Reason</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Manual correction, overtime approved by site engineer"
+                            value={editNotes}
+                            onChange={(e) => setEditNotes(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 bg-slate-50 focus:outline-none focus:border-blue-600"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleSaveCalendarAttendance}
+                            disabled={savingAttendance}
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer"
+                          >
+                            {savingAttendance ? 'Saving Attendance...' : '💾 Save Attendance Record'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditAttendanceMode(false)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inline Add Payment Form */}
+                    {addPaymentDateMode && (
+                      <div className="p-3.5 rounded-xl bg-white text-slate-900 border border-emerald-200 shadow-md space-y-3 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between font-extrabold text-xs text-emerald-950 border-b border-slate-100 pb-2">
+                          <span>💵 Record Advance / Payment on {selectedDateDetails.date}</span>
+                          <button type="button" onClick={() => setAddPaymentDateMode(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Amount (₹)</label>
+                            <input
+                              type="number"
+                              placeholder="e.g. 500"
+                              value={datePayAmount}
+                              onChange={(e) => setDatePayAmount(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-extrabold text-slate-900 bg-slate-50 focus:outline-none focus:border-emerald-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Category</label>
+                            <select
+                              value={datePayCategory}
+                              onChange={(e) => setDatePayCategory(e.target.value as any)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-900 bg-slate-50 focus:outline-none focus:border-emerald-600"
+                            >
+                              <option value="advance">Advance (Kharche / Cash)</option>
+                              <option value="wage">Wage Settlement</option>
+                              <option value="kharcha">Kharcha</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Payment Method</label>
+                            <select
+                              value={datePayMethod}
+                              onChange={(e) => setDatePayMethod(e.target.value as any)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 font-bold text-slate-900 bg-slate-50 focus:outline-none focus:border-emerald-600"
+                            >
+                              <option value="gpay">Google Pay</option>
+                              <option value="phonepe">PhonePe</option>
+                              <option value="paytm">Paytm</option>
+                              <option value="cash">Cash / Haath Se</option>
+                              <option value="bank_transfer">Bank Transfer</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="font-bold text-slate-700 block mb-1">Notes / Remarks</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Site advance paid by supervisor"
+                            value={datePayNotes}
+                            onChange={(e) => setDatePayNotes(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-900 bg-slate-50 focus:outline-none focus:border-emerald-600"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleSaveCalendarPayment}
+                            disabled={savingDatePayment}
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer"
+                          >
+                            {savingDatePayment ? 'Saving Payment...' : '💾 Save Payment Record'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAddPaymentDateMode(false)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
