@@ -55,7 +55,7 @@ export default function WorkerProfileDossierModal({
 }: WorkerProfileDossierModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'payments' | 'attendance' | 'photos'>(defaultTab || 'overview');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'this_month' | 'last_month' | 'this_week'>('all');
-  
+
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -401,7 +401,7 @@ export default function WorkerProfileDossierModal({
   const calendarDays = useMemo(() => {
     const totalDaysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
     const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay(); // 0 = Sun, 1 = Mon, ...
-    
+
     // Map of dateStr -> AttendanceRecord[]
     const attendanceMap = new Map<string, AttendanceRecord[]>();
     attendanceRecords.forEach((r) => {
@@ -531,10 +531,10 @@ export default function WorkerProfileDossierModal({
     const periodLabel = periodFilter === 'all'
       ? 'All_Time'
       : periodFilter === 'this_month'
-      ? 'This_Month'
-      : periodFilter === 'last_month'
-      ? 'Last_Month'
-      : 'This_Week';
+        ? 'This_Month'
+        : periodFilter === 'last_month'
+          ? 'Last_Month'
+          : 'This_Week';
 
     const safeWorkerName = (worker.name || 'Worker').replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `${safeWorkerName}_Hisab_Ledger_${periodLabel}_${getTodayDateString()}.csv`;
@@ -614,7 +614,7 @@ export default function WorkerProfileDossierModal({
   return (
     <div className={isFullPage ? 'w-full' : 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto'}>
       <div className={isFullPage ? 'w-full space-y-6' : 'max-w-5xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col'}>
-        
+
         {/* =====================================================================
             1. HEADER BANNER & WORKER IDENTITY
             ===================================================================== */}
@@ -696,7 +696,7 @@ export default function WorkerProfileDossierModal({
                 <Plus className="w-4 h-4" />
                 <span>+ Give Advance / Payment</span>
               </button>
-              
+
               <button
                 onClick={handleDownloadCsv}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-extrabold border border-emerald-400/40 transition-all shadow-sm active:scale-95"
@@ -803,13 +803,12 @@ export default function WorkerProfileDossierModal({
             </div>
 
             {/* Net Balance Payable */}
-            <div className={`p-4 rounded-2xl border shadow-sm ${
-              netPayableBalance > 0
-                ? 'bg-emerald-50/70 border-emerald-200'
-                : netPayableBalance < 0
+            <div className={`p-4 rounded-2xl border shadow-sm ${netPayableBalance > 0
+              ? 'bg-emerald-50/70 border-emerald-200'
+              : netPayableBalance < 0
                 ? 'bg-rose-50/70 border-rose-200'
                 : 'bg-slate-100 border-slate-200'
-            }`}>
+              }`}>
               <div className="flex items-center justify-between text-xs font-extrabold">
                 <span className={netPayableBalance > 0 ? 'text-emerald-800' : netPayableBalance < 0 ? 'text-rose-800' : 'text-slate-700'}>
                   Net Balance Due
@@ -817,20 +816,18 @@ export default function WorkerProfileDossierModal({
                 <DollarSign className={`w-4 h-4 ${netPayableBalance > 0 ? 'text-emerald-600' : netPayableBalance < 0 ? 'text-rose-600' : 'text-slate-600'}`} />
               </div>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className={`text-2xl font-black ${
-                  netPayableBalance > 0 ? 'text-emerald-700' : netPayableBalance < 0 ? 'text-rose-700' : 'text-slate-800'
-                }`}>
+                <span className={`text-2xl font-black ${netPayableBalance > 0 ? 'text-emerald-700' : netPayableBalance < 0 ? 'text-rose-700' : 'text-slate-800'
+                  }`}>
                   ₹{Math.abs(netPayableBalance).toLocaleString('en-IN')}
                 </span>
               </div>
-              <p className={`mt-1 text-[11px] font-bold ${
-                netPayableBalance > 0 ? 'text-emerald-700' : netPayableBalance < 0 ? 'text-rose-700' : 'text-slate-500'
-              }`}>
+              <p className={`mt-1 text-[11px] font-bold ${netPayableBalance > 0 ? 'text-emerald-700' : netPayableBalance < 0 ? 'text-rose-700' : 'text-slate-500'
+                }`}>
                 {netPayableBalance > 0
                   ? 'To be paid to worker'
                   : netPayableBalance < 0
-                  ? 'Worker has excess advance'
-                  : 'Settled & Cleared (₹0)'}
+                    ? 'Worker has excess advance'
+                    : 'Settled & Cleared (₹0)'}
               </p>
             </div>
           </div>
@@ -843,11 +840,10 @@ export default function WorkerProfileDossierModal({
           <div className="flex items-center gap-6 text-xs font-extrabold">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
-                activeTab === 'overview'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${activeTab === 'overview'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <Building2 className="w-4 h-4" />
               <span>Overview & Sites ({siteBreakdown.length})</span>
@@ -855,11 +851,10 @@ export default function WorkerProfileDossierModal({
 
             <button
               onClick={() => setActiveTab('payments')}
-              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
-                activeTab === 'payments'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${activeTab === 'payments'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <Receipt className="w-4 h-4" />
               <span>Payments & Advances ({filteredPayments.length})</span>
@@ -867,11 +862,10 @@ export default function WorkerProfileDossierModal({
 
             <button
               onClick={() => setActiveTab('attendance')}
-              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
-                activeTab === 'attendance'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${activeTab === 'attendance'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <Calendar className="w-4 h-4" />
               <span>Attendance History ({filteredAttendance.length})</span>
@@ -879,11 +873,10 @@ export default function WorkerProfileDossierModal({
 
             <button
               onClick={() => setActiveTab('photos')}
-              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
-                activeTab === 'photos'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${activeTab === 'photos'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <Sparkles className="w-4 h-4" />
               <span>AI Face Vectors ({photos.length})</span>
@@ -1043,11 +1036,10 @@ export default function WorkerProfileDossierModal({
                             <span className="font-extrabold text-sm text-slate-900">
                               ₹{p.amount.toLocaleString('en-IN')}
                             </span>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase border ${
-                              p.category === 'advance' || p.category === 'kharcha'
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase border ${p.category === 'advance' || p.category === 'kharcha'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              }`}>
                               {p.category}
                             </span>
                             <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
@@ -1180,17 +1172,16 @@ export default function WorkerProfileDossierModal({
                               setSelectedCalendarDate(cell.dateStr);
                             }
                           }}
-                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm transition-all cursor-pointer relative group ${
-                            isSelected
-                              ? 'ring-2 ring-blue-600 ring-offset-2 scale-110 font-black z-10 ' + (cell.isPresent ? 'bg-emerald-500/30 border border-emerald-500 text-emerald-950' : 'bg-blue-600 text-white shadow-xs')
-                              : cell.isPresent
+                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm transition-all cursor-pointer relative group ${isSelected
+                            ? 'ring-2 ring-blue-600 ring-offset-2 scale-110 font-black z-10 ' + (cell.isPresent ? 'bg-emerald-500/30 border border-emerald-500 text-emerald-950' : 'bg-blue-600 text-white shadow-xs')
+                            : cell.isPresent
                               ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-900 font-extrabold hover:bg-emerald-500/30 shadow-2xs'
                               : cell.isToday
-                              ? 'border border-blue-400 text-blue-600 font-bold hover:bg-blue-50'
-                              : cell.isFuture
-                              ? 'text-slate-300 opacity-40 hover:bg-slate-50'
-                              : 'text-slate-700 hover:bg-slate-100 font-medium'
-                          }`}
+                                ? 'border border-blue-400 text-blue-600 font-bold hover:bg-blue-50'
+                                : cell.isFuture
+                                  ? 'text-slate-300 opacity-40 hover:bg-slate-50'
+                                  : 'text-slate-700 hover:bg-slate-100 font-medium'
+                            }`}
                           title={`${cell.dateStr}${cell.isPresent ? ` • Present (${cell.totalHajri} Hajri)` : ''}`}
                         >
                           <span>{cell.dayNumber}</span>
@@ -1217,11 +1208,10 @@ export default function WorkerProfileDossierModal({
                               year: 'numeric',
                             })}
                           </h5>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                            selectedDateDetails.isPresent
-                              ? 'bg-emerald-500 text-white shadow-xs'
-                              : 'bg-rose-500/80 text-white'
-                          }`}>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${selectedDateDetails.isPresent
+                            ? 'bg-emerald-500 text-white shadow-xs'
+                            : 'bg-rose-500/80 text-white'
+                            }`}>
                             {selectedDateDetails.isPresent ? `Present (${selectedDateDetails.totalHajri} Hajri)` : 'Absent / No Log'}
                           </span>
                         </div>
@@ -1293,7 +1283,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="0.5 Hajri (Half Day)"
                           >
-                            0.5 H
+                            0.5
                           </button>
 
                           <button
@@ -1303,7 +1293,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="1.0 Hajri (Full Day)"
                           >
-                            1 Hajri
+                            1
                           </button>
 
                           <button
@@ -1313,7 +1303,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="1.5 Hajri (Dedhi / OT)"
                           >
-                            1.5 H
+                            1.5
                           </button>
 
                           <button
@@ -1323,7 +1313,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="2.0 Hajri (Double Shift)"
                           >
-                            2 Hajri
+                            2
                           </button>
 
                           <button
@@ -1333,7 +1323,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="2.5 Hajri (Dhai Shift)"
                           >
-                            2.5 H
+                            2.5
                           </button>
 
                           <button
@@ -1343,7 +1333,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="3.0 Hajri (Triple Shift)"
                           >
-                            3 Hajri
+                            3
                           </button>
 
                           <button
@@ -1353,7 +1343,7 @@ export default function WorkerProfileDossierModal({
                             className="py-1.5 px-1 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 border border-white/15 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 text-center"
                             title="0 Hajri (Absent)"
                           >
-                            0 (Abs)
+                            0
                           </button>
 
                           {/* Manual Entry Box for Hajri */}
